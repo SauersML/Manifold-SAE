@@ -101,6 +101,31 @@ def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float 
     return t.clamp(eps, 1.0 - eps)
 
 
+def _basis_lookup(positions: torch.Tensor, phi_lookup: torch.Tensor) -> torch.Tensor:
+    """Evaluate the Duchon basis at positions in [0, 1] by linear
+    interpolation over a precomputed (T_fine, K) lookup table.
+
+    Lets the SAE run end-to-end on MPS/CUDA — no gamfit float64 calls in
+    the forward path. Accuracy: with T_fine=4096 the interp error is
+    O(1/T_fine^2) for the (smooth) Duchon basis — well below SGD noise.
+
+    Args:
+        positions: any shape with values in [0, 1], on the same device.
+        phi_lookup: (T_fine, K) float32.
+    Returns:
+        Same leading shape as positions, with a final K dim.
+    """
+    T_fine = phi_lookup.shape[0]
+    K = phi_lookup.shape[1]
+    flat = positions.reshape(-1).clamp(0.0, 1.0)
+    idx_f = flat * (T_fine - 1)
+    i0 = idx_f.floor().long().clamp(0, T_fine - 2)
+    i1 = i0 + 1
+    w = (idx_f - i0.to(positions.dtype)).unsqueeze(-1)
+    phi = (1.0 - w) * phi_lookup[i0] + w * phi_lookup[i1]
+    return phi.view(*positions.shape, K)
+
+
 def _duchon_penalty_matrix(centers: torch.Tensor, basis_order: int = 2) -> torch.Tensor:
     """Integrated squared mth-derivative penalty for Duchon basis on [0,1].
 
@@ -139,12 +164,26 @@ class ManifoldSAE(nn.Module):
         R = int(config.intrinsic_rank)
         F = int(config.n_features)
 
-        centers = np.linspace(0.0, 1.0, K, dtype=np.float64)
-        self.register_buffer("centers", torch.from_numpy(centers))
+        centers_np = np.linspace(0.0, 1.0, K, dtype=np.float64)
+        # Centers used only at init (penalty + lookup precompute) — store as
+        # float32 so the buffer can live on MPS (which lacks float64).
+        self.register_buffer("centers", torch.from_numpy(centers_np).to(torch.float32))
         # Real Duchon m=2 penalty matrix — gives correct smoothness behavior
-        # (penalizes curvature, leaves linear functions free).
-        S = _duchon_penalty_matrix(self.centers, basis_order=2)
-        self.register_buffer("penalty", S)
+        # (penalizes curvature, leaves linear functions free). Cast to float32
+        # so it lives on MPS/CUDA without dtype promotion.
+        S = _duchon_penalty_matrix(torch.from_numpy(centers_np), basis_order=2)
+        self.register_buffer("penalty", S.to(torch.float32))
+
+        # Pre-compute the Duchon basis on a dense grid so forward passes
+        # never call gamfit. MPS doesn't support float64 (which gamfit
+        # requires), so any forward path that calls gamfit forces CPU.
+        # The basis function is fixed once centers are fixed → precompute
+        # at init in float64, store as float32, then evaluate at arbitrary
+        # positions by linear interpolation across the grid.
+        T_fine = 4096
+        t_fine = torch.linspace(0.0, 1.0, T_fine, dtype=torch.float64)
+        phi_fine = gt.duchon_basis_1d(t_fine, torch.from_numpy(centers_np), m=2, periodic=False)
+        self.register_buffer("phi_lookup", phi_fine.to(torch.float32))     # (T_fine, K)
 
         # Persistent per-feature W_k in R^(D, R).
         if D >= F * R:
@@ -183,12 +222,12 @@ class ManifoldSAE(nn.Module):
         R = dirs.shape[-1]
         K = coeff.shape[1]
 
-        # Evaluate basis at positions (no per-batch solve).
-        t_flat = positions.t().contiguous().view(-1).to(torch.float64)  # (F*B,)
-        phi = gt.duchon_basis_1d(t_flat, self.centers, m=2, periodic=False).to(x_dtype)
-        phi = phi.view(F, B, K)
+        # Evaluate basis at positions via the precomputed lookup table —
+        # no gamfit calls in the forward path, so the whole forward runs
+        # on MPS/CUDA in float32.
+        phi = _basis_lookup(positions, self.phi_lookup.to(x_dtype))  # (B, F, K)
         # g_{b,f,:} = phi_{b,f,:} @ B_f
-        g = torch.einsum("fbk,fkr->bfr", phi, coeff)
+        g = torch.einsum("bfk,fkr->bfr", phi, coeff)
 
         # Lift to ambient, gated by binary amplitude. Add back the
         # decoder pre-bias to undo the input centering.
@@ -201,8 +240,8 @@ class ManifoldSAE(nn.Module):
         # with continuous amp, (amp, curve) is a multiplicative gauge.
         curve_norm_w = float(getattr(self.config, "curve_norm_weight", 0.0))
         if curve_norm_w > 0:
-            t_grid = torch.linspace(0.02, 0.98, 32, dtype=torch.float64, device=x.device)
-            phi_g = gt.duchon_basis_1d(t_grid, self.centers, m=2, periodic=False).to(coeff.dtype)
+            t_grid = torch.linspace(0.02, 0.98, 32, dtype=x_dtype, device=x.device)
+            phi_g = _basis_lookup(t_grid, self.phi_lookup.to(x_dtype))     # (T, K)
             g_grid = torch.einsum("tk,fkr->ftr", phi_g, coeff)             # (F, T, R)
             amb = torch.einsum("ftr,fdr->ftd", g_grid, dirs)               # (F, T, D)
             per_feat = amb.pow(2).sum(dim=-1).mean(dim=-1)                 # (F,)
@@ -296,37 +335,36 @@ def extract_feature_curves(
 ) -> torch.Tensor:
     """Per-feature learned curves on ``t_grid`` in ambient space.
 
-    With persistent curves there's no batch dependence — evaluate the
-    Duchon basis at t_grid (mapped into each feature's observed position
-    range), contract with the stored coefficients, lift to ambient.
+    Uses the persistent lookup table — no gamfit calls, runs on whatever
+    device the SAE lives on.
     """
     device = next(sae.parameters()).device
     activations = activations.to(device)
-    t_grid_f64 = t_grid.to(device=device, dtype=torch.float64)
+    t_grid_f = t_grid.to(device=device, dtype=torch.float32)
 
     sae.eval()
     out = sae(activations)
-    coeff = sae.coeff.to(torch.float64)
-    dirs = sae.directions.to(torch.float64)
+    coeff = sae.coeff
+    dirs = sae.directions
     amp = out.amplitudes
     pos = out.positions
     firing = amp > 1e-3
     F = coeff.shape[0]
-    T = t_grid_f64.shape[0]
+    T = t_grid_f.shape[0]
     D = dirs.shape[1]
-    curves = torch.zeros(F, T, D, dtype=torch.float64, device=device)
+    curves = torch.zeros(F, T, D, dtype=torch.float32, device=device)
     for k in range(F):
         m = firing[:, k]
         if m.sum() < 2:
             t_lo, t_hi = 0.0, 1.0
         else:
-            pos_k = pos[m, k].to(torch.float64)
+            pos_k = pos[m, k]
             t_lo = float(pos_k.quantile(0.02).item())
             t_hi = float(pos_k.quantile(0.98).item())
             if t_hi - t_lo < 1e-3:
                 t_lo, t_hi = 0.0, 1.0
-        t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)
+        t_k = t_lo + (t_hi - t_lo) * t_grid_f
+        phi_k = _basis_lookup(t_k, sae.phi_lookup)
         intrinsic_curve = phi_k @ coeff[k]
         ambient_curve = intrinsic_curve @ dirs[k].T
         curves[k] = ambient_curve

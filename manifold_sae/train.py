@@ -70,6 +70,9 @@ def train(
             it = iter(data_loader)
             batch = next(it)
 
+        # Move batch to whatever device the SAE lives on.
+        device = next(sae.parameters()).device
+        batch = batch.to(device)
         optimizer.zero_grad(set_to_none=True)
         out = sae(batch)
         losses = total_loss(out, batch, sae.config)
