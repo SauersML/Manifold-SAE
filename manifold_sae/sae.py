@@ -56,6 +56,7 @@ class ManifoldSAEOutput:
     directions: torch.Tensor
     cumulant_loss: torch.Tensor
     ortho_loss: torch.Tensor
+    monotonicity_loss: torch.Tensor
 
 
 def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float = 1e-4) -> torch.Tensor:
@@ -150,11 +151,36 @@ class ManifoldSAE(nn.Module):
         else:
             cumulant_loss = torch.zeros((), dtype=x_dtype, device=x.device)
 
-        # Orthonormality of per-feature W_k. Keeps the subspace columns
-        # well-conditioned and prevents collapse / rescaling drift.
-        I_R = torch.eye(R, dtype=dirs.dtype, device=dirs.device).unsqueeze(0)  # (1, R, R)
-        WtW = torch.einsum("fdr,fds->frs", dirs, dirs)  # (F, R, R)
+        # Orthonormality of per-feature W_k.
+        I_R = torch.eye(R, dtype=dirs.dtype, device=dirs.device).unsqueeze(0)
+        WtW = torch.einsum("fdr,fds->frs", dirs, dirs)
         ortho_loss = ((WtW - I_R) ** 2).mean()
+
+        # Monotonicity: for each feature, the encoder's position should be a
+        # monotone function of the "natural" intrinsic coordinate — the
+        # projection of x onto W_k's principal direction. Penalizes
+        # 1 - |corr(positions, principal-projection)| per feature, over
+        # FIRING tokens (so dead features don't contribute).
+        # This is the self-supervised signal that turns subspace recovery
+        # into curve recovery: W_k says "feature k lives along this 1D
+        # direction in ambient," and the encoder must use positions consistent
+        # with that direction's natural ordering.
+        principal = y_proj[..., 0]  # (B, F) — projection onto W_k's first column
+        mask_f = mask_binary.detach()  # avoid gradient through gating decision
+        eps = 1e-6
+        corr_terms = []
+        for k in range(F):
+            m = mask_f[:, k] > 0.5
+            if m.sum() < 5:
+                continue
+            p = positions[m, k]
+            q = principal[m, k]
+            p_c = p - p.mean()
+            q_c = q - q.mean()
+            denom = (p_c.pow(2).sum() * q_c.pow(2).sum()).clamp(min=eps).sqrt()
+            corr = (p_c * q_c).sum() / denom
+            corr_terms.append(1.0 - corr.abs())
+        monotonicity_loss = torch.stack(corr_terms).mean() if corr_terms else torch.zeros((), dtype=x_dtype, device=x.device)
 
         return ManifoldSAEOutput(
             reconstruction=recon,
@@ -165,6 +191,7 @@ class ManifoldSAE(nn.Module):
             directions=self.directions,
             cumulant_loss=cumulant_loss,
             ortho_loss=ortho_loss,
+            monotonicity_loss=monotonicity_loss,
         )
 
 

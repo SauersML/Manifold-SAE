@@ -47,6 +47,7 @@ def total_loss(
         + config.cumulant_weight * output.cumulant_loss
         + config.ortho_weight * output.ortho_loss
         + 1e-2 * coverage
+        + 1e-1 * output.monotonicity_loss
     )
     return {
         "mse": mse,
@@ -54,5 +55,6 @@ def total_loss(
         "cumulant": output.cumulant_loss,
         "ortho": output.ortho_loss,
         "coverage": coverage,
+        "monotonicity": output.monotonicity_loss,
         "total": total,
     }
