@@ -50,7 +50,11 @@ def total_loss(
         + getattr(config, "smoothness_weight", 1e-3) * smoothness
         + getattr(config, "curve_norm_weight", 0.0) * output.curve_norm_loss
         + 1e-2 * coverage
-        + 1e-1 * output.monotonicity_loss
+        # Light monotone prior — biases position to track principal
+        # projection but doesn't force it. At weight 1e-1 (original) it
+        # killed non-monotone features like parabola; at 0 (V14) the
+        # monotone features wobble. 1e-2 is the soft middle ground.
+        + 1e-2 * output.monotonicity_loss
     )
     return {
         "mse": mse,
