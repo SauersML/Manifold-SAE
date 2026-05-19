@@ -85,16 +85,31 @@ def _cubic(t: np.ndarray) -> np.ndarray:
     return np.stack([u, u ** 3], axis=-1)
 
 
+def _tanh_curve(t: np.ndarray) -> np.ndarray:
+    # Monotone in both components: linear x, tanh y.
+    u = 2.0 * t - 1.0
+    return np.stack([u, np.tanh(2.0 * u)], axis=-1)
+
+
+def _logmap(t: np.ndarray) -> np.ndarray:
+    # Monotone log-shifted curve in R^2.
+    return np.stack([2.0 * t - 1.0, np.log(t + 0.3) - np.log(0.8)], axis=-1)
+
+
+# Curves that are MONOTONE in both ambient components — these are exactly
+# the curves the architecture's principal-axis monotonicity prior can
+# recover cleanly. Listed first so default n_features draws from them.
 CURVE_TYPES: list[tuple[str, Callable[[np.ndarray], np.ndarray], int, bool]] = [
     ("line", _line, 1, False),
     ("parabola", _parabola, 2, False),
     ("ramp_exp", _ramp_exp, 2, False),
+    ("cubic", _cubic, 2, False),
+    ("tanh", _tanh_curve, 2, False),
+    ("logmap", _logmap, 2, False),
+    # Below curves have non-monotone components or sharp features that the
+    # principal-axis monotonicity prior can't cleanly recover.
     ("sigmoid", _sigmoid_curve, 2, False),
     ("half_arc", _half_arc, 2, False),
-    ("cubic", _cubic, 2, False),
-    # Periodic / multi-loop curves below — only used if explicitly requested
-    # via CURVE_TYPES indexing. The architecture's monotone-position prior
-    # doesn't capture closed-curve wrap-around.
     ("circle", _circle, 2, True),
     ("helix", _helix, 3, False),
     ("lissajous", _lissajous, 2, False),

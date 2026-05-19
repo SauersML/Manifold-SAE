@@ -105,14 +105,9 @@ class ManifoldSAE(nn.Module):
 
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
         x_dtype = x.dtype
-        dirs = self.directions.to(x_dtype)  # (F, D, R) — persistent W_k
-        # Encoder operates on raw x. The W_k learns purely from the
-        # reconstruction gradient — that path gave cleanly-recovered planted
-        # subspaces (cosine 0.96+) in earlier runs.
+        dirs = self.directions.to(x_dtype)
         z_raw, mask_soft, mask_binary = self.encoder(x)
         positions = _soft_rescale_positions(z_raw)
-        # Project x onto each feature's persistent ambient subspace for the
-        # per-feature gamfit target.
         y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
 
         B, F = positions.shape
@@ -131,9 +126,8 @@ class ManifoldSAE(nn.Module):
             period=1.0 if self.config.periodic else None,
             by=by_packed,
         )
-        fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)  # (F, B, R)
-        # Lift R-dim curve back to D-dim via persistent W_k.
-        contribution = torch.einsum("fbr,fdr->bfd", fitted_intrinsic, dirs)  # (B, F, D)
+        fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)
+        contribution = torch.einsum("fbr,fdr->bfd", fitted_intrinsic, dirs)
         recon = contribution.sum(dim=1)  # (B, D)
 
         # Identifiability: 4th-moment cumulant contrast on PRE-binarization
@@ -208,8 +202,8 @@ def extract_feature_curves(
 
     sae.eval()
     out = sae(activations)
-    coefficients = out.coefficients.to(torch.float64)  # (F, K, R)
-    directions = sae.directions.to(torch.float64)  # (F, D, R)
+    coefficients = out.coefficients.to(torch.float64)
+    directions = sae.directions.to(torch.float64)
     amp = out.amplitudes
     pos = out.positions
     firing = amp > 1e-3
@@ -228,7 +222,7 @@ def extract_feature_curves(
             continue
         t_k = t_lo + (t_hi - t_lo) * t_grid_f64
         phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=sae.config.periodic)
-        intrinsic_curve = phi_k @ coefficients[k]  # (T, R)
-        ambient_curve = intrinsic_curve @ directions[k].T  # (T, D)
+        intrinsic_curve = phi_k @ coefficients[k]
+        ambient_curve = intrinsic_curve @ directions[k].T
         curves[k] = ambient_curve
     return curves.to(activations.dtype)

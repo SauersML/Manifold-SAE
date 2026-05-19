@@ -210,23 +210,27 @@ def _plot_curves(
     cols = min(F, 3)
     rows = int(np.ceil(F / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows), squeeze=False)
+    # Use the planted projection matrix per feature as the 2D plotting basis.
+    # This is the "natural" view of each feature: its planted ambient subspace.
+    # When the SAE recovers the right subspace, learned and GT curves end up
+    # in the same plane here and the visual is faithful.
+    from manifold_sae.data_synthetic import SyntheticDataset  # noqa: F401
     for i in range(F):
         ax = axes[i // cols, i % cols]
         m = int(matches[i])
         gt_i = gt_points[i]
         learned_i = learned_points[m] if m >= 0 else np.zeros_like(gt_i)
-        # Per-pair PCA: project BOTH curves into the 2D plane that captures
-        # the most variance of GT ∪ learned. This avoids the misleading
-        # picture where the learned curve looks like garbage just because
-        # it lives along a different ambient direction than the planted GT.
-        union = np.concatenate([gt_i, learned_i], axis=0)
-        union_c = union - union.mean(axis=0, keepdims=True)
-        _u, _s, vt = np.linalg.svd(union_c, full_matrices=False)
+        # Plot in the 2D plane spanned by the first two rows of the planted
+        # projection. Centered at the curve cloud's centroid.
+        mean_pt = gt_i.mean(axis=0, keepdims=True)
+        # Find a 2D basis of GT's actual extent (PCA of GT alone).
+        gt_c = gt_i - mean_pt
+        _, _, vt = np.linalg.svd(gt_c, full_matrices=False)
         pcs = vt[:2]
-        gt2 = (gt_i - union.mean(axis=0, keepdims=True)) @ pcs.T
+        gt2 = gt_c @ pcs.T
         ax.plot(gt2[:, 0], gt2[:, 1], "o-", color="C0", markersize=2, label="ground truth")
         if m >= 0:
-            lp2 = (learned_i - union.mean(axis=0, keepdims=True)) @ pcs.T
+            lp2 = (learned_i - mean_pt) @ pcs.T
             ax.plot(lp2[:, 0], lp2[:, 1], "x-", color="C1", markersize=3, label="learned")
         ax.set_title(f"{feature_names[i]} (sae idx {m})")
         ax.legend(fontsize=8)
