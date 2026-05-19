@@ -45,6 +45,10 @@ class Config:
     sae_features_curve: int = 32          # curve only needs ~1 per family
     top_k_vanilla: int = 8                # ~ avg curve_features active per token + slack
     top_k_curve: int = 4                  # only ~ #firing GT features
+    # Optional override to compare matched-budget (vanilla and curve at the same F)
+    match_budget: bool = False
+    matched_features: int = 32
+    matched_topk: int = 4
 
     n_steps: int = 6000
     batch_size: int = 256
@@ -160,17 +164,22 @@ def main(cfg: Config = Config()) -> int:
     X_n = (X - mu) / max(sigma, 1e-6)
     var = float(X_n.var().item())
 
+    F_van = cfg.matched_features if cfg.match_budget else cfg.sae_features_vanilla
+    K_van = cfg.matched_topk if cfg.match_budget else cfg.top_k_vanilla
+    F_crv = cfg.matched_features if cfg.match_budget else cfg.sae_features_curve
+    K_crv = cfg.matched_topk if cfg.match_budget else cfg.top_k_curve
+
     print("[vanilla] train", flush=True)
-    van = VanillaSAE(D=X.shape[1], F=cfg.sae_features_vanilla, top_k=cfg.top_k_vanilla).to(device)
+    van = VanillaSAE(D=X.shape[1], F=F_van, top_k=K_van).to(device)
     n_v = sum(p.numel() for p in van.parameters())
-    print(f"  params={n_v/1e6:.2f}M  F={cfg.sae_features_vanilla}  topk={cfg.top_k_vanilla}", flush=True)
+    print(f"  params={n_v/1e6:.2f}M  F={F_van}  topk={K_van}", flush=True)
     vh, t_v = train(van, X_n, cfg, "van", device, is_curve=False)
 
     print("[curve] train", flush=True)
     from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
     sae_cfg = ManifoldSAEConfig(
-        input_dim=X.shape[1], n_features=cfg.sae_features_curve, n_basis=cfg.n_basis,
-        top_k=cfg.top_k_curve, intrinsic_rank=cfg.intrinsic_rank,
+        input_dim=X.shape[1], n_features=F_crv, n_basis=cfg.n_basis,
+        top_k=K_crv, intrinsic_rank=cfg.intrinsic_rank,
         sparsity_weight=cfg.sparsity_weight, cumulant_weight=0.0,
         ortho_weight=cfg.ortho_weight, smoothness_weight=cfg.smoothness_weight,
         encoder_type="linear",
@@ -179,7 +188,7 @@ def main(cfg: Config = Config()) -> int:
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())
-    print(f"  params={n_c/1e6:.2f}M  F={cfg.sae_features_curve}  topk={cfg.top_k_curve}", flush=True)
+    print(f"  params={n_c/1e6:.2f}M  F={F_crv}  topk={K_crv}", flush=True)
     ch, t_c = train(curve, X_n, cfg, "crv", device, is_curve=True, sae_cfg=sae_cfg)
 
     van.eval(); curve.eval()
@@ -193,8 +202,8 @@ def main(cfg: Config = Config()) -> int:
         alive_c = ((out_c.amplitudes > 0.5).any(dim=0)).sum().item()
         z_v_np = (z_v > 0).cpu().numpy()
         z_c_np = (out_c.amplitudes > 0.5).cpu().numpy()
-    print(f"[eval] vanilla MSE={mse_v:.4e} expl={1-mse_v/var:.3f} alive={alive_v}/{cfg.sae_features_vanilla}", flush=True)
-    print(f"[eval] curve   MSE={mse_c:.4e} expl={1-mse_c/var:.3f} alive={alive_c}/{cfg.sae_features_curve}", flush=True)
+    print(f"[eval] vanilla MSE={mse_v:.4e} expl={1-mse_v/var:.3f} alive={alive_v}/{F_van}", flush=True)
+    print(f"[eval] curve   MSE={mse_c:.4e} expl={1-mse_c/var:.3f} alive={alive_c}/{F_crv}", flush=True)
 
     coverage_v, coverage_c = [], []
     active = data["active"][: eb.shape[0]]

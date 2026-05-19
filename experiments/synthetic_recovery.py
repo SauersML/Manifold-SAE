@@ -60,6 +60,8 @@ class Config:
     cumulant_weight: float = 1e-2
     ortho_weight: float = 1e-2
     smoothness_weight: float = 1e-3
+    continuous_amp: bool = False
+    curve_norm_weight: float = 0.0
     # Curriculum: train first on samples with only `curriculum_start_active`
     # GT features active, ramping linearly to all-active over
     # `curriculum_steps` steps. Forces each SAE feature to first specialize
@@ -292,6 +294,8 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         cumulant_weight=cfg.cumulant_weight,
         ortho_weight=cfg.ortho_weight,
         smoothness_weight=cfg.smoothness_weight,
+        continuous_amp=cfg.continuous_amp,
+        curve_norm_weight=cfg.curve_norm_weight,
     )
     sae = ManifoldSAE(sae_config)
 

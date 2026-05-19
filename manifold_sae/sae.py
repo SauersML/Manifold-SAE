@@ -164,12 +164,19 @@ class ManifoldSAE(nn.Module):
         # Per-feature learnable log-smoothness.
         self.log_lambda = nn.Parameter(torch.zeros(F, dtype=torch.float32))
 
+        # Decoder pre-bias (standard SAE practice): subtract from x before
+        # encoding, add back to reconstruction. Captures the data mean so
+        # atoms aren't wasted reconstructing it.
+        self.b_dec = nn.Parameter(torch.zeros(D, dtype=torch.float32))
+
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
         x_dtype = x.dtype
         dirs = self.directions.to(x_dtype)
         coeff = self.coeff.to(x_dtype)
-        y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
-        z_raw, mask_soft, mask_binary = self.encoder(x, y_proj)
+        b_dec = self.b_dec.to(x_dtype)
+        x_centered = x - b_dec
+        y_proj = torch.einsum("bd,fdr->bfr", x_centered, dirs)  # (B, F, R)
+        z_raw, mask_soft, mask_binary = self.encoder(x_centered, y_proj)
         positions = _soft_rescale_positions(z_raw)
 
         B, F = positions.shape
@@ -183,9 +190,10 @@ class ManifoldSAE(nn.Module):
         # g_{b,f,:} = phi_{b,f,:} @ B_f
         g = torch.einsum("fbk,fkr->bfr", phi, coeff)
 
-        # Lift to ambient, gated by binary amplitude.
+        # Lift to ambient, gated by binary amplitude. Add back the
+        # decoder pre-bias to undo the input centering.
         contribution = torch.einsum("bfr,fdr->bfd", g * mask_binary.unsqueeze(-1), dirs)
-        recon = contribution.sum(dim=1)
+        recon = contribution.sum(dim=1) + b_dec.unsqueeze(0)
 
         # Curve-norm gauge penalty: keep E_t[||g_k(t) @ W_k^T||²] near 1
         # so amplitude carries magnitude and curve carries shape (when
