@@ -13,7 +13,11 @@ def total_loss(
     config: ManifoldSAEConfig,
 ) -> dict[str, torch.Tensor]:
     mse = torch.mean((output.reconstruction - target) ** 2)
-    sparsity = output.amplitudes.abs().mean()
+    # Sparsity on PRE-binarization sigmoid probabilities. Gives gradient to
+    # all features (not just TopK-selected ones), so non-firing features
+    # still get pushed toward zero — helps the encoder converge on which
+    # features should fire.
+    sparsity = output.mask_soft.mean()
     total = (
         mse
         + config.sparsity_weight * sparsity
