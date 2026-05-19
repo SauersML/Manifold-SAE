@@ -156,19 +156,15 @@ class ManifoldSAE(nn.Module):
         WtW = torch.einsum("fdr,fds->frs", dirs, dirs)
         ortho_loss = ((WtW - I_R) ** 2).mean()
 
-        # Monotonicity: for each feature, the encoder's position should be a
-        # monotone function of the "natural" intrinsic coordinate — the
-        # projection of x onto W_k's principal direction. Penalizes
-        # 1 - |corr(positions, principal-projection)| per feature, over
-        # FIRING tokens (so dead features don't contribute).
-        # This is the self-supervised signal that turns subspace recovery
-        # into curve recovery: W_k says "feature k lives along this 1D
-        # direction in ambient," and the encoder must use positions consistent
-        # with that direction's natural ordering.
-        principal = y_proj[..., 0]  # (B, F) — projection onto W_k's first column
-        mask_f = mask_binary.detach()  # avoid gradient through gating decision
+        # Monotonicity: position should be a monotone function of the
+        # principal-axis projection x @ W_k[:, 0]. Penalty is
+        # 1 - |Pearson corr(position, principal-projection)| per feature
+        # over firing tokens. Anchored to principal axis only — angular
+        # variant on top introduces twisting for genuinely monotone curves.
+        principal = y_proj[..., 0]  # (B, F)
+        mask_f = mask_binary.detach()
         eps = 1e-6
-        corr_terms = []
+        terms = []
         for k in range(F):
             m = mask_f[:, k] > 0.5
             if m.sum() < 5:
@@ -178,9 +174,8 @@ class ManifoldSAE(nn.Module):
             p_c = p - p.mean()
             q_c = q - q.mean()
             denom = (p_c.pow(2).sum() * q_c.pow(2).sum()).clamp(min=eps).sqrt()
-            corr = (p_c * q_c).sum() / denom
-            corr_terms.append(1.0 - corr.abs())
-        monotonicity_loss = torch.stack(corr_terms).mean() if corr_terms else torch.zeros((), dtype=x_dtype, device=x.device)
+            terms.append(1.0 - (p_c * q_c).sum().abs() / denom)
+        monotonicity_loss = torch.stack(terms).mean() if terms else torch.zeros((), dtype=x_dtype, device=x.device)
 
         return ManifoldSAEOutput(
             reconstruction=recon,
