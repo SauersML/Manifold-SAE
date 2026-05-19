@@ -223,25 +223,29 @@ def _plot_curves(
         m = int(matches[i])
         gt_i = gt_points[i]
         learned_i = learned_points[m] if m >= 0 else np.zeros_like(gt_i)
-        # Plot in the 2D plane spanned by the first two rows of the planted
-        # projection. Centered at the curve cloud's centroid.
-        mean_pt = gt_i.mean(axis=0, keepdims=True)
-        # Find a 2D basis of GT's actual extent (PCA of GT alone).
-        gt_c = gt_i - mean_pt
-        _, _, vt = np.linalg.svd(gt_c, full_matrices=False)
+        # Joint-PCA + Procrustes-aligned plot: builds a 2D basis on the
+        # combined point cloud so neither curve is privileged, then
+        # solves the optimal rotation+scale to overlay the learned onto
+        # GT. This is the visualization that honestly tracks the
+        # chamfer (which itself centers + Frob-normalizes both curves).
+        gt_c = gt_i - gt_i.mean(axis=0, keepdims=True)
+        lp_c = learned_i - learned_i.mean(axis=0, keepdims=True)
+        # Frobenius-normalize each independently (matches chamfer's gauge).
+        gt_n = gt_c / max(np.linalg.norm(gt_c), 1e-12)
+        lp_n = lp_c / max(np.linalg.norm(lp_c), 1e-12)
+        # Joint-PCA basis.
+        joint = np.concatenate([gt_n, lp_n], axis=0)
+        _, _, vt = np.linalg.svd(joint, full_matrices=False)
         pcs = vt[:2]
-        gt2 = gt_c @ pcs.T
+        gt2 = gt_n @ pcs.T
+        lp2 = lp_n @ pcs.T
+        # Procrustes: optimal 2x2 rotation+reflection (Frobenius norm fixed).
+        M = lp2.T @ gt2
+        U, _, Vt = np.linalg.svd(M, full_matrices=False)
+        Q = U @ Vt
+        lp2_aligned = lp2 @ Q
         ax.plot(gt2[:, 0], gt2[:, 1], "o-", color="C0", markersize=2, label="ground truth")
-        if m >= 0:
-            lp_c = learned_i - learned_i.mean(axis=0, keepdims=True)
-            lp2 = lp_c @ pcs.T
-            # Best-scalar-fit so visual matches the scale-invariant chamfer
-            # metric (binary amp closes the gauge by dropping magnitude).
-            num = float((lp2 * gt2).sum())
-            den = float((lp2 * lp2).sum()) + 1e-12
-            alpha = num / den
-            lp2 = lp2 * alpha
-            ax.plot(lp2[:, 0], lp2[:, 1], "x-", color="C1", markersize=3, label="learned")
+        ax.plot(lp2_aligned[:, 0], lp2_aligned[:, 1], "x-", color="C1", markersize=3, label="learned")
         ax.set_title(f"{feature_names[i]} (sae idx {m})")
         ax.legend(fontsize=8)
         ax.set_aspect("equal", adjustable="datalim")
