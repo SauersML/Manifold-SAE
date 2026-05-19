@@ -60,12 +60,44 @@ def _parabola(t: np.ndarray) -> np.ndarray:
     return np.stack([u, u**2 - 1.0 / 3.0], axis=-1)
 
 
+def _ramp_exp(t: np.ndarray) -> np.ndarray:
+    # Monotone exponential ramp in R^2 (one component grows linearly, another
+    # exponentially). Both components are monotone in t.
+    return np.stack([2.0 * t - 1.0, np.exp(t) - np.exp(0.5)], axis=-1)
+
+
+def _sigmoid_curve(t: np.ndarray) -> np.ndarray:
+    # Steep sigmoid + linear coordinate in R^2. Monotone but non-uniform speed.
+    s = 1.0 / (1.0 + np.exp(-10.0 * (t - 0.5)))
+    return np.stack([2.0 * s - 1.0, 2.0 * t - 1.0], axis=-1)
+
+
+def _half_arc(t: np.ndarray) -> np.ndarray:
+    # Half-circle arc (open, monotone in angle) in R^2: t -> (cos πt, sin πt).
+    # Endpoints differ — open curve.
+    theta = np.pi * t
+    return np.stack([np.cos(theta), np.sin(theta)], axis=-1)
+
+
+def _cubic(t: np.ndarray) -> np.ndarray:
+    # Monotone cubic in R^2: (u, u^3) where u = 2t-1.
+    u = 2.0 * t - 1.0
+    return np.stack([u, u ** 3], axis=-1)
+
+
 CURVE_TYPES: list[tuple[str, Callable[[np.ndarray], np.ndarray], int, bool]] = [
-    ("circle", _circle, 2, True),
     ("line", _line, 1, False),
+    ("parabola", _parabola, 2, False),
+    ("ramp_exp", _ramp_exp, 2, False),
+    ("sigmoid", _sigmoid_curve, 2, False),
+    ("half_arc", _half_arc, 2, False),
+    ("cubic", _cubic, 2, False),
+    # Periodic / multi-loop curves below — only used if explicitly requested
+    # via CURVE_TYPES indexing. The architecture's monotone-position prior
+    # doesn't capture closed-curve wrap-around.
+    ("circle", _circle, 2, True),
     ("helix", _helix, 3, False),
     ("lissajous", _lissajous, 2, False),
-    ("parabola", _parabola, 2, False),
 ]
 
 
