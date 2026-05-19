@@ -55,7 +55,10 @@ class Config:
     lr: float = 1e-3
     seed: int = 0
     sparsity_weight: float = 1e-3
-    top_k: int = 7
+    top_k: int = 2
+    intrinsic_rank: int = 3
+    cumulant_weight: float = 1e-2
+    ortho_weight: float = 1e-2
     # Curriculum: train first on samples with only `curriculum_start_active`
     # GT features active, ramping linearly to all-active over
     # `curriculum_steps` steps. Forces each SAE feature to first specialize
@@ -273,6 +276,9 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         n_basis=cfg.n_basis,
         sparsity_weight=cfg.sparsity_weight,
         top_k=cfg.top_k,
+        intrinsic_rank=cfg.intrinsic_rank,
+        cumulant_weight=cfg.cumulant_weight,
+        ortho_weight=cfg.ortho_weight,
     )
     sae = ManifoldSAE(sae_config)
 

@@ -1,13 +1,24 @@
-"""Manifold-SAE: encoder + gamfit Duchon REML decoder.
+"""Manifold-SAE: factored architecture with persistent per-feature subspace.
 
-Each feature is a 1D smooth curve in residual stream space, fit via gamfit's
-Duchon-basis REML solve (gamfit picks the smoothing parameter automatically
-per feature). Amplitudes are binary (straight-through TopK) so they can't
-leak position information through a continuous gauge.
+Each feature k owns a learnable rank-R ambient subspace ``W_k ∈ R^(D, R)`` —
+the "tube" the curve lives in. Gamfit's Duchon REML fits the 1D smooth path
+inside that subspace. ``W_k`` is the manifold-analog of ``W_dec`` in a
+standard SAE; it carries persistent feature identity across batches.
 
-The architecture is the spec's minimal form: encoder + gamfit. Persistent
-feature identity must come from training dynamics (curriculum) rather than
-architectural anchors.
+Position parameterization
+-------------------------
+The encoder produces UNBOUNDED scalar position logits. A per-batch soft
+min-max rescaling maps them into ``[0, 1]`` so positions span the basis
+domain by construction every batch — no init dependence, no rank-deficient
+inner solves from clustered positions. This decouples the encoder's learned
+representation from gamfit's required domain; the curve's reparameterization
+invariance makes the rescaling lossless.
+
+Amplitudes
+----------
+Binary via straight-through TopK. Amplitudes can only encode "feature fires
+y/n", not magnitude — closing the amp/coef gauge so positions must carry
+where-on-the-curve information.
 """
 
 from __future__ import annotations
@@ -28,16 +39,38 @@ class ManifoldSAEConfig:
     n_features: int
     n_basis: int
     top_k: int
+    intrinsic_rank: int = 2
     sparsity_weight: float = 1e-3
+    cumulant_weight: float = 1e-2   # 4th-moment ICA-style identifiability
+    ortho_weight: float = 1e-2      # ||W_k^T W_k − I_R||² per feature
 
 
 @dataclass
 class ManifoldSAEOutput:
     reconstruction: torch.Tensor
     positions: torch.Tensor
-    amplitudes: torch.Tensor
+    amplitudes: torch.Tensor       # binary (TopK + straight-through)
+    mask_soft: torch.Tensor        # pre-binarization sigmoid probabilities
     coefficients: torch.Tensor
-    reml_score: torch.Tensor
+    directions: torch.Tensor
+    cumulant_loss: torch.Tensor
+    ortho_loss: torch.Tensor
+
+
+def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float = 1e-4) -> torch.Tensor:
+    """Smooth per-batch min-max normalization of unbounded scalar logits to [0, 1].
+
+    ``z_raw`` has shape (B, F). For each feature, compute a smooth min and
+    soft max across the batch dimension, then rescale.
+    ``-(1/β) logsumexp(-β z)`` is a smooth lower envelope; ``(1/β) logsumexp(β z)``
+    is a smooth upper envelope. β controls sharpness; β=10 is tight enough
+    that positions span [eps, 1-eps] reliably without being non-smooth.
+    """
+    soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)  # (F,)
+    soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)  # (F,)
+    span = (soft_max - soft_min).clamp(min=1e-6)
+    t = (z_raw - soft_min.unsqueeze(0)) / span.unsqueeze(0)
+    return t.clamp(eps, 1.0 - eps)
 
 
 class ManifoldSAE(nn.Module):
@@ -50,17 +83,43 @@ class ManifoldSAE(nn.Module):
             top_k=config.top_k,
         )
         K = int(config.n_basis)
+        D = int(config.input_dim)
+        R = int(config.intrinsic_rank)
+        F = int(config.n_features)
+
         centers = np.linspace(0.0, 1.0, K, dtype=np.float64)
         penalty = np.eye(K, dtype=np.float64)
         self.register_buffer("centers", torch.from_numpy(centers))
         self.register_buffer("penalty", torch.from_numpy(penalty))
 
+        # Persistent per-feature ambient subspace W_k ∈ R^(D, R). Initialized
+        # with orthonormal columns per feature so different features start
+        # in different ambient subspaces.
+        directions = torch.empty(F, D, R, dtype=torch.float32)
+        for k in range(F):
+            g = torch.randn(D, R)
+            q, _ = torch.linalg.qr(g)
+            directions[k] = q
+        self.directions = nn.Parameter(directions)
+
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
-        positions, amplitudes = self.encoder(x)
+        z_raw, mask_soft, mask_binary = self.encoder(x)
+        # Soft per-batch min-max → positions in [eps, 1-eps] spanning the basis.
+        positions = _soft_rescale_positions(z_raw)
+
         B, F = positions.shape
+        D = x.shape[1]
+        R = self.directions.shape[-1]
+        x_dtype = x.dtype
+        dirs = self.directions.to(x_dtype)  # (F, D, R)
+        # Project x onto each feature's persistent ambient subspace.
+        y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
+
+        # gamfit per-batch REML solve in R-dim subspace (one inner solve, all
+        # features batched). REML auto-selects smoothing per feature.
         t_packed = positions.t().contiguous().view(-1).to(torch.float64)
-        by_packed = amplitudes.t().contiguous().view(-1).to(torch.float64)
-        y_packed = x.to(torch.float64).repeat(F, 1)
+        by_packed = mask_binary.t().contiguous().view(-1).to(torch.float64)
+        y_packed = y_proj.permute(1, 0, 2).contiguous().view(F * B, R).to(torch.float64)
         offsets = (torch.arange(F + 1, device=positions.device) * B).to(torch.uint64)
         out = gt.gaussian_reml_fit_positions_batched(
             t_packed, y_packed, offsets,
@@ -68,15 +127,41 @@ class ManifoldSAE(nn.Module):
             basis_order=2, periodic=False,
             by=by_packed,
         )
-        per_feature = out.fitted.view(F, B, x.shape[1])
-        reconstruction = per_feature.sum(dim=0).to(x.dtype)
-        reml_per_feat = torch.nan_to_num(out.reml_score, nan=0.0, posinf=0.0, neginf=0.0)
+        fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)  # (F, B, R)
+        # Lift R-dim curve back to D-dim via persistent W_k.
+        contribution = torch.einsum("fbr,fdr->bfd", fitted_intrinsic, dirs)  # (B, F, D)
+        recon = contribution.sum(dim=1)  # (B, D)
+
+        # Identifiability: 4th-moment cumulant contrast on PRE-binarization
+        # mask probabilities. Pushes features toward statistical independence
+        # so the planted decomposition becomes the unique low-loss attractor.
+        # Use mask_soft (gradient-friendly) rather than mask_binary.
+        if self.config.cumulant_weight > 0:
+            a = mask_soft
+            a_c = a - a.mean(dim=0, keepdim=True)
+            a_std = a_c.std(dim=0, keepdim=True).clamp(min=1e-6)
+            a_n = a_c / a_std
+            pair_4th = (a_n.unsqueeze(-1) * a_n.unsqueeze(-2)).pow(2).mean(dim=0)  # (F, F)
+            n_off = max(F * F - F, 1)
+            cumulant_loss = (pair_4th.sum() - pair_4th.diagonal().sum()) / n_off
+        else:
+            cumulant_loss = torch.zeros((), dtype=x_dtype, device=x.device)
+
+        # Orthonormality of per-feature W_k. Keeps the subspace columns
+        # well-conditioned and prevents collapse / rescaling drift.
+        I_R = torch.eye(R, dtype=dirs.dtype, device=dirs.device).unsqueeze(0)  # (1, R, R)
+        WtW = torch.einsum("fdr,fds->frs", dirs, dirs)  # (F, R, R)
+        ortho_loss = ((WtW - I_R) ** 2).mean()
+
         return ManifoldSAEOutput(
-            reconstruction=reconstruction,
+            reconstruction=recon,
             positions=positions,
-            amplitudes=amplitudes,
-            coefficients=out.coefficients.to(x.dtype),
-            reml_score=reml_per_feat.sum().to(x.dtype),
+            amplitudes=mask_binary,
+            mask_soft=mask_soft,
+            coefficients=out.coefficients.to(x_dtype),
+            directions=self.directions,
+            cumulant_loss=cumulant_loss,
+            ortho_loss=ortho_loss,
         )
 
 
@@ -86,21 +171,26 @@ def extract_feature_curves(
     activations: torch.Tensor,
     t_grid: torch.Tensor,
 ) -> torch.Tensor:
-    """Per-feature learned curves on ``t_grid``, restricted to actually-fired
-    position range to avoid extrapolation."""
+    """Per-feature learned curves on ``t_grid`` in ambient space.
+
+    Evaluates the Duchon basis at t_grid mapped to each feature's actually-
+    observed position range, contracts with the per-batch coefficients (in
+    R-dim subspace), lifts to ambient via the persistent W_k.
+    """
     device = next(sae.parameters()).device
     activations = activations.to(device)
     t_grid_f64 = t_grid.to(device=device, dtype=torch.float64)
 
     sae.eval()
     out = sae(activations)
-    coefficients = out.coefficients.to(torch.float64)
+    coefficients = out.coefficients.to(torch.float64)  # (F, K, R)
+    directions = sae.directions.to(torch.float64)  # (F, D, R)
     amp = out.amplitudes
     pos = out.positions
     firing = amp > 1e-3
     F = coefficients.shape[0]
     T = t_grid_f64.shape[0]
-    D = coefficients.shape[-1]
+    D = directions.shape[1]
     curves = torch.zeros(F, T, D, dtype=torch.float64, device=device)
     for k in range(F):
         m = firing[:, k]
@@ -112,7 +202,8 @@ def extract_feature_curves(
         if t_hi - t_lo < 1e-3:
             continue
         t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)
-        mean_amp_k = amp[m, k].to(torch.float64).mean()
-        curves[k] = mean_amp_k * (phi_k @ coefficients[k])
+        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)  # (T, K)
+        intrinsic_curve = phi_k @ coefficients[k]  # (T, R)
+        ambient_curve = intrinsic_curve @ directions[k].T  # (T, D)
+        curves[k] = ambient_curve
     return curves.to(activations.dtype)

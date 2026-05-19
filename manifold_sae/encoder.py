@@ -41,43 +41,46 @@ class ManifoldEncoder(nn.Module):
 
     def _init_position_bias(self) -> None:
         with torch.no_grad():
-            # Spread per-feature MEAN positions across [0,1].
-            targets = torch.linspace(0.25, 0.75, self.n_features)
-            logits = torch.log(targets / (1.0 - targets))
+            # Positions are now unbounded; the SAE's soft-rescaling guarantees
+            # per-batch coverage of the basis domain. We just need each
+            # feature head to produce distinct (and per-token varying) z_raw
+            # at init. Different per-feature biases break feature symmetry.
             self.fc2_b.zero_()
-            self.fc2_b[:, 0] = logits
+            self.fc2_b[:, 0] = torch.linspace(-1.0, 1.0, self.n_features)
             self.fc2_b[:, 1] = 0.0
-            # Boost position-head weights so per-token positions actually vary
-            # across the batch at init. Without this, position logits have
-            # tiny variance, sigmoid saturates near the bias target, gamfit's
-            # design is rank-deficient on near-constant positions, and the
-            # inner solve returns zero coefficients.
+            # Position head weights: large enough that z_raw has substantial
+            # per-token variance, so soft-rescale produces well-spread positions.
             scale = 3.0 / max(self.hidden_dim, 1) ** 0.5
             self.fc2_w.data[:, :, 0].normal_(0.0, scale)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Returns (raw_position_logits, mask_soft, mask_binary).
+
+        ``raw_position_logits`` are UNBOUNDED scalar position outputs — the
+        caller (ManifoldSAE) does soft per-batch min-max rescaling to map
+        them into the basis domain. Decoupling encoder output from gamfit
+        domain prevents the position-clustering-at-init failure mode.
+
+        ``mask_soft`` is sigmoid(amp_logit) — used for the cumulant
+        identifiability loss (continuous probabilities). ``mask_binary`` is
+        the straight-through TopK result — used as gamfit's by-gate.
+        """
         x_n = self.norm(x)
         h = torch.einsum("bd,fdh->bfh", x_n, self.fc1_w) + self.fc1_b.unsqueeze(0)
         h = self.act(h)
         out = torch.einsum("bfh,fho->bfo", h, self.fc2_w) + self.fc2_b.unsqueeze(0)
-        pos_logits = torch.nan_to_num(out[:, :, 0], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
+        # Position is unbounded; SAE will soft-rescale.
+        z_raw = torch.nan_to_num(out[:, :, 0], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
         amp_logits = torch.nan_to_num(out[:, :, 1], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
-        positions = torch.sigmoid(pos_logits).clamp(1e-4, 1.0 - 1e-4)
-        # Amplitudes as BINARY gates via sigmoid + TopK + straight-through.
-        # Standard "manifold features" deliberately do NOT use amp magnitude
-        # to encode continuous information — position-on-the-curve is the
-        # one-dim degree of freedom. If amp is unconstrained the encoder
-        # uses it as a free gauge to leak position information, so amp is
-        # forced to {0, 1}-ish via a hard gate.
-        amp_soft = torch.sigmoid(amp_logits)  # (B, F) in (0, 1)
+        mask_soft = torch.sigmoid(amp_logits)  # (B, F)
+        # Binary mask via straight-through TopK.
         if self.top_k is not None and self.top_k < self.n_features:
-            _vals, idx = torch.topk(amp_soft, self.top_k, dim=1)
-            hard_mask = torch.zeros_like(amp_soft)
+            _vals, idx = torch.topk(mask_soft, self.top_k, dim=1)
+            hard_mask = torch.zeros_like(mask_soft)
             hard_mask.scatter_(1, idx, 1.0)
-            amplitudes = hard_mask + (amp_soft - amp_soft.detach())
+            mask_binary = hard_mask + (mask_soft - mask_soft.detach())
         else:
-            # All features always fire (top_k >= n_features). Hard amp = 1.
-            hard_mask = torch.ones_like(amp_soft)
-            amplitudes = hard_mask + (amp_soft - amp_soft.detach())
-        return positions, amplitudes
+            hard_mask = torch.ones_like(mask_soft)
+            mask_binary = hard_mask + (mask_soft - mask_soft.detach())
+        return z_raw, mask_soft, mask_binary
 
