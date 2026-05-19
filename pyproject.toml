@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "manifold-sae"
+version = "0.0.1"
+description = "Sparse autoencoders whose features are smooth 1D curves in residual stream, with a vector-output GAM decoder wrapping gamfit's Gaussian REML primitive."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+authors = [
+    { name = "Scott Sauers" },
+]
+keywords = ["sparse-autoencoder", "interpretability", "gam", "reml", "mechanistic-interpretability"]
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26",
+    "tqdm>=4.66",
+    "gamfit>=0.1.64",
+]
+
+[project.optional-dependencies]
+llm = [
+    "transformers",
+    "datasets",
+    "accelerate",
+    "safetensors",
+]
+plot = [
+    "matplotlib",
+]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+manifold-sae = "manifold_sae.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["manifold_sae"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
