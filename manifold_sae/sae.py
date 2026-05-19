@@ -288,29 +288,33 @@ class ManifoldSAE(nn.Module):
         # where two SAE features end up in the same subspace.
         M = dirs.permute(0, 2, 1).reshape(F * R, dirs.shape[1])  # (F*R, D)
         gram = M @ M.t()  # (F*R, F*R)
-        # Mask out the F diagonal R×R blocks
-        block_eye = torch.zeros_like(gram)
-        for k in range(F):
-            block_eye[k*R:(k+1)*R, k*R:(k+1)*R] = 1.0
+        # Mask out the F diagonal R×R blocks (vectorized via kron — no
+        # Python for-loop which would tank MPS throughput).
+        block_eye = torch.kron(
+            torch.eye(F, dtype=dirs.dtype, device=dirs.device),
+            torch.ones(R, R, dtype=dirs.dtype, device=dirs.device),
+        )
         off_block = gram * (1.0 - block_eye)
         cross_ortho = (off_block ** 2).mean()
         ortho_loss = per_feature_ortho + 0.1 * cross_ortho
 
-        principal = y_proj[..., 0]
-        mask_f = mask_binary.detach()
-        eps = 1e-6
-        terms = []
-        for k in range(F):
-            m = mask_f[:, k] > 0.5
-            if m.sum() < 5:
-                continue
-            p = positions[m, k]
-            q = principal[m, k]
-            p_c = p - p.mean()
-            q_c = q - q.mean()
-            denom = (p_c.pow(2).sum() * q_c.pow(2).sum()).clamp(min=eps).sqrt()
-            terms.append(1.0 - (p_c * q_c).sum().abs() / denom)
-        monotonicity_loss = torch.stack(terms).mean() if terms else torch.zeros((), dtype=x_dtype, device=x.device)
+        # Vectorized monotonicity loss: |Pearson corr(position, principal-axis
+        # projection)| per feature, averaged. The Python-for-loop version
+        # tanks MPS throughput from kernel-launch overhead; this is fully
+        # batched.
+        principal = y_proj[..., 0]                                # (B, F)
+        mask_f = (mask_binary.detach() > 0.5).to(positions.dtype)  # (B, F)
+        mass = mask_f.sum(dim=0).clamp(min=1.0)                   # (F,)
+        p_mean = (positions * mask_f).sum(dim=0) / mass
+        q_mean = (principal * mask_f).sum(dim=0) / mass
+        p_c = (positions - p_mean.unsqueeze(0)) * mask_f
+        q_c = (principal - q_mean.unsqueeze(0)) * mask_f
+        num = (p_c * q_c).sum(dim=0).abs()
+        den = (p_c.pow(2).sum(dim=0) * q_c.pow(2).sum(dim=0)).clamp(min=1e-12).sqrt()
+        per_feat_mono = 1.0 - num / den                           # (F,)
+        # Only count features with enough firing tokens
+        active_feat = (mass >= 5.0).to(positions.dtype)
+        monotonicity_loss = (per_feat_mono * active_feat).sum() / active_feat.sum().clamp(min=1.0)
 
         return ManifoldSAEOutput(
             reconstruction=recon,

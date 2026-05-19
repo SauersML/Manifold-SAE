@@ -299,12 +299,10 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
     )
     sae = ManifoldSAE(sae_config)
 
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-    else:
-        device = torch.device("cpu")
+    # CPU is faster than MPS at this small scale (D=64, F~10); MPS
+    # overhead dominates per-kernel launch. Real LLM-scale runs should
+    # use CUDA explicitly.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[setup] device={device}")
     sae.to(device)
 
