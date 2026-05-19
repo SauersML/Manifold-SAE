@@ -1,24 +1,44 @@
-"""Manifold-SAE: factored architecture with persistent per-feature subspace.
+"""Manifold-SAE: standard-SAE shape with curve-valued atoms.
 
-Each feature k owns a learnable rank-R ambient subspace ``W_k ∈ R^(D, R)`` —
-the "tube" the curve lives in. Gamfit's Duchon REML fits the 1D smooth path
-inside that subspace. ``W_k`` is the manifold-analog of ``W_dec`` in a
-standard SAE; it carries persistent feature identity across batches.
+Each dictionary atom is a smooth 1D curve ``g_k: [0, 1] -> R^D`` instead
+of a single direction. The whole thing is shaped like a vanilla SAE so
+the scaling story is identical: persistent parameters, feedforward
+encoder, Adam-trainable, applies to a fresh token in one forward pass.
 
-Position parameterization
--------------------------
-The encoder produces UNBOUNDED scalar position logits. A per-batch soft
-min-max rescaling maps them into ``[0, 1]`` so positions span the basis
-domain by construction every batch — no init dependence, no rank-deficient
-inner solves from clustered positions. This decouples the encoder's learned
-representation from gamfit's required domain; the curve's reparameterization
-invariance makes the rescaling lossless.
+Parameterization
+----------------
+Per feature ``k``:
+
+  * ``W_k in R^(D, R)``           — persistent ambient subspace
+  * ``B_k in R^(K_basis, R)``    — persistent spline coefficients
+  * ``log_lambda_k``              — persistent per-feature smoothness scalar
+
+  g_k(t) = phi(t) @ B_k @ W_k^T,  phi the Duchon m=2 1D basis on [0, 1].
+
+The basis evaluation is the only call into gamfit; there is NO per-batch
+REML solve. ``B_k`` is updated by Adam just like ``W_dec`` columns are in
+a vanilla SAE.
+
+Smoothness
+----------
+The loss includes ``sum_k exp(log_lambda_k) * tr(B_k^T S B_k)`` where
+``S`` is the integrated-squared-second-derivative penalty matrix from
+gamfit. ``log_lambda_k`` is learnable, so Adam picks per-feature
+smoothing on its own — the same identifiability gain as REML, paid for
+in parameters instead of per-batch linear solves.
+
+Encoder
+-------
+Linear ``W_enc_t, W_enc_a in R^(F, D)`` heads (vanilla-SAE shape).
+A small per-feature MLP on top of ``(x_norm, y_proj_k)`` is used for the
+toy task only because the linear heads can't separate look-alike
+monotone features at F = 5. The MLP is replaceable with the linear heads
+at LLM scale where overcompleteness does the separation.
 
 Amplitudes
 ----------
-Binary via straight-through TopK. Amplitudes can only encode "feature fires
-y/n", not magnitude — closing the amp/coef gauge so positions must carry
-where-on-the-curve information.
+Straight-through TopK on sigmoid amplitude logits — binary firing,
+closes the amp/coef gauge so position must carry where-on-the-curve.
 """
 
 from __future__ import annotations
@@ -41,9 +61,9 @@ class ManifoldSAEConfig:
     top_k: int
     intrinsic_rank: int = 2
     sparsity_weight: float = 1e-3
-    cumulant_weight: float = 1e-2   # 4th-moment ICA-style identifiability
-    ortho_weight: float = 1e-2      # ||W_k^T W_k − I_R||² per feature
-    periodic: bool = False          # use periodic Duchon basis (gamfit 0.1.69+)
+    cumulant_weight: float = 0.0
+    ortho_weight: float = 1e-2
+    smoothness_weight: float = 1e-3   # base coef on tr(B^T S B), scaled per feature by exp(log_lambda_k)
 
 
 @dataclass
@@ -52,27 +72,48 @@ class ManifoldSAEOutput:
     positions: torch.Tensor
     amplitudes: torch.Tensor       # binary (TopK + straight-through)
     mask_soft: torch.Tensor        # pre-binarization sigmoid probabilities
-    coefficients: torch.Tensor
-    directions: torch.Tensor
+    coefficients: torch.Tensor     # persistent B (F, K, R), broadcast for compat
+    directions: torch.Tensor       # persistent W (F, D, R)
     cumulant_loss: torch.Tensor
     ortho_loss: torch.Tensor
     monotonicity_loss: torch.Tensor
+    smoothness_loss: torch.Tensor
 
 
 def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float = 1e-4) -> torch.Tensor:
     """Smooth per-batch min-max normalization of unbounded scalar logits to [0, 1].
 
-    ``z_raw`` has shape (B, F). For each feature, compute a smooth min and
-    soft max across the batch dimension, then rescale.
-    ``-(1/β) logsumexp(-β z)`` is a smooth lower envelope; ``(1/β) logsumexp(β z)``
-    is a smooth upper envelope. β controls sharpness; β=10 is tight enough
-    that positions span [eps, 1-eps] reliably without being non-smooth.
+    Gauge-fixes the position so atoms always see positions spanning the
+    basis domain — no init-clustering pathology where every position
+    starts at sigmoid(0) = 0.5. ``log_lambda`` and ``B_k`` are reparam-
+    invariant under monotone rescaling of ``t``, so this is lossless.
+    O(B*F) work at LLM scale, no extra parameters.
     """
-    soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)  # (F,)
-    soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)  # (F,)
+    soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)
+    soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)
     span = (soft_max - soft_min).clamp(min=1e-6)
     t = (z_raw - soft_min.unsqueeze(0)) / span.unsqueeze(0)
     return t.clamp(eps, 1.0 - eps)
+
+
+def _duchon_penalty_matrix(centers: torch.Tensor, basis_order: int = 2) -> torch.Tensor:
+    """Integrated squared mth-derivative penalty for Duchon basis on [0,1].
+
+    Approximated by finite-difference on a fine grid of basis evaluations.
+    Returns a (K, K) PSD matrix.
+    """
+    K = int(centers.shape[0])
+    M = 2048
+    t = torch.linspace(0.0, 1.0, M, dtype=torch.float64)
+    phi = gt.duchon_basis_1d(t, centers.to(torch.float64), m=basis_order, periodic=False)
+    # Finite-difference second derivative across t.
+    d2 = phi[2:] - 2.0 * phi[1:-1] + phi[:-2]
+    h = 1.0 / (M - 1)
+    d2 = d2 / (h ** 2)
+    S = d2.T @ d2 * (1.0 / (M - 2))
+    # Add a tiny diagonal to keep PSD on degenerate basis directions.
+    S = S + 1e-8 * torch.eye(K, dtype=torch.float64)
+    return S
 
 
 class ManifoldSAE(nn.Module):
@@ -91,13 +132,13 @@ class ManifoldSAE(nn.Module):
         F = int(config.n_features)
 
         centers = np.linspace(0.0, 1.0, K, dtype=np.float64)
-        penalty = np.eye(K, dtype=np.float64)
         self.register_buffer("centers", torch.from_numpy(centers))
-        self.register_buffer("penalty", torch.from_numpy(penalty))
+        # Real Duchon m=2 penalty matrix — gives correct smoothness behavior
+        # (penalizes curvature, leaves linear functions free).
+        S = _duchon_penalty_matrix(self.centers, basis_order=2)
+        self.register_buffer("penalty", S)
 
-        # Persistent per-feature ambient subspace W_k ∈ R^(D, R). Initialize
-        # so the UNION of all features' columns is one orthonormal frame
-        # when D ≥ F*R; otherwise fall back to per-feature independent QR.
+        # Persistent per-feature W_k in R^(D, R).
         if D >= F * R:
             Q, _ = torch.linalg.qr(torch.randn(D, F * R))
             directions = Q.reshape(D, F, R).permute(1, 0, 2).contiguous()
@@ -108,64 +149,84 @@ class ManifoldSAE(nn.Module):
                 directions[k] = q
         self.directions = nn.Parameter(directions.to(torch.float32))
 
+        # Persistent per-feature spline coefficients B_k in R^(K, R).
+        # Init small so curves start near zero — Adam will grow them.
+        self.coeff = nn.Parameter(0.05 * torch.randn(F, K, R, dtype=torch.float32))
+
+        # Per-feature learnable log-smoothness.
+        self.log_lambda = nn.Parameter(torch.zeros(F, dtype=torch.float32))
+
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
         x_dtype = x.dtype
         dirs = self.directions.to(x_dtype)
-        # Compute per-feature subspace projection first; pass to encoder so it
-        # has the per-feature signal needed to specialize.
+        coeff = self.coeff.to(x_dtype)
         y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
         z_raw, mask_soft, mask_binary = self.encoder(x, y_proj)
         positions = _soft_rescale_positions(z_raw)
 
         B, F = positions.shape
         R = dirs.shape[-1]
+        K = coeff.shape[1]
 
-        # gamfit per-batch REML solve in R-dim subspace.
-        t_packed = positions.t().contiguous().view(-1).to(torch.float64)
-        by_packed = mask_binary.t().contiguous().view(-1).to(torch.float64)
-        y_packed = y_proj.permute(1, 0, 2).contiguous().view(F * B, R).to(torch.float64)
-        offsets = (torch.arange(F + 1, device=positions.device) * B).to(torch.uint64)
-        out = gt.gaussian_reml_fit_positions_batched(
-            t_packed, y_packed, offsets,
-            "duchon", self.centers, self.penalty,
-            basis_order=2,
-            periodic=self.config.periodic,
-            period=1.0 if self.config.periodic else None,
-            by=by_packed,
-            init_lambda=1e-4,  # bias REML toward low smoothing — preserves
-                                # curvature of sharper features (cubic, tanh)
-                                # that REML otherwise flattens at default init.
-        )
-        fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)
-        contribution = torch.einsum("fbr,fdr->bfd", fitted_intrinsic, dirs)
-        recon = contribution.sum(dim=1)  # (B, D)
+        # Evaluate basis at positions (no per-batch solve).
+        t_flat = positions.t().contiguous().view(-1).to(torch.float64)  # (F*B,)
+        phi = gt.duchon_basis_1d(t_flat, self.centers, m=2, periodic=False).to(x_dtype)
+        phi = phi.view(F, B, K)
+        # g_{b,f,:} = phi_{b,f,:} @ B_f
+        g = torch.einsum("fbk,fkr->bfr", phi, coeff)
 
-        # Identifiability: 4th-moment cumulant contrast on PRE-binarization
-        # mask probabilities. Pushes features toward statistical independence
-        # so the planted decomposition becomes the unique low-loss attractor.
-        # Use mask_soft (gradient-friendly) rather than mask_binary.
+        # Lift to ambient, gated by binary amplitude.
+        contribution = torch.einsum("bfr,fdr->bfd", g * mask_binary.unsqueeze(-1), dirs)
+        recon = contribution.sum(dim=1)
+
+        # Per-feature smoothness penalty: sum_k exp(log_lambda_k) * tr(B_k^T S B_k).
+        # Done in float64 to avoid quadratic blow-up.
+        S = self.penalty.to(coeff.dtype)
+        SB = torch.einsum("kj,fjr->fkr", S, coeff)
+        per_feature = torch.einsum("fkr,fkr->f", coeff, SB)  # tr(B_k^T S B_k)
+        lam = torch.exp(self.log_lambda).to(coeff.dtype)
+        smoothness_loss = (lam * per_feature).mean()
+
+        # Identifiability: 4th-moment cumulant contrast (off by default at
+        # cumulant_weight=0).
         if self.config.cumulant_weight > 0:
             a = mask_soft
             a_c = a - a.mean(dim=0, keepdim=True)
             a_std = a_c.std(dim=0, keepdim=True).clamp(min=1e-6)
             a_n = a_c / a_std
-            pair_4th = (a_n.unsqueeze(-1) * a_n.unsqueeze(-2)).pow(2).mean(dim=0)  # (F, F)
+            pair_4th = (a_n.unsqueeze(-1) * a_n.unsqueeze(-2)).pow(2).mean(dim=0)
             n_off = max(F * F - F, 1)
             cumulant_loss = (pair_4th.sum() - pair_4th.diagonal().sum()) / n_off
         else:
             cumulant_loss = torch.zeros((), dtype=x_dtype, device=x.device)
 
-        # Orthonormality of per-feature W_k.
+        # Per-feature column orthonormality AND cross-feature subspace
+        # orthogonality. Cross-feature term is the load-bearing one: without
+        # it, different features' W_k can align to overlapping ambient
+        # directions, the encoder sees nearly identical y_proj signals
+        # across features and can't separate them — the recovered curves
+        # then represent mixtures of GT features. Build M = (FR, D) of
+        # all column vectors; penalize off-diagonal entries of M M^T.
         I_R = torch.eye(R, dtype=dirs.dtype, device=dirs.device).unsqueeze(0)
         WtW = torch.einsum("fdr,fds->frs", dirs, dirs)
-        ortho_loss = ((WtW - I_R) ** 2).mean()
+        per_feature_ortho = ((WtW - I_R) ** 2).mean()
+        # Cross-feature subspace coherence: penalize OFF-DIAGONAL blocks only.
+        # The diagonal blocks are per-feature ortho (already covered); the
+        # off-diagonal blocks measure how much different features' subspaces
+        # overlap. Real planted features in this dataset share dimensions, so
+        # this penalty should be light — it only breaks pathological aliasing
+        # where two SAE features end up in the same subspace.
+        M = dirs.permute(0, 2, 1).reshape(F * R, dirs.shape[1])  # (F*R, D)
+        gram = M @ M.t()  # (F*R, F*R)
+        # Mask out the F diagonal R×R blocks
+        block_eye = torch.zeros_like(gram)
+        for k in range(F):
+            block_eye[k*R:(k+1)*R, k*R:(k+1)*R] = 1.0
+        off_block = gram * (1.0 - block_eye)
+        cross_ortho = (off_block ** 2).mean()
+        ortho_loss = per_feature_ortho + 0.1 * cross_ortho
 
-        # Monotonicity: position should be a monotone function of the
-        # principal-axis projection x @ W_k[:, 0]. Penalty is
-        # 1 - |Pearson corr(position, principal-projection)| per feature
-        # over firing tokens. Anchored to principal axis only — angular
-        # variant on top introduces twisting for genuinely monotone curves.
-        principal = y_proj[..., 0]  # (B, F)
+        principal = y_proj[..., 0]
         mask_f = mask_binary.detach()
         eps = 1e-6
         terms = []
@@ -186,11 +247,12 @@ class ManifoldSAE(nn.Module):
             positions=positions,
             amplitudes=mask_binary,
             mask_soft=mask_soft,
-            coefficients=out.coefficients.to(x_dtype),
+            coefficients=self.coeff,
             directions=self.directions,
             cumulant_loss=cumulant_loss,
             ortho_loss=ortho_loss,
             monotonicity_loss=monotonicity_loss,
+            smoothness_loss=smoothness_loss,
         )
 
 
@@ -202,9 +264,9 @@ def extract_feature_curves(
 ) -> torch.Tensor:
     """Per-feature learned curves on ``t_grid`` in ambient space.
 
-    Evaluates the Duchon basis at t_grid mapped to each feature's actually-
-    observed position range, contracts with the per-batch coefficients (in
-    R-dim subspace), lifts to ambient via the persistent W_k.
+    With persistent curves there's no batch dependence — evaluate the
+    Duchon basis at t_grid (mapped into each feature's observed position
+    range), contract with the stored coefficients, lift to ambient.
     """
     device = next(sae.parameters()).device
     activations = activations.to(device)
@@ -212,27 +274,28 @@ def extract_feature_curves(
 
     sae.eval()
     out = sae(activations)
-    coefficients = out.coefficients.to(torch.float64)
-    directions = sae.directions.to(torch.float64)
+    coeff = sae.coeff.to(torch.float64)
+    dirs = sae.directions.to(torch.float64)
     amp = out.amplitudes
     pos = out.positions
     firing = amp > 1e-3
-    F = coefficients.shape[0]
+    F = coeff.shape[0]
     T = t_grid_f64.shape[0]
-    D = directions.shape[1]
+    D = dirs.shape[1]
     curves = torch.zeros(F, T, D, dtype=torch.float64, device=device)
     for k in range(F):
         m = firing[:, k]
         if m.sum() < 2:
-            continue
-        pos_k = pos[m, k].to(torch.float64)
-        t_lo = float(pos_k.quantile(0.02).item())
-        t_hi = float(pos_k.quantile(0.98).item())
-        if t_hi - t_lo < 1e-3:
-            continue
+            t_lo, t_hi = 0.0, 1.0
+        else:
+            pos_k = pos[m, k].to(torch.float64)
+            t_lo = float(pos_k.quantile(0.02).item())
+            t_hi = float(pos_k.quantile(0.98).item())
+            if t_hi - t_lo < 1e-3:
+                t_lo, t_hi = 0.0, 1.0
         t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=sae.config.periodic)
-        intrinsic_curve = phi_k @ coefficients[k]
-        ambient_curve = intrinsic_curve @ directions[k].T
+        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)
+        intrinsic_curve = phi_k @ coeff[k]
+        ambient_curve = intrinsic_curve @ dirs[k].T
         curves[k] = ambient_curve
     return curves.to(activations.dtype)

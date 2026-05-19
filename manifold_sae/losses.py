@@ -41,11 +41,13 @@ def total_loss(
     mse = torch.mean((output.reconstruction - target) ** 2)
     sparsity = output.mask_soft.mean()
     coverage = _position_coverage_loss(output.positions, output.mask_soft)
+    smoothness = output.smoothness_loss
     total = (
         mse
         + config.sparsity_weight * sparsity
         + config.cumulant_weight * output.cumulant_loss
         + config.ortho_weight * output.ortho_loss
+        + getattr(config, "smoothness_weight", 1e-3) * smoothness
         + 1e-2 * coverage
         + 1e-1 * output.monotonicity_loss
     )
@@ -56,5 +58,6 @@ def total_loss(
         "ortho": output.ortho_loss,
         "coverage": coverage,
         "monotonicity": output.monotonicity_loss,
+        "smoothness": smoothness,
         "total": total,
     }

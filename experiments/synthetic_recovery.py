@@ -59,6 +59,7 @@ class Config:
     intrinsic_rank: int = 3
     cumulant_weight: float = 1e-2
     ortho_weight: float = 1e-2
+    smoothness_weight: float = 1e-3
     # Curriculum: train first on samples with only `curriculum_start_active`
     # GT features active, ramping linearly to all-active over
     # `curriculum_steps` steps. Forces each SAE feature to first specialize
@@ -230,7 +231,14 @@ def _plot_curves(
         gt2 = gt_c @ pcs.T
         ax.plot(gt2[:, 0], gt2[:, 1], "o-", color="C0", markersize=2, label="ground truth")
         if m >= 0:
-            lp2 = (learned_i - mean_pt) @ pcs.T
+            lp_c = learned_i - learned_i.mean(axis=0, keepdims=True)
+            lp2 = lp_c @ pcs.T
+            # Best-scalar-fit so visual matches the scale-invariant chamfer
+            # metric (binary amp closes the gauge by dropping magnitude).
+            num = float((lp2 * gt2).sum())
+            den = float((lp2 * lp2).sum()) + 1e-12
+            alpha = num / den
+            lp2 = lp2 * alpha
             ax.plot(lp2[:, 0], lp2[:, 1], "x-", color="C1", markersize=3, label="learned")
         ax.set_title(f"{feature_names[i]} (sae idx {m})")
         ax.legend(fontsize=8)
@@ -283,6 +291,7 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         intrinsic_rank=cfg.intrinsic_rank,
         cumulant_weight=cfg.cumulant_weight,
         ortho_weight=cfg.ortho_weight,
+        smoothness_weight=cfg.smoothness_weight,
     )
     sae = ManifoldSAE(sae_config)
 
