@@ -51,6 +51,7 @@ import torch
 from torch import nn
 
 from .encoder import ManifoldEncoder
+from .encoder_linear import ManifoldEncoderLinear
 
 
 @dataclass
@@ -64,6 +65,9 @@ class ManifoldSAEConfig:
     cumulant_weight: float = 0.0
     ortho_weight: float = 1e-2
     smoothness_weight: float = 1e-3   # base coef on tr(B^T S B), scaled per feature by exp(log_lambda_k)
+    encoder_type: str = "mlp"          # "mlp" (per-feature, toy) or "linear" (LLM scale)
+    continuous_amp: bool = False        # True: softplus(a) + topk gate (continuous magnitude)
+    curve_norm_weight: float = 0.0      # weight on (avg curve_norm² - 1)² gauge penalty
 
 
 @dataclass
@@ -78,6 +82,7 @@ class ManifoldSAEOutput:
     ortho_loss: torch.Tensor
     monotonicity_loss: torch.Tensor
     smoothness_loss: torch.Tensor
+    curve_norm_loss: torch.Tensor
 
 
 def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float = 1e-4) -> torch.Tensor:
@@ -120,12 +125,15 @@ class ManifoldSAE(nn.Module):
     def __init__(self, config: ManifoldSAEConfig) -> None:
         super().__init__()
         self.config = config
-        self.encoder = ManifoldEncoder(
+        EncoderCls = ManifoldEncoderLinear if getattr(config, "encoder_type", "mlp") == "linear" else ManifoldEncoder
+        self.encoder = EncoderCls(
             intrinsic_rank=config.intrinsic_rank,
             n_features=config.n_features,
             input_dim=config.input_dim,
             top_k=config.top_k,
         )
+        # Plumb continuous_amp into the encoder so it can switch gauges.
+        self.encoder.continuous_amp = bool(getattr(config, "continuous_amp", False))
         K = int(config.n_basis)
         D = int(config.input_dim)
         R = int(config.intrinsic_rank)
@@ -178,6 +186,21 @@ class ManifoldSAE(nn.Module):
         # Lift to ambient, gated by binary amplitude.
         contribution = torch.einsum("bfr,fdr->bfd", g * mask_binary.unsqueeze(-1), dirs)
         recon = contribution.sum(dim=1)
+
+        # Curve-norm gauge penalty: keep E_t[||g_k(t) @ W_k^T||²] near 1
+        # so amplitude carries magnitude and curve carries shape (when
+        # ``continuous_amp`` is enabled in the config). Without this and
+        # with continuous amp, (amp, curve) is a multiplicative gauge.
+        curve_norm_w = float(getattr(self.config, "curve_norm_weight", 0.0))
+        if curve_norm_w > 0:
+            t_grid = torch.linspace(0.02, 0.98, 32, dtype=torch.float64, device=x.device)
+            phi_g = gt.duchon_basis_1d(t_grid, self.centers, m=2, periodic=False).to(coeff.dtype)
+            g_grid = torch.einsum("tk,fkr->ftr", phi_g, coeff)             # (F, T, R)
+            amb = torch.einsum("ftr,fdr->ftd", g_grid, dirs)               # (F, T, D)
+            per_feat = amb.pow(2).sum(dim=-1).mean(dim=-1)                 # (F,)
+            curve_norm_loss = ((per_feat - 1.0) ** 2).mean()
+        else:
+            curve_norm_loss = torch.zeros((), dtype=x_dtype, device=x.device)
 
         # Per-feature smoothness penalty: sum_k exp(log_lambda_k) * tr(B_k^T S B_k).
         # Done in float64 to avoid quadratic blow-up.
@@ -253,6 +276,7 @@ class ManifoldSAE(nn.Module):
             ortho_loss=ortho_loss,
             monotonicity_loss=monotonicity_loss,
             smoothness_loss=smoothness_loss,
+            curve_norm_loss=curve_norm_loss,
         )
 
 

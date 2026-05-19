@@ -58,6 +58,16 @@ class ManifoldEncoder(nn.Module):
         z_raw = torch.nan_to_num(out[:, :, 0], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
         amp_logits = torch.nan_to_num(out[:, :, 1], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
         mask_soft = torch.sigmoid(amp_logits)
+        if getattr(self, "continuous_amp", False):
+            amp_cont = torch.nn.functional.softplus(amp_logits)
+            if self.top_k is not None and self.top_k < self.n_features:
+                _vals, idx = torch.topk(amp_cont, self.top_k, dim=1)
+                gate = torch.zeros_like(amp_cont)
+                gate.scatter_(1, idx, 1.0)
+                amp_out = amp_cont * gate
+            else:
+                amp_out = amp_cont
+            return z_raw, mask_soft, amp_out
         # Binary straight-through TopK: closes the (amp, curve) gauge by
         # forbidding amplitude from carrying magnitude. Curves absorb it.
         if self.top_k is not None and self.top_k < self.n_features:

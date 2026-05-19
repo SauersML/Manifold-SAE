@@ -48,6 +48,7 @@ def total_loss(
         + config.cumulant_weight * output.cumulant_loss
         + config.ortho_weight * output.ortho_loss
         + getattr(config, "smoothness_weight", 1e-3) * smoothness
+        + getattr(config, "curve_norm_weight", 0.0) * output.curve_norm_loss
         + 1e-2 * coverage
         + 1e-1 * output.monotonicity_loss
     )
