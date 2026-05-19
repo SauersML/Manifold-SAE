@@ -60,7 +60,7 @@ class TrainConfig:
     batch_size: int = 64
     lr: float = 1e-3
     sparsity_weight: float = 1e-3
-    reml_weight: float = 1e-2
+    top_k: int = 4
     log_every: int = 50
     output_dir: str = "runs/sae_days_v1"
     seed: int = 0
@@ -124,7 +124,7 @@ def train_sae(cfg: TrainConfig = DEFAULT_TRAIN_CONFIG) -> None:
         n_features=cfg.n_features,
         n_basis=cfg.n_basis,
         sparsity_weight=cfg.sparsity_weight,
-        reml_weight=cfg.reml_weight,
+        top_k=cfg.top_k,
     )
     sae = ManifoldSAE(sae_config)
 
@@ -194,7 +194,7 @@ def _decode_curves_from_data(
     Thin wrapper over :func:`manifold_sae.decoder.extract_feature_curves` —
     kept here so the analyze subcommand has one obvious entrypoint.
     """
-    from manifold_sae.decoder import extract_feature_curves
+    from manifold_sae.sae import extract_feature_curves
 
     return extract_feature_curves(sae, activations.to(device), t_grid)
 

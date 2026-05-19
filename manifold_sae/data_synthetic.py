@@ -259,17 +259,30 @@ class SyntheticDataset(Dataset):
 
 
 def chamfer_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """Symmetric Chamfer distance between two point clouds in R^d.
+    """Symmetric Chamfer distance, scale + translation invariant.
 
-    ``a`` has shape ``(N_a, d)`` and ``b`` has shape ``(N_b, d)``. Returns the mean
-    of the mean nearest-neighbor distance from a->b and b->a. This is gauge-free
-    over reparameterizations of the underlying curves (it only depends on the
-    point cloud, not the order or scaling of the parameter axis).
+    The Manifold-SAE has one legit gauge: amp <-> coefficient SCALE. To
+    measure shape recovery we center both clouds and normalize by Frobenius
+    norm, then take pure chamfer. We do NOT allow rotation — the planted
+    direction in ambient space is observable and the SAE must recover it
+    (the per-feature decoder coefficients pick direction in ambient).
+
+    A degenerate cloud (one point / zero spread) gets the worst-case
+    chamfer 2 (diameter of the unit-norm ball both clouds live in).
     """
     a = np.asarray(a, dtype=np.float64)
     b = np.asarray(b, dtype=np.float64)
-    # Pairwise squared distances; works fine for small clouds (T ~ 256).
-    diff = a[:, None, :] - b[None, :, :]
+
+    a_c = a - a.mean(axis=0, keepdims=True)
+    b_c = b - b.mean(axis=0, keepdims=True)
+    a_norm = np.linalg.norm(a_c, "fro")
+    b_norm = np.linalg.norm(b_c, "fro")
+    if a_norm < 1e-12 or b_norm < 1e-12:
+        return 2.0
+    a_n = a_c / a_norm
+    b_n = b_c / b_norm
+
+    diff = a_n[:, None, :] - b_n[None, :, :]
     d2 = np.einsum("ijk,ijk->ij", diff, diff)
     d_ab = np.sqrt(d2.min(axis=1)).mean()
     d_ba = np.sqrt(d2.min(axis=0)).mean()

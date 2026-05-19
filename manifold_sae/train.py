@@ -56,7 +56,6 @@ def train(
         "step": [],
         "mse": [],
         "sparsity": [],
-        "reml": [],
         "position_variance_mean": [],
         "dead_feature_count": [],
         "grad_ratio_mean": [],
@@ -84,7 +83,6 @@ def train(
                 f"[step {step:6d}] "
                 f"mse={losses['mse'].item():.4e} "
                 f"sparsity={losses['sparsity'].item():.4e} "
-                f"reml={losses['reml'].item():.4e} "
                 f"pos_var={pos_var.mean().item():.4e} "
                 f"dead={int(dead.sum().item())} "
                 f"grad_ratio={ratio_info['ratio'].mean().item():.4e}"
@@ -92,12 +90,12 @@ def train(
             history["step"].append(step)
             history["mse"].append(losses["mse"].item())
             history["sparsity"].append(losses["sparsity"].item())
-            history["reml"].append(losses["reml"].item())
             history["position_variance_mean"].append(pos_var.mean().item())
             history["dead_feature_count"].append(int(dead.sum().item()))
             history["grad_ratio_mean"].append(ratio_info["ratio"].mean().item())
 
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(sae.parameters(), max_norm=1.0)
         optimizer.step()
         step += 1
 

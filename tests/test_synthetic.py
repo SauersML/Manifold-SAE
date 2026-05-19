@@ -41,12 +41,10 @@ def test_synthetic_recovery_directional() -> None:
     config = sae_mod.ManifoldSAEConfig(
         input_dim=16,
         n_features=5,  # 3 planted + 2 slack
-        n_basis=6,
-        # Tuned for fast synthetic recovery: drop sparsity so features don't die,
-        # boost position spread to keep features from collapsing to a point.
+        n_basis=14,
+        top_k=2,
+        # Tuned for fast synthetic recovery: drop sparsity so features don't die.
         sparsity_weight=0.0,
-        reml_weight=1e-4,
-        position_spread_weight=1e-1,
     )
     sae = sae_mod.ManifoldSAE(config)
     optimizer = train_mod.build_optimizer(sae, lr=5e-3)
@@ -69,9 +67,7 @@ def test_synthetic_recovery_directional() -> None:
         f"{naive_mse:.4f} (ratio={relative:.3f}); architecture did not learn"
     )
     # Also assert some features stayed alive — the dead-feature failure mode.
-    edf = recon.new_tensor([0.0])  # placeholder to keep linter quiet
-    del edf
-    alive = (sae(dataset.x).edf > 0.1).sum().item()
+    alive = (sae(dataset.x).amplitudes.mean(dim=0) > 1e-3).sum().item()
     assert alive >= 2, f"only {alive} features survived training (need >=2)"
     _ = chamfer_distance  # imported for the longer experiment; keep reachable
 

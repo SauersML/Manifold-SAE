@@ -10,7 +10,7 @@ from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
 
 def test_sae_smoke() -> None:
     torch.manual_seed(0)
-    config = ManifoldSAEConfig(input_dim=16, n_features=4, n_basis=6)
+    config = ManifoldSAEConfig(input_dim=16, n_features=4, n_basis=10, top_k=2)
     sae = ManifoldSAE(config)
 
     x = torch.randn(32, 16)

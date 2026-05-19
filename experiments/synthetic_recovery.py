@@ -55,8 +55,13 @@ class Config:
     lr: float = 1e-3
     seed: int = 0
     sparsity_weight: float = 1e-3
-    reml_weight: float = 1e-2
-    position_spread_weight: float = 1e-3
+    top_k: int = 7
+    # Curriculum: train first on samples with only `curriculum_start_active`
+    # GT features active, ramping linearly to all-active over
+    # `curriculum_steps` steps. Forces each SAE feature to first specialize
+    # on a single GT direction before being asked to handle superpositions.
+    curriculum_start_active: int = 1
+    curriculum_steps: int = 2000
     # Extra learned features beyond planted ground truth, acts as slack.
     slack_features: int = 2
     # Number of t samples used to probe each learned curve.
@@ -84,6 +89,24 @@ def _build_loader(dataset: SyntheticDataset, batch_size: int, seed: int) -> Iter
         shuffle=True,
         drop_last=True,
         generator=g,
+    )
+
+
+def _curriculum_loader(
+    dataset: SyntheticDataset, batch_size: int, max_active: int, seed: int,
+) -> Iterable[torch.Tensor]:
+    """Yield batches of samples whose GT active-feature count is <= max_active."""
+    active = dataset.ground_truth["active"]  # (N, F)
+    counts = active.to(torch.int64).sum(dim=1)
+    keep = (counts <= max_active) & (counts >= 1)
+    idx = torch.nonzero(keep, as_tuple=True)[0].numpy()
+    if len(idx) < batch_size:
+        # Not enough samples — fall back to all data.
+        return _build_loader(dataset, batch_size, seed)
+    subset = torch.utils.data.Subset(dataset, idx.tolist())
+    g = torch.Generator().manual_seed(seed + 1)
+    return DataLoader(
+        subset, batch_size=batch_size, shuffle=True, drop_last=True, generator=g,
     )
 
 
@@ -119,7 +142,7 @@ def _probe_learned_curves(
     ndarray
         Shape ``(F_sae, T_grid, d_ambient)``.
     """
-    from manifold_sae.decoder import extract_feature_curves
+    from manifold_sae.sae import extract_feature_curves
 
     # The probe needs real activations as fit targets — passing zeros makes
     # gamfit's inner solve collapse every coefficient to zero and the probed
@@ -181,26 +204,26 @@ def _plot_curves(
     import matplotlib.pyplot as plt
 
     F = gt_points.shape[0]
-    # PCA on the union of GT and matched learned points so the projection is shared.
-    union = np.concatenate(
-        [gt_points.reshape(-1, gt_points.shape[-1])]
-        + [learned_points[m].reshape(-1, learned_points.shape[-1]) for m in matches if m >= 0],
-        axis=0,
-    )
-    union -= union.mean(axis=0, keepdims=True)
-    _u, _s, vt = np.linalg.svd(union, full_matrices=False)
-    pcs = vt[:2]  # (2, D)
-
     cols = min(F, 3)
     rows = int(np.ceil(F / cols))
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows), squeeze=False)
     for i in range(F):
         ax = axes[i // cols, i % cols]
-        gt2 = gt_points[i] @ pcs.T
-        ax.plot(gt2[:, 0], gt2[:, 1], "o-", color="C0", markersize=2, label="ground truth")
         m = int(matches[i])
+        gt_i = gt_points[i]
+        learned_i = learned_points[m] if m >= 0 else np.zeros_like(gt_i)
+        # Per-pair PCA: project BOTH curves into the 2D plane that captures
+        # the most variance of GT ∪ learned. This avoids the misleading
+        # picture where the learned curve looks like garbage just because
+        # it lives along a different ambient direction than the planted GT.
+        union = np.concatenate([gt_i, learned_i], axis=0)
+        union_c = union - union.mean(axis=0, keepdims=True)
+        _u, _s, vt = np.linalg.svd(union_c, full_matrices=False)
+        pcs = vt[:2]
+        gt2 = (gt_i - union.mean(axis=0, keepdims=True)) @ pcs.T
+        ax.plot(gt2[:, 0], gt2[:, 1], "o-", color="C0", markersize=2, label="ground truth")
         if m >= 0:
-            lp2 = learned_points[m] @ pcs.T
+            lp2 = (learned_i - union.mean(axis=0, keepdims=True)) @ pcs.T
             ax.plot(lp2[:, 0], lp2[:, 1], "x-", color="C1", markersize=3, label="learned")
         ax.set_title(f"{feature_names[i]} (sae idx {m})")
         ax.legend(fontsize=8)
@@ -249,8 +272,7 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         n_features=n_sae_features,
         n_basis=cfg.n_basis,
         sparsity_weight=cfg.sparsity_weight,
-        reml_weight=cfg.reml_weight,
-        position_spread_weight=cfg.position_spread_weight,
+        top_k=cfg.top_k,
     )
     sae = ManifoldSAE(sae_config)
 
@@ -260,9 +282,28 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
     optimizer = build_optimizer(sae, lr=cfg.lr)
 
     print(f"[train] {cfg.n_steps} steps, batch={cfg.batch_size}, lr={cfg.lr}, "
-          f"n_sae_features={n_sae_features}, n_basis={cfg.n_basis}")
+          f"n_sae_features={n_sae_features}, n_basis={cfg.n_basis}, "
+          f"curriculum: {cfg.curriculum_start_active}->{cfg.n_features} active over {cfg.curriculum_steps} steps")
     t0 = time.time()
-    history = train(sae, loader, optimizer, n_steps=cfg.n_steps, log_every=max(cfg.n_steps // 20, 1))
+    history = {"step": [], "mse": [], "sparsity": [], "position_variance_mean": [], "dead_feature_count": [], "grad_ratio_mean": []}
+    # Curriculum schedule: ramp max_active from start to full over curriculum_steps.
+    n_phases = cfg.n_features - cfg.curriculum_start_active + 1
+    phase_size = max(cfg.curriculum_steps // max(n_phases, 1), 1)
+    step_done = 0
+    for phase in range(n_phases):
+        max_active = cfg.curriculum_start_active + phase
+        if phase == n_phases - 1:
+            steps_this = cfg.n_steps - step_done
+        else:
+            steps_this = phase_size
+        if steps_this <= 0:
+            continue
+        loader_phase = _curriculum_loader(dataset, cfg.batch_size, max_active, cfg.seed + phase)
+        print(f"[curriculum] phase {phase}: max_active={max_active}, {steps_this} steps")
+        h = train(sae, loader_phase, optimizer, n_steps=steps_this, log_every=max(steps_this // 5, 1))
+        for k, v in h.items():
+            history.setdefault(k, []).extend(v)
+        step_done += steps_this
     train_time = time.time() - t0
 
     print("[eval] probing learned curves")

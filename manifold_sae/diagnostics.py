@@ -12,9 +12,9 @@ def position_variance(output: ManifoldSAEOutput) -> torch.Tensor:
     return output.positions.var(dim=0, unbiased=False)
 
 
-def dead_feature_mask(output: ManifoldSAEOutput, edf_threshold: float = 0.5) -> torch.Tensor:
-    """Boolean mask, True where a feature's effective degrees of freedom fall below threshold."""
-    return output.edf < edf_threshold
+def dead_feature_mask(output: ManifoldSAEOutput, amp_threshold: float = 1e-3) -> torch.Tensor:
+    """Boolean mask, True where a feature's mean amplitude across the batch is below threshold."""
+    return output.amplitudes.mean(dim=0) < amp_threshold
 
 
 def position_amplitude_grad_ratio(
