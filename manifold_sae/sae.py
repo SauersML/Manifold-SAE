@@ -111,11 +111,9 @@ class ManifoldSAE(nn.Module):
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
         x_dtype = x.dtype
         dirs = self.directions.to(x_dtype)
-        # Compute per-feature subspace projection first; pass to encoder so it
-        # has the per-feature signal needed to specialize.
-        y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
-        z_raw, mask_soft, mask_binary = self.encoder(x, y_proj)
+        z_raw, mask_soft, mask_binary = self.encoder(x)
         positions = _soft_rescale_positions(z_raw)
+        y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
 
         B, F = positions.shape
         R = dirs.shape[-1]

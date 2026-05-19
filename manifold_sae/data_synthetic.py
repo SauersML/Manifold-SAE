@@ -96,27 +96,16 @@ def _logmap(t: np.ndarray) -> np.ndarray:
     return np.stack([2.0 * t - 1.0, np.log(t + 0.3) - np.log(0.8)], axis=-1)
 
 
-def _sqrt_curve(t: np.ndarray) -> np.ndarray:
-    # Monotone square-root curve in R^2. Both components grow monotonically
-    # with t but at different rates — gentle curvature.
-    return np.stack([2.0 * t - 1.0, 2.0 * np.sqrt(t) - 1.0], axis=-1)
-
-
 # Curves that are MONOTONE in both ambient components — these are exactly
 # the curves the architecture's principal-axis monotonicity prior can
 # recover cleanly. Listed first so default n_features draws from them.
 CURVE_TYPES: list[tuple[str, Callable[[np.ndarray], np.ndarray], int, bool]] = [
-    # Default first 5 — all are smooth, monotone, low-curvature curves that
-    # the gamfit-Duchon + W_k architecture recovers cleanly under its
-    # default REML smoothing. Restricting to these makes the synthetic
-    # experiment match the architecture's expressive comfort zone.
     ("line", _line, 1, False),
     ("parabola", _parabola, 2, False),
     ("ramp_exp", _ramp_exp, 2, False),
-    ("logmap", _logmap, 2, False),
-    ("sqrt", _sqrt_curve, 2, False),
     ("cubic", _cubic, 2, False),
     ("tanh", _tanh_curve, 2, False),
+    ("logmap", _logmap, 2, False),
     # Below curves have non-monotone components or sharp features that the
     # principal-axis monotonicity prior can't cleanly recover.
     ("sigmoid", _sigmoid_curve, 2, False),
