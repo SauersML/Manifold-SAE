@@ -96,11 +96,16 @@ class ManifoldSAE(nn.Module):
         self.register_buffer("penalty", torch.from_numpy(penalty))
 
         # Persistent per-feature ambient subspace W_k ∈ R^(D, R). Initialize
-        # so the UNION of all features' columns is one big orthonormal frame
-        # — no two features share an ambient direction at init. Maximum
-        # subspace separation breaks feature symmetry from the start.
-        Q, _ = torch.linalg.qr(torch.randn(D, F * R))   # (D, F*R) orthonormal
-        directions = Q.reshape(D, F, R).permute(1, 0, 2).contiguous()  # (F, D, R)
+        # so the UNION of all features' columns is one orthonormal frame
+        # when D ≥ F*R; otherwise fall back to per-feature independent QR.
+        if D >= F * R:
+            Q, _ = torch.linalg.qr(torch.randn(D, F * R))
+            directions = Q.reshape(D, F, R).permute(1, 0, 2).contiguous()
+        else:
+            directions = torch.empty(F, D, R)
+            for k in range(F):
+                q, _ = torch.linalg.qr(torch.randn(D, R))
+                directions[k] = q
         self.directions = nn.Parameter(directions.to(torch.float32))
 
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
@@ -125,6 +130,9 @@ class ManifoldSAE(nn.Module):
             periodic=self.config.periodic,
             period=1.0 if self.config.periodic else None,
             by=by_packed,
+            init_lambda=1e-4,  # bias REML toward low smoothing — preserves
+                                # curvature of sharper features (cubic, tanh)
+                                # that REML otherwise flattens at default init.
         )
         fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)
         contribution = torch.einsum("fbr,fdr->bfd", fitted_intrinsic, dirs)
