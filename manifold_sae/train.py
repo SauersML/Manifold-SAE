@@ -71,9 +71,6 @@ def train(
             it = iter(data_loader)
             batch = next(it)
 
-        if isinstance(batch, (list, tuple)):
-            batch = batch[0]
-
         optimizer.zero_grad(set_to_none=True)
         out = sae(batch)
         losses = total_loss(out, batch, sae.config)

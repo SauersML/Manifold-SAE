@@ -31,7 +31,11 @@ def total_loss(
 ) -> dict[str, torch.Tensor]:
     mse = torch.mean((output.reconstruction - target) ** 2)
     sparsity = output.amplitudes.abs().mean()
-    reml = -output.reml_score
+    # REML score grows ~ batch_size * n_features; normalise so the loss
+    # contribution is comparable to MSE and `reml_weight` is a meaningful knob.
+    B = output.reconstruction.shape[0]
+    F = output.amplitudes.shape[1]
+    reml = -output.reml_score / max(B * F, 1)
     spread = _position_spread_entropy(output.positions)
 
     total = (

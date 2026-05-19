@@ -31,6 +31,7 @@ class ManifoldSAEOutput:
     reml_score: torch.Tensor
     lambdas: torch.Tensor
     edf: torch.Tensor
+    coefficients: torch.Tensor
 
 
 class ManifoldSAE(nn.Module):
@@ -56,4 +57,5 @@ class ManifoldSAE(nn.Module):
             reml_score=fit["reml_score"],
             lambdas=fit["lambdas"],
             edf=fit["edf"],
+            coefficients=fit["coefficients"],
         )

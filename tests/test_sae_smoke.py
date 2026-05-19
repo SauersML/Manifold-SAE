@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
 import torch
 
-gamfit_glue = pytest.importorskip("manifold_sae.gamfit_glue")
+from manifold_sae.losses import total_loss
+from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
 
 
 def test_sae_smoke() -> None:
-    from manifold_sae.losses import total_loss
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-
     torch.manual_seed(0)
     config = ManifoldSAEConfig(input_dim=16, n_features=4, n_basis=6)
     sae = ManifoldSAE(config)

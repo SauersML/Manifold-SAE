@@ -36,25 +36,14 @@ axis 0, and packing amplitudes the same way. ``row_offsets`` then marks each
 feature's slice of length B. This lets us hit the gamfit primitive once per
 forward (and once per backward) instead of looping in Python.
 
-Upstream gaps surfaced by this glue
------------------------------------
-1. **Buggy Python wrapper for the batched-positions backward.** In
-   ``gamfit==0.1.64``'s ``gamfit._api.gaussian_reml_fit_positions_batched_backward``,
-   the call into the Rust extension omits the ``forward_state`` keyword arg.
-   The Rust signature expects ``forward_state`` at positional slot 11, so
-   ``basis_order`` ends up in that slot and the call dies with
-   ``TypeError: argument 'forward_state': 'int' object is not an instance of 'dict'``.
-   We work around this by calling ``gamfit._rust`` directly from
-   :meth:`ManifoldFit.backward`, passing ``forward_state=None`` explicitly and
-   letting Rust recompute the forward fits. Flagged for upstream fix in gamfit.
-2. **No analytic backward for ``edf``.** ``gaussian_reml_fit_positions_batched_backward``
-   accepts ``grad_lambda``, ``grad_coefficients``, ``grad_fitted``,
-   ``grad_reml_score`` but no ``grad_edf``. If a caller requests gradients via
-   ``edf`` we treat that upstream gradient as zero (silently dropped). Flagged
-   for upstream fix; downstream code that wants ``edf``-driven regularization
-   needs a different path until gamfit ships an ``edf`` backward.
-
-Both gaps are repeated in the test file.
+Upstream gap (still open as of gamfit 0.1.67)
+---------------------------------------------
+**No analytic backward for ``edf``.** ``gaussian_reml_fit_positions_batched_backward``
+accepts ``grad_lambda``, ``grad_coefficients``, ``grad_fitted``, ``grad_reml_score``
+but no ``grad_edf``. If a caller requests gradients via ``edf`` we treat that
+upstream gradient as zero (silently dropped). Downstream code that wants
+``edf``-driven regularization needs a different path until gamfit ships an
+``edf`` backward.
 """
 
 from __future__ import annotations
@@ -181,7 +170,7 @@ class ManifoldFit(torch.autograd.Function):
         amplitudes: torch.Tensor,
         targets: torch.Tensor,
         basis_spec_bytes: bytes,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         import gamfit  # local import so module-level import does not require gamfit
 
         basis_spec: BasisSpec = pickle.loads(basis_spec_bytes)
@@ -220,6 +209,7 @@ class ManifoldFit(torch.autograd.Function):
         reml_per_feat = np.asarray(out["reml_score"], dtype=np.float64)  # (F,)
         lambdas = np.asarray(out["lambda"], dtype=np.float64)  # (F,)
         edf = np.asarray(out["edf"], dtype=np.float64)  # (F,)
+        coefficients = np.asarray(out["coefficients"], dtype=np.float64)  # (F, K, D)
         # Degenerate features (fully gated off via by=0) yield NaN reml/lambda
         # because the design matrix is rank-deficient. Replace with 0 so the
         # reduced scalar REML score and per-feature lambdas remain finite.
@@ -277,7 +267,10 @@ class ManifoldFit(torch.autograd.Function):
         edf_t = torch.as_tensor(edf, dtype=torch.float64, device="cpu").to(
             device=ref.device, dtype=ref.dtype
         )
-        return reconstruction, reml_score, lambdas_t, edf_t
+        coefficients_t = torch.as_tensor(coefficients, dtype=torch.float64, device="cpu").to(
+            device=ref.device, dtype=ref.dtype
+        )
+        return reconstruction, reml_score, lambdas_t, edf_t, coefficients_t
 
     @staticmethod
     def backward(  # type: ignore[override]
@@ -286,91 +279,59 @@ class ManifoldFit(torch.autograd.Function):
         g_reml: torch.Tensor | None,
         g_lambdas: torch.Tensor | None,
         g_edf: torch.Tensor | None,
+        g_coefficients: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor | None, torch.Tensor | None, torch.Tensor | None, None]:
-        from gamfit._binding import rust_module
-        from gamfit._api import (
-            _numeric_vector,
-            _numeric_matrix,
-            _index_vector,
-            _optional_batch_vector,
-        )
+        import gamfit
 
         F = ctx.F
         B = ctx.B
         D = ctx.D
 
-        # Build the three (and only three) upstream gradient inputs gamfit's
-        # batched-positions backward actually understands.
-        #
-        # grad_fitted: reconstruction = sum_f fitted[f]. So d(reconstruction)/d(fitted[f])
-        # is identity for every f, meaning every per-feature slice receives
-        # the same upstream gradient g_recon (B, D).
+        # gamfit's batched-positions backward consumes upstream gradients on
+        # three outputs: fitted (B, D per feature, tiled F times along axis 0
+        # because the reconstruction is the SUM of per-feature fits), reml_score
+        # (F,), and lambda (F,). It has no VJP for edf; g_edf is dropped.
         if g_recon is None:
             grad_fitted_np = None
         else:
             g_recon_np = g_recon.detach().to(device="cpu", dtype=torch.float64).contiguous().numpy()
-            # Tile g_recon F times along axis 0 to get shape (F*B, D).
             grad_fitted_np = np.ascontiguousarray(np.tile(g_recon_np, (F, 1)))
 
-        # grad_reml_score: reml_score (scalar) = sum_f reml_per_feat. d/d each
-        # per-feature score is 1 -> grad_reml_score vector is g_reml broadcast.
         if g_reml is None:
             grad_reml_np = None
         else:
             g_reml_val = float(g_reml.detach().to(device="cpu", dtype=torch.float64).item())
             grad_reml_np = np.full(F, g_reml_val, dtype=np.float64)
 
-        # grad_lambda: per-feature lambdas pass through directly.
         if g_lambdas is None:
             grad_lambda_np = None
         else:
-            grad_lambda_np = (
-                g_lambdas.detach().to(device="cpu", dtype=torch.float64).contiguous().numpy()
-                .astype(np.float64, copy=False)
+            grad_lambda_np = np.ascontiguousarray(
+                g_lambdas.detach().to(device="cpu", dtype=torch.float64).contiguous().numpy(),
+                dtype=np.float64,
             )
-            grad_lambda_np = np.ascontiguousarray(grad_lambda_np, dtype=np.float64)
 
-        # NOTE: gamfit's backward has no analytic VJP for ``edf``. If a caller
-        # requests gradient via ``edf`` we silently drop it. This is documented
-        # in the module docstring and the test file. If all upstream gradients
-        # we *can* use are None there is nothing to compute.
         if grad_fitted_np is None and grad_reml_np is None and grad_lambda_np is None:
             return None, None, None, None
 
-        # Call the Rust binding directly because the Python wrapper for the
-        # positions-batched backward in gamfit 0.1.64 omits the ``forward_state``
-        # slot, causing a type error (documented above and in tests).
-        offsets = _index_vector(ctx.offsets, "row_offsets")
-        t_v = _numeric_vector(ctx.t_packed, "t")
-        y_m = _numeric_matrix(ctx.y_packed, "y")
-        knots_v = _numeric_vector(ctx.knots_or_centers, "knots_or_centers")
-        penalty_m = _numeric_matrix(ctx.penalty, "penalty")
-        by_v = _numeric_vector(ctx.by_packed, "by")
-        grad_lambda_v = _optional_batch_vector(grad_lambda_np, F, "grad_lambda")
-        grad_reml_v = _optional_batch_vector(grad_reml_np, F, "grad_reml_score")
-        grad_fitted_m = (
-            None if grad_fitted_np is None else _numeric_matrix(grad_fitted_np, "grad_fitted")
-        )
-
-        out = rust_module().gaussian_reml_fit_positions_batched_backward(
-            t_v,
-            y_m,
-            offsets,
+        out = gamfit.gaussian_reml_fit_positions_batched_backward(
+            ctx.t_packed,
+            ctx.y_packed,
+            ctx.offsets,
             ctx.basis_kind,
-            knots_v,
-            penalty_m,
-            grad_lambda_v,
-            None,  # grad_coefficients — we do not expose coefficient outputs
-            grad_fitted_m,
-            grad_reml_v,
-            None,  # forward_state — let Rust recompute; cheap and avoids the upstream bug
-            int(ctx.basis_order),
-            False,  # periodic — v1 fits everything as open 1D Duchon
-            None,   # period
-            None,   # weights — unused, amplitudes route through `by`
-            None if ctx.init_lambda is None else float(ctx.init_lambda),
-            by_v,
-            0,  # by_start_col — by-gate applies to every basis column
+            ctx.knots_or_centers,
+            ctx.penalty,
+            grad_lambda=grad_lambda_np,
+            grad_coefficients=None,
+            grad_fitted=grad_fitted_np,
+            grad_reml_score=grad_reml_np,
+            basis_order=int(ctx.basis_order),
+            periodic=False,
+            period=None,
+            weights=None,
+            init_lambda=None if ctx.init_lambda is None else float(ctx.init_lambda),
+            by=ctx.by_packed,
+            by_start_col=0,
         )
 
         grad_t_packed = np.asarray(out["grad_t"], dtype=np.float64)  # (F*B,)
@@ -446,10 +407,13 @@ def manifold_fit(
     ``lambdas`` ``(F,)``, ``edf`` ``(F,)``.
     """
     basis_bytes = pickle.dumps(basis_spec)
-    recon, reml, lambdas, edf = ManifoldFit.apply(positions, amplitudes, targets, basis_bytes)
+    recon, reml, lambdas, edf, coefficients = ManifoldFit.apply(
+        positions, amplitudes, targets, basis_bytes
+    )
     return {
         "reconstruction": recon,
         "reml_score": reml,
         "lambdas": lambdas,
         "edf": edf,
+        "coefficients": coefficients,
     }

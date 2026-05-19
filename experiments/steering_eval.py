@@ -28,7 +28,6 @@ Run from repo root:
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from dataclasses import dataclass, field
@@ -74,22 +73,18 @@ class ActivationBundle:
 
     @classmethod
     def from_path(cls, path: Path) -> ActivationBundle:
-        # Try the canonical dataset wrapper first; fall back to a raw torch dict.
-        try:
-            from data_activations import ActivationDataset  # type: ignore
-            ds = ActivationDataset.load(str(path))
-            acts = ds.activations  # expected (N, D)
-            labels = list(ds.labels)
-        except Exception as e:
-            blob = torch.load(str(path), map_location="cpu")
-            if not isinstance(blob, dict) or "activations" not in blob or "labels" not in blob:
-                raise ValueError(
-                    f"activations file {path} must be either an ActivationDataset or a dict "
-                    "with keys 'activations' and 'labels'"
-                ) from e
-            acts = blob["activations"]
-            labels = [str(x) for x in blob["labels"]]
-        bundle = cls(activations=acts.float(), labels=labels)
+        """Load from a torch-saved dict with keys ``activations`` (N, D) and ``labels`` (N,).
+
+        This is the exact format the harvest pipeline (``experiments.llm_activations.harvest``)
+        emits — no other format is supported.
+        """
+        blob = torch.load(str(path), map_location="cpu")
+        if not isinstance(blob, dict) or "activations" not in blob or "labels" not in blob:
+            raise ValueError(
+                f"activations file {path} must be a torch dict with keys "
+                "'activations' (N, D) and 'labels' (length N)"
+            )
+        bundle = cls(activations=blob["activations"].float(), labels=[str(x) for x in blob["labels"]])
         bundle._index_by_label()
         return bundle
 
@@ -257,39 +252,31 @@ class CellResult:
     n_trials: int
 
 
-def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
-    task = TASKS[args.task]
+def run_benchmark(cfg: Config) -> dict[str, Any]:
+    task = TASKS[cfg.task]
     task_categories: list[str] = task["categories"]
     periodic: bool = task["periodic"]
 
-    print(f"[steering-eval] task={args.task} periodic={periodic} categories={task_categories}")
-    bundle = ActivationBundle.from_path(Path(args.activations))
+    print(f"[steering-eval] task={cfg.task} periodic={periodic} categories={task_categories}")
+    bundle = ActivationBundle.from_path(Path(cfg.activations))
     print(f"[steering-eval] loaded {bundle.activations.shape[0]} activations dim={bundle.activations.shape[1]}")
 
-    # Lazy import so the module loads even before sibling SAE code is built.
     from manifold_sae import steering
 
-    msae = _load_torch_module(args.manifold_sae_checkpoint, kind="manifold")
-    lsae = _load_torch_module(args.linear_sae_checkpoint, kind="linear")
+    msae = _load_torch_module(cfg.manifold_sae_checkpoint, kind="manifold")
+    lsae = _load_torch_module(cfg.linear_sae_checkpoint, kind="linear")
 
-    rng = torch.Generator(device="cpu").manual_seed(args.seed)
-    trials = sample_trials(bundle, task_categories, args.n_trials, rng)
+    rng = torch.Generator(device="cpu").manual_seed(cfg.seed)
+    trials = sample_trials(bundle, task_categories, cfg.n_trials, rng)
 
-    # Pre-pick the most category-aligned feature for each SAE.
-    m_feat = select_manifold_feature(msae, bundle, task_categories) if msae is not None else 0
-    l_feat = select_linear_feature(lsae, bundle, task_categories) if lsae is not None else 0
+    m_feat = select_manifold_feature(msae, bundle, task_categories)
+    l_feat = select_linear_feature(lsae, bundle, task_categories)
     print(f"[steering-eval] manifold steering feature = {m_feat}; linear steering feature = {l_feat}")
 
     results: list[CellResult] = []
-    alphas = [float(a) for a in args.alpha_grid]
+    alphas = list(cfg.alpha_grid)
 
     for method in ("manifold", "linear", "diff-means"):
-        if method == "manifold" and msae is None:
-            print("[steering-eval] skipping manifold (no checkpoint)")
-            continue
-        if method == "linear" and lsae is None:
-            print("[steering-eval] skipping linear (no checkpoint)")
-            continue
         for alpha in alphas:
             hits, side_effects = 0, []
             for example_idx, src, tgt in trials:
@@ -329,19 +316,19 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             )
 
     summary = {
-        "task": args.task,
-        "n_trials": args.n_trials,
+        "task": cfg.task,
+        "n_trials": cfg.n_trials,
         "alphas": alphas,
         "results": [cell.__dict__ for cell in results],
     }
 
-    out_dir = Path(args.output_dir)
+    out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "steering_results.json"
     json_path.write_text(json.dumps(summary, indent=2))
     print(f"[steering-eval] wrote {json_path}")
 
-    _maybe_plot(results, alphas, out_dir / "steering_results.png")
+    _plot_results(results, alphas, out_dir / "steering_results.png")
     _declare_winner(results)
     return summary
 
@@ -351,23 +338,19 @@ def _load_torch_module(path: str | None, kind: str):
         return None
     p = Path(path)
     if not p.exists():
-        print(f"[steering-eval] checkpoint not found at {p}; skipping {kind}-sae")
-        return None
+        raise FileNotFoundError(f"{kind}-sae checkpoint not found at {p}")
     obj = torch.load(str(p), map_location="cpu", weights_only=False)
-    # Accept either a full nn.Module or a {"model": ...} dict.
     if isinstance(obj, dict) and "model" in obj:
         obj = obj["model"]
     return obj
 
 
-def _maybe_plot(results: list[CellResult], alphas: list[float], path: Path) -> None:
-    try:
-        import matplotlib  # type: ignore
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt  # type: ignore
-    except ImportError:
-        print("[steering-eval] matplotlib not available; skipping plot")
-        return
+def _plot_results(results: list[CellResult], alphas: list[float], path: Path) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     methods = sorted({c.method for c in results})
     fig, ax = plt.subplots(figsize=(8, 5))
     width = 0.8 / max(len(methods), 1)
@@ -409,37 +392,31 @@ def _declare_winner(results: list[CellResult]) -> None:
 
 
 # -----------------------------------------------------------------------------
-# argparse.
+# Config dataclass and default entrypoint.
 # -----------------------------------------------------------------------------
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description=(
-            "Steering benchmark for Manifold-SAE vs Linear-SAE vs diff-of-means. "
-            "Success metric is a nearest-neighbour probe over harvested activations."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument("--task", required=True, choices=sorted(TASKS.keys()))
-    p.add_argument("--manifold-sae-checkpoint", default=None,
-                   help="Path to a torch-saved ManifoldSAE (or {'model': ManifoldSAE}).")
-    p.add_argument("--linear-sae-checkpoint", default=None,
-                   help="Path to a torch-saved LinearSAE (or {'model': LinearSAE}).")
-    p.add_argument("--activations", required=True,
-                   help="Phase-4 activations file: torch dict with 'activations' (N,D) and 'labels' (N,).")
-    p.add_argument("--n-trials", type=int, default=100)
-    p.add_argument("--alpha-grid", nargs="+", default=["0.5", "1.0", "2.0", "4.0"],
-                   help="Scalar multipliers for each method (interpreted per-method).")
-    p.add_argument("--output-dir", required=True)
-    p.add_argument("--seed", type=int, default=0)
-    return p
+@dataclass(frozen=True)
+class Config:
+    """Steering-benchmark configuration. Edit ``DEFAULT_CONFIG`` to override."""
+
+    task: str = "days-of-week-shift"  # one of TASKS.keys()
+    manifold_sae_checkpoint: str = "runs/sae_days_v1/sae.pt"
+    linear_sae_checkpoint: str = "runs/lsae_days_v1/sae.pt"
+    activations: str = "runs/llama31_8b_l28.pt"
+    n_trials: int = 100
+    alpha_grid: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0)
+    output_dir: str = "runs/steering"
+    seed: int = 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    run_benchmark(args)
+DEFAULT_CONFIG = Config()
+
+
+def main(cfg: Config = DEFAULT_CONFIG) -> int:
+    if cfg.task not in TASKS:
+        raise ValueError(f"unknown task {cfg.task!r}; choices: {sorted(TASKS)}")
+    run_benchmark(cfg)
     return 0
 
 

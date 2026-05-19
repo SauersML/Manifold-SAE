@@ -2,17 +2,12 @@
 
 We build a tiny dataset, train a small ManifoldSAE for a short budget, and check
 that the trained features have at least directionally recovered the planted
-curves. ``chamfer < 0.5`` is intentionally generous: the goal is to catch total
+curves. The threshold is intentionally generous: the goal is to catch total
 breakage (encoder collapsed, decoder degenerate, dead features all the way down),
 not to pin a particular reconstruction quality.
-
-Skipped when sibling modules (``gamfit_glue``, ``sae``, ``train``) aren't yet
-importable, so the suite stays green during parallel development.
 """
 
 from __future__ import annotations
-
-import importlib
 
 import numpy as np
 import pytest
@@ -22,21 +17,10 @@ from torch.utils.data import DataLoader
 from manifold_sae.data_synthetic import SyntheticDataset, chamfer_distance
 
 
-def _swarm_ready() -> bool:
-    """True iff the gamfit-glue / sae / train modules from the swarm are importable."""
-    for mod in ("manifold_sae.gamfit_glue", "manifold_sae.sae", "manifold_sae.train"):
-        try:
-            importlib.import_module(mod)
-        except Exception:
-            return False
-    return True
-
-
 @pytest.mark.slow
-@pytest.mark.skipif(not _swarm_ready(), reason="swarm modules (gamfit_glue/sae/train) not ready")
 def test_synthetic_recovery_directional() -> None:
-    sae_mod = importlib.import_module("manifold_sae.sae")
-    train_mod = importlib.import_module("manifold_sae.train")
+    from manifold_sae import sae as sae_mod
+    from manifold_sae import train as train_mod
     torch.manual_seed(0)
     np.random.seed(0)
 

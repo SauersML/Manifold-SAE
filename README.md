@@ -63,16 +63,19 @@ Optional extras:
 
 ```bash
 uv pip install -e ".[llm]"     # transformers / datasets / accelerate / safetensors
-uv pip install -e ".[plot]"    # matplotlib
 uv pip install -e ".[dev]"     # pytest, ruff
 ```
 
-Or, from a project that depends on this:
+## Running things
 
-```bash
-uv add manifold-sae
-uv add "manifold-sae[llm,plot]"
+No CLI. Each experiment is a Python module with a frozen `Config` dataclass at the top; edit the dataclass instantiation (or import the module and call programmatically) to override defaults:
+
+```python
+from experiments.synthetic_recovery import main, Config
+main(Config(d_ambient=64, n_features=5, n_steps=2000, output_dir="runs/syn"))
 ```
+
+Same pattern for `experiments.llm_activations` (`HarvestConfig`, `TrainConfig`, `AnalyzeConfig`) and `experiments.steering_eval` (`Config`).
 
 ## Layout
 
@@ -80,14 +83,18 @@ uv add "manifold-sae[llm,plot]"
 manifold_sae/      # library code
   gamfit_glue.py   # BasisSpec, ManifoldFit, manifold_fit — thin wrapper over gamfit's Gaussian REML
   encoder.py       # ManifoldEncoder — produces (a_k, t_k) per feature
+  decoder.py       # decode() + extract_feature_curves() for post-hoc topology probes
   sae.py           # ManifoldSAE, ManifoldSAEConfig — full module, joint training step
-  cli.py           # `manifold-sae` entry point
+  losses.py        # MSE + L1 sparsity + REML + position-spread entropy
+  train.py         # Adam training loop
+  diagnostics.py   # position-collapse / dead-feature / grad-ratio probes
+  steering.py      # manifold-position / linear / diff-of-means steering operators
+  data_synthetic.py        # planted-curve synthetic dataset
+  data_activations.py      # LLM activation harvest + dataset wrapper
 experiments/       # runnable experiment drivers (synthetic recovery, LLM activations, steering)
-scripts/           # one-off scripts: activation dumps, plot generators, eval harnesses
-tests/             # pytest suite — unit tests for basis/penalty/REML glue, encoder shapes, SAE forward/backward
+scripts/           # phase 0 gamfit substrate check + notes
+tests/             # pytest suite — gradcheck, smoke, synthetic recovery
 ```
-
-The package's `__init__.py` re-exports the main symbols (`BasisSpec`, `ManifoldFit`, `manifold_fit`, `ManifoldEncoder`, `ManifoldSAE`, `ManifoldSAEConfig`) with `try/except ImportError` guards so partial checkouts still import during parallel development.
 
 ## License
 

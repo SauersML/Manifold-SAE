@@ -1,39 +1,30 @@
-"""Three-subcommand driver: harvest activations, train Manifold-SAE, analyze topology.
+"""LLM-activation pipeline: harvest, train Manifold-SAE, analyze topology.
 
-Usage:
-    python -m experiments.llm_activations harvest --model meta-llama/Meta-Llama-3.1-8B \\
-        --layer 28 --prompts experiments/prompts_cyclic.json \\
-        --output runs/llama31_8b_l28.pt --batch-size 4 --device cuda
+Three top-level entrypoints, each driven by a frozen Config dataclass at the
+bottom of this file. No CLI. To run, edit ``DEFAULT_*_CONFIG`` or import this
+module and call ``harvest(HarvestConfig(...))`` / ``train_sae(TrainConfig(...))``
+/ ``analyze(AnalyzeConfig(...))``.
 
-    python -m experiments.llm_activations train \\
-        --activations runs/llama31_8b_l28.pt --n-features 64 --n-basis 12 \\
-        --n-steps 5000 --batch-size 64 --lr 1e-3 \\
-        --output-dir runs/sae_days_v1
-
-    python -m experiments.llm_activations analyze \\
-        --sae-checkpoint runs/sae_days_v1/sae.pt \\
-        --activations runs/llama31_8b_l28.pt \\
-        --output-dir runs/sae_days_v1/analysis
-
-The headline experiment: train on cyclic-concept activations, then in ``analyze``
-look for the feature whose mean amplitude is largest on the days-of-week prompts.
-If the inferred ``t`` values for that feature wrap nicely around the unit
-interval when sorted Mon -> Sun, we've discovered the days circle unsupervised.
+The headline experiment: train on cyclic-concept activations, then in
+``analyze`` look for the feature whose mean amplitude is largest on the
+days-of-week prompts. If the inferred ``t`` values for that feature wrap
+nicely around the unit interval when sorted Mon -> Sun, we've discovered the
+days circle unsupervised.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 
 import torch
 
-# Make sibling-package import work whether run via ``python -m`` or directly.
+# Make sibling-package import work whether run as a script or via python -m.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from manifold_sae.data_activations import (  # noqa: E402
+from manifold_sae.data_activations import (
     ActivationDataset,
     harvest_activations,
     iter_batches,
@@ -43,24 +34,72 @@ from manifold_sae.data_activations import (  # noqa: E402
 
 
 # ----------------------------------------------------------------------
+# Configs
+# ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class HarvestConfig:
+    model: str = "meta-llama/Meta-Llama-3.1-8B"
+    layer: int = 28
+    prompts: str = "experiments/prompts_cyclic.json"
+    output: str = "runs/llama31_8b_l28.pt"
+    batch_size: int = 4
+    device: str = "cuda"
+    dtype: str = "float16"
+    target_token_strategy: str = "value_token"
+    max_prompts: int | None = None
+
+
+@dataclass(frozen=True)
+class TrainConfig:
+    activations: str = "runs/llama31_8b_l28.pt"
+    n_features: int = 64
+    n_basis: int = 12
+    n_steps: int = 5000
+    batch_size: int = 64
+    lr: float = 1e-3
+    sparsity_weight: float = 1e-3
+    reml_weight: float = 1e-2
+    log_every: int = 50
+    output_dir: str = "runs/sae_days_v1"
+    seed: int = 0
+    device: str = "cuda"
+
+
+@dataclass(frozen=True)
+class AnalyzeConfig:
+    sae_checkpoint: str = "runs/sae_days_v1/sae.pt"
+    activations: str = "runs/llama31_8b_l28.pt"
+    output_dir: str = "runs/sae_days_v1/analysis"
+    n_grid: int = 128
+    device: str = "cpu"
+
+
+DEFAULT_HARVEST_CONFIG = HarvestConfig()
+DEFAULT_TRAIN_CONFIG = TrainConfig()
+DEFAULT_ANALYZE_CONFIG = AnalyzeConfig()
+
+
+# ----------------------------------------------------------------------
 # harvest
 # ----------------------------------------------------------------------
 
 
-def cmd_harvest(args: argparse.Namespace) -> None:
-    prompts = load_prompts(args.prompts)
-    print(f"[harvest] {len(prompts)} prompts loaded from {args.prompts}")
+def harvest(cfg: HarvestConfig = DEFAULT_HARVEST_CONFIG) -> None:
+    prompts = load_prompts(cfg.prompts)
+    print(f"[harvest] {len(prompts)} prompts loaded from {cfg.prompts}")
 
     result = harvest_activations(
-        model_name=args.model,
+        model_name=cfg.model,
         prompts=prompts,
-        layer=args.layer,
-        target_token_strategy=args.target_token_strategy,
-        device=args.device,
-        batch_size=args.batch_size,
-        output_path=args.output,
-        dtype=args.dtype,
-        max_prompts=args.max_prompts,
+        layer=cfg.layer,
+        target_token_strategy=cfg.target_token_strategy,
+        device=cfg.device,
+        batch_size=cfg.batch_size,
+        output_path=cfg.output,
+        dtype=cfg.dtype,
+        max_prompts=cfg.max_prompts,
     )
     print(f"[harvest] done — {result['n_records']} records at {result['output_path']}")
 
@@ -70,46 +109,41 @@ def cmd_harvest(args: argparse.Namespace) -> None:
 # ----------------------------------------------------------------------
 
 
-def cmd_train(args: argparse.Namespace) -> None:
-    # Heavy imports deferred — the harvest subcommand shouldn't pay this cost.
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig  # noqa: WPS433
-    from manifold_sae.train import build_optimizer, train  # noqa: WPS433
+def train_sae(cfg: TrainConfig = DEFAULT_TRAIN_CONFIG) -> None:
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.train import build_optimizer, train
 
-    torch.manual_seed(args.seed)
-    g = torch.Generator().manual_seed(args.seed)
+    torch.manual_seed(cfg.seed)
+    g = torch.Generator().manual_seed(cfg.seed)
 
-    ds = ActivationDataset(args.activations, dtype=torch.float32)
+    ds = ActivationDataset(cfg.activations, dtype=torch.float32)
     print(f"[train] {len(ds)} activations of dim {ds.dim}; meta={ds.meta}")
 
-    cfg = ManifoldSAEConfig(
+    sae_config = ManifoldSAEConfig(
         input_dim=ds.dim,
-        n_features=args.n_features,
-        n_basis=args.n_basis,
-        sparsity_weight=args.sparsity_weight,
-        reml_weight=args.reml_weight,
+        n_features=cfg.n_features,
+        n_basis=cfg.n_basis,
+        sparsity_weight=cfg.sparsity_weight,
+        reml_weight=cfg.reml_weight,
     )
-    sae = ManifoldSAE(cfg)
+    sae = ManifoldSAE(sae_config)
 
-    device = torch.device(args.device)
+    device = torch.device(cfg.device)
     sae.to(device)
     activations = ds.activations.to(device)
 
-    loader = iter_batches(activations, batch_size=args.batch_size, shuffle=True, generator=g)
-    optimizer = build_optimizer(sae, lr=args.lr)
+    loader = iter_batches(activations, batch_size=cfg.batch_size, shuffle=True, generator=g)
+    optimizer = build_optimizer(sae, lr=cfg.lr)
 
-    history = train(sae, loader, optimizer, n_steps=args.n_steps, log_every=args.log_every)
+    history = train(sae, loader, optimizer, n_steps=cfg.n_steps, log_every=cfg.log_every)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    ckpt_path = os.path.join(args.output_dir, "sae.pt")
+    os.makedirs(cfg.output_dir, exist_ok=True)
+    ckpt_path = os.path.join(cfg.output_dir, "sae.pt")
     torch.save(
-        {
-            "config": cfg.__dict__,
-            "state_dict": sae.state_dict(),
-            "meta": ds.meta,
-        },
+        {"config": sae_config.__dict__, "state_dict": sae.state_dict(), "meta": ds.meta},
         ckpt_path,
     )
-    with open(os.path.join(args.output_dir, "history.json"), "w") as f:
+    with open(os.path.join(cfg.output_dir, "history.json"), "w") as f:
         json.dump(history, f, indent=2)
     print(f"[train] saved checkpoint to {ckpt_path}")
 
@@ -165,31 +199,30 @@ def _decode_curves_from_data(
     return extract_feature_curves(sae, activations.to(device), t_grid)
 
 
-def cmd_analyze(args: argparse.Namespace) -> None:
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig  # noqa: WPS433
+def analyze(cfg: AnalyzeConfig = DEFAULT_ANALYZE_CONFIG) -> None:
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(cfg.output_dir, exist_ok=True)
 
-    ckpt = torch.load(args.sae_checkpoint, map_location="cpu")
-    cfg = ManifoldSAEConfig(**ckpt["config"])
-    sae = ManifoldSAE(cfg)
+    ckpt = torch.load(cfg.sae_checkpoint, map_location="cpu")
+    sae_cfg = ManifoldSAEConfig(**ckpt["config"])
+    sae = ManifoldSAE(sae_cfg)
     sae.load_state_dict(ckpt["state_dict"])
 
-    device = torch.device(args.device)
+    device = torch.device(cfg.device)
     sae.to(device)
     sae.eval()
 
-    ds = ActivationDataset(args.activations, dtype=torch.float32)
+    ds = ActivationDataset(cfg.activations, dtype=torch.float32)
     activations = ds.activations.to(device)
 
-    # Inference on the full dataset
     with torch.no_grad():
         out = sae(activations)
     positions = out.positions.cpu()  # (N, F)
     amplitudes = out.amplitudes.cpu()  # (N, F)
 
-    F = cfg.n_features
-    t_grid = torch.linspace(0.0, 1.0, args.n_grid)
+    F = sae_cfg.n_features
+    t_grid = torch.linspace(0.0, 1.0, cfg.n_grid)
 
     curves = _decode_curves_from_data(sae, activations, t_grid, device).cpu()  # (F, T, D)
 
@@ -220,50 +253,44 @@ def cmd_analyze(args: argparse.Namespace) -> None:
             "positions_on_candidate": sub_positions,
         }
 
-    # Try plotting
-    try:
-        import matplotlib
+    import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        from sklearn.decomposition import PCA  # type: ignore
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from sklearn.decomposition import PCA
 
-        # PCA the union of all curves -> 3D for a single 3D scatter per feature group.
-        all_pts = curves.reshape(-1, curves.shape[-1]).numpy()
-        pca = PCA(n_components=3).fit(all_pts)
+    # PCA the union of all curves -> 3D for a single 3D scatter per feature group.
+    all_pts = curves.reshape(-1, curves.shape[-1]).numpy()
+    pca = PCA(n_components=3).fit(all_pts)
 
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection="3d")
-        for k in range(min(F, 16)):
-            pts = pca.transform(curves[k].numpy())
-            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], label=f"feat {k}")
-        ax.set_title("Learned curves in PCA(3) space")
-        ax.legend(fontsize=6, loc="upper right")
-        fig.savefig(os.path.join(args.output_dir, "curves_pca3.png"), dpi=150)
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection="3d")
+    for k in range(min(F, 16)):
+        pts = pca.transform(curves[k].numpy())
+        ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], label=f"feat {k}")
+    ax.set_title("Learned curves in PCA(3) space")
+    ax.legend(fontsize=6, loc="upper right")
+    fig.savefig(os.path.join(cfg.output_dir, "curves_pca3.png"), dpi=150)
+    plt.close(fig)
+
+    # For each category, color its prompts on the candidate-feature t-axis.
+    for cat, summary in category_summary.items():
+        vals = summary["values"]
+        ts = summary["positions_on_candidate"]
+        uniq = sorted(set(vals))
+        color_map = {v: i for i, v in enumerate(uniq)}
+        colors = [color_map[v] for v in vals]
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.scatter(ts, [0] * len(ts), c=colors, cmap="hsv", s=40)
+        ax.set_yticks([])
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_title(f"{cat}: candidate feature {summary['candidate_feature']}")
+        for v in uniq:
+            xs = [t for t, vv in zip(ts, vals, strict=False) if vv == v]
+            if xs:
+                ax.text(sum(xs) / len(xs), 0.02, v, fontsize=7, ha="center")
+        fig.savefig(os.path.join(cfg.output_dir, f"category_{cat}_positions.png"), dpi=150)
         plt.close(fig)
-
-        # For each category, color its prompts on the candidate-feature t-axis.
-        for cat, summary in category_summary.items():
-            vals = summary["values"]
-            ts = summary["positions_on_candidate"]
-            uniq = sorted(set(vals))
-            color_map = {v: i for i, v in enumerate(uniq)}
-            colors = [color_map[v] for v in vals]
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.scatter(ts, [0] * len(ts), c=colors, cmap="hsv", s=40)
-            ax.set_yticks([])
-            ax.set_xlim(-0.02, 1.02)
-            ax.set_title(f"{cat}: candidate feature {summary['candidate_feature']}")
-            for v in uniq:
-                xs = [t for t, vv in zip(ts, vals, strict=False) if vv == v]
-                if xs:
-                    ax.text(sum(xs) / len(xs), 0.02, v, fontsize=7, ha="center")
-            fig.savefig(
-                os.path.join(args.output_dir, f"category_{cat}_positions.png"), dpi=150
-            )
-            plt.close(fig)
-    except ImportError as e:
-        print(f"[analyze] plotting skipped ({e})")
 
     metrics_dump = {
         "per_feature": per_feature,
@@ -271,67 +298,16 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         "config": ckpt["config"],
         "meta": ckpt.get("meta", {}),
     }
-    with open(os.path.join(args.output_dir, "metrics.json"), "w") as f:
+    with open(os.path.join(cfg.output_dir, "metrics.json"), "w") as f:
         json.dump(metrics_dump, f, indent=2)
-    print(f"[analyze] wrote metrics + figures to {args.output_dir}")
+    print(f"[analyze] wrote metrics + figures to {cfg.output_dir}")
 
 
 # ----------------------------------------------------------------------
-# CLI plumbing
+# Default entrypoint: train on already-harvested activations.
+# Edit the dataclass constructors below to override, or import and call.
 # ----------------------------------------------------------------------
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Manifold-SAE LLM activation pipeline")
-    sub = p.add_subparsers(dest="cmd", required=True)
-
-    h = sub.add_parser("harvest", help="harvest residual-stream activations")
-    h.add_argument("--model", default="meta-llama/Meta-Llama-3.1-8B")
-    h.add_argument("--layer", type=int, default=28)
-    h.add_argument("--prompts", default="experiments/prompts_cyclic.json")
-    h.add_argument("--output", required=True)
-    h.add_argument("--batch-size", type=int, default=4)
-    h.add_argument("--device", default="cuda")
-    h.add_argument("--dtype", default="bfloat16")
-    h.add_argument(
-        "--target-token-strategy",
-        default="value_token",
-        choices=["value_token", "last_token"],
-    )
-    h.add_argument("--max-prompts", type=int, default=None)
-    h.set_defaults(func=cmd_harvest)
-
-    t = sub.add_parser("train", help="train Manifold-SAE on harvested activations")
-    t.add_argument("--activations", required=True)
-    t.add_argument("--n-features", type=int, default=64)
-    t.add_argument("--n-basis", type=int, default=12)
-    t.add_argument("--n-steps", type=int, default=5000)
-    t.add_argument("--batch-size", type=int, default=64)
-    t.add_argument("--lr", type=float, default=1e-3)
-    t.add_argument("--sparsity-weight", type=float, default=1e-3)
-    t.add_argument("--reml-weight", type=float, default=1e-2)
-    t.add_argument("--log-every", type=int, default=50)
-    t.add_argument("--output-dir", required=True)
-    t.add_argument("--seed", type=int, default=0)
-    t.add_argument("--device", default="cuda")
-    t.set_defaults(func=cmd_train)
-
-    a = sub.add_parser("analyze", help="post-hoc topology analysis on a trained SAE")
-    a.add_argument("--sae-checkpoint", required=True)
-    a.add_argument("--activations", required=True)
-    a.add_argument("--output-dir", required=True)
-    a.add_argument("--n-grid", type=int, default=64)
-    a.add_argument("--device", default="cpu")
-    a.set_defaults(func=cmd_analyze)
-
-    return p
-
-
-def main(argv: list[str] | None = None) -> None:
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-    args.func(args)
 
 
 if __name__ == "__main__":
-    main()
+    train_sae(DEFAULT_TRAIN_CONFIG)

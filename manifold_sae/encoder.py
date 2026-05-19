@@ -50,11 +50,18 @@ class ManifoldEncoder(nn.Module):
             # design while staying near the per-feature target mean.
             std = 1.0 / max(self.hidden_dim, 1) ** 0.5
             self.fc2.weight.data[: self.n_features].normal_(mean=0.0, std=std)
+            # Amplitude-head bias is set so softplus(bias) ≈ 1 at init: every
+            # feature is gated ON from step 0. With the previous ReLU + zero
+            # bias, ~half of features had amp=0 at init, and amp=0 makes
+            # gamfit's `by`-gated design degenerate → grad_by returns 0 →
+            # the feature is permanently dead. Softplus has no zero-gradient
+            # region, so even small amplitudes can recover.
+            self.fc2.bias[self.n_features :].fill_(0.5413)  # softplus(0.5413) ≈ 1.0
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.act(self.fc1(x))
         out = self.fc2(h)
         pos_logits, amp_raw = out[:, : self.n_features], out[:, self.n_features :]
         positions = torch.sigmoid(pos_logits)
-        amplitudes = torch.relu(amp_raw)
+        amplitudes = torch.nn.functional.softplus(amp_raw)
         return positions, amplitudes

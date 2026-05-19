@@ -22,10 +22,10 @@ falling back.
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from collections.abc import Iterable
 
@@ -36,32 +36,38 @@ from torch.utils.data import DataLoader
 from manifold_sae.data_synthetic import SyntheticDataset, chamfer_distance
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Manifold-SAE synthetic recovery experiment")
-    p.add_argument("--d-ambient", type=int, default=64)
-    p.add_argument("--n-features", type=int, default=5)
-    p.add_argument("--n-basis", type=int, default=12)
-    p.add_argument("--n-samples", type=int, default=8192)
-    p.add_argument("--sparsity", type=float, default=0.3)
-    p.add_argument("--noise", type=float, default=0.05)
-    p.add_argument("--n-steps", type=int, default=2000)
-    p.add_argument("--batch-size", type=int, default=256)
-    p.add_argument("--lr", type=float, default=1e-3)
-    p.add_argument("--seed", type=int, default=0)
-    # v1: every feature uses 1D Duchon on [0, 1]. Cyclic concepts (if any) are
-    # fit as approximately-closed open curves per the spec — no per-run flag.
-    p.add_argument("--sparsity-weight", type=float, default=1e-3)
-    p.add_argument("--reml-weight", type=float, default=1e-2)
-    p.add_argument("--position-spread-weight", type=float, default=1e-3)
-    p.add_argument("--slack-features", type=int, default=2,
-                   help="Extra learned features beyond planted ground truth (acts as slack).")
-    p.add_argument("--t-grid-size", type=int, default=128,
-                   help="Number of t samples used to probe each learned curve.")
-    p.add_argument("--chamfer-threshold", type=float, default=0.3,
-                   help="Mean chamfer above this -> nonzero exit code.")
-    p.add_argument("--output-dir", type=str, default="runs/synthetic_recovery")
-    p.add_argument("--no-plot", action="store_true")
-    return p.parse_args(argv)
+@dataclass(frozen=True)
+class Config:
+    """Synthetic-recovery experiment configuration.
+
+    All knobs live here; edit at the bottom of the file (or import this module
+    and call ``main(Config(...))``) to override. No CLI.
+    """
+
+    d_ambient: int = 64
+    n_features: int = 5
+    n_basis: int = 12
+    n_samples: int = 8192
+    sparsity: float = 0.3
+    noise: float = 0.05
+    n_steps: int = 2000
+    batch_size: int = 256
+    lr: float = 1e-3
+    seed: int = 0
+    sparsity_weight: float = 1e-3
+    reml_weight: float = 1e-2
+    position_spread_weight: float = 1e-3
+    # Extra learned features beyond planted ground truth, acts as slack.
+    slack_features: int = 2
+    # Number of t samples used to probe each learned curve.
+    t_grid_size: int = 128
+    # Mean chamfer above this -> nonzero exit code.
+    chamfer_threshold: float = 0.3
+    output_dir: str = "runs/synthetic_recovery"
+    plot: bool = True
+
+
+DEFAULT_CONFIG = Config()
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +119,7 @@ def _probe_learned_curves(
     ndarray
         Shape ``(F_sae, T_grid, d_ambient)``.
     """
-    from manifold_sae.decoder import extract_feature_curves  # noqa: WPS433
+    from manifold_sae.decoder import extract_feature_curves
 
     # The probe needs real activations as fit targets — passing zeros makes
     # gamfit's inner solve collapse every coefficient to zero and the probed
@@ -162,21 +168,17 @@ def _match_curves(
     return matches, costs
 
 
-def _maybe_plot(
+def _plot_curves(
     output_dir: Path,
     gt_points: np.ndarray,
     learned_points: np.ndarray,
     matches: np.ndarray,
     feature_names: list[str],
 ) -> None:
-    try:
-        import matplotlib
+    import matplotlib
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-    except Exception as e:  # noqa: BLE001
-        print(f"[plot] matplotlib unavailable ({e}); skipping plots", file=sys.stderr)
-        return
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
 
     F = gt_points.shape[0]
     # PCA on the union of GT and matched learned points so the projection is shared.
@@ -217,66 +219,52 @@ def _maybe_plot(
 # ---------------------------------------------------------------------------
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+def main(cfg: Config = DEFAULT_CONFIG) -> int:
+    torch.manual_seed(cfg.seed)
+    np.random.seed(cfg.seed)
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(cfg.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[setup] building SyntheticDataset (d_ambient={args.d_ambient}, "
-          f"n_features={args.n_features}, n_samples={args.n_samples})")
+    print(f"[setup] SyntheticDataset(d_ambient={cfg.d_ambient}, "
+          f"n_features={cfg.n_features}, n_samples={cfg.n_samples})")
     dataset = SyntheticDataset(
-        d_ambient=args.d_ambient,
-        n_features=args.n_features,
-        n_samples=args.n_samples,
-        sparsity=args.sparsity,
-        noise=args.noise,
-        seed=args.seed,
-        t_grid_size=args.t_grid_size,
+        d_ambient=cfg.d_ambient,
+        n_features=cfg.n_features,
+        n_samples=cfg.n_samples,
+        sparsity=cfg.sparsity,
+        noise=cfg.noise,
+        seed=cfg.seed,
+        t_grid_size=cfg.t_grid_size,
     )
-    loader = _build_loader(dataset, args.batch_size, args.seed)
+    loader = _build_loader(dataset, cfg.batch_size, cfg.seed)
 
-    # Import the swarm-built modules late so we can give a helpful error if a
-    # sibling module isn't yet present (gamfit_glue / sae / train / losses).
-    try:
-        from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-        from manifold_sae.train import build_optimizer, train
-        from manifold_sae.diagnostics import dead_feature_mask, position_variance
-    except ImportError as e:
-        print(f"[fatal] swarm module not importable yet: {e}", file=sys.stderr)
-        report = {
-            "status": "import_error",
-            "error": str(e),
-            "args": vars(args),
-        }
-        (output_dir / "synthetic_recovery_results.json").write_text(json.dumps(report, indent=2))
-        return 2
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.train import build_optimizer, train
+    from manifold_sae.diagnostics import dead_feature_mask, position_variance
 
-    n_sae_features = args.n_features + args.slack_features
-    config = ManifoldSAEConfig(
-        input_dim=args.d_ambient,
+    n_sae_features = cfg.n_features + cfg.slack_features
+    sae_config = ManifoldSAEConfig(
+        input_dim=cfg.d_ambient,
         n_features=n_sae_features,
-        n_basis=args.n_basis,
-        sparsity_weight=args.sparsity_weight,
-        reml_weight=args.reml_weight,
-        position_spread_weight=args.position_spread_weight,
+        n_basis=cfg.n_basis,
+        sparsity_weight=cfg.sparsity_weight,
+        reml_weight=cfg.reml_weight,
+        position_spread_weight=cfg.position_spread_weight,
     )
-    sae = ManifoldSAE(config)
+    sae = ManifoldSAE(sae_config)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     sae.to(device)
 
-    optimizer = build_optimizer(sae, lr=args.lr)
+    optimizer = build_optimizer(sae, lr=cfg.lr)
 
-    print(f"[train] {args.n_steps} steps, batch={args.batch_size}, lr={args.lr}, "
-          f"n_sae_features={n_sae_features}, n_basis={args.n_basis}")
+    print(f"[train] {cfg.n_steps} steps, batch={cfg.batch_size}, lr={cfg.lr}, "
+          f"n_sae_features={n_sae_features}, n_basis={cfg.n_basis}")
     t0 = time.time()
-    history = train(sae, loader, optimizer, n_steps=args.n_steps, log_every=max(args.n_steps // 20, 1))
+    history = train(sae, loader, optimizer, n_steps=cfg.n_steps, log_every=max(cfg.n_steps // 20, 1))
     train_time = time.time() - t0
 
-    # Evaluation -------------------------------------------------------------
     print("[eval] probing learned curves")
     t_grid = dataset.ground_truth["t_grid"]
     gt_points = dataset.ground_truth["curve_points"]  # (F_gt, T_grid, D)
@@ -286,7 +274,6 @@ def main(argv: list[str] | None = None) -> int:
 
     matches, costs = _match_curves(gt_points, learned_points)
 
-    # Diagnostics over a final batch.
     sae.eval()
     with torch.no_grad():
         eval_batch = dataset.x[: min(1024, len(dataset))].to(device)
@@ -305,11 +292,11 @@ def main(argv: list[str] | None = None) -> int:
             "sae_match_index": int(matches[i]),
             "chamfer": float(costs[i]),
         }
-        for i in range(args.n_features)
+        for i in range(cfg.n_features)
     ]
     report = {
         "status": "ok",
-        "args": vars(args),
+        "config": asdict(cfg),
         "train_seconds": train_time,
         "mse_eval": mse,
         "chamfer_per_feature": per_feature,
@@ -326,12 +313,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[eval] chamfer mean={report['chamfer_mean']:.4f} max={report['chamfer_max']:.4f} "
           f"dead={report['dead_feature_count']}")
 
-    if not args.no_plot:
-        _maybe_plot(output_dir, gt_points, learned_points, matches, feature_names)
+    if cfg.plot:
+        _plot_curves(output_dir, gt_points, learned_points, matches, feature_names)
 
-    if report["chamfer_mean"] > args.chamfer_threshold:
+    if report["chamfer_mean"] > cfg.chamfer_threshold:
         print(f"[fail] chamfer mean {report['chamfer_mean']:.4f} > threshold "
-              f"{args.chamfer_threshold}", file=sys.stderr)
+              f"{cfg.chamfer_threshold}", file=sys.stderr)
         return 1
     return 0
 

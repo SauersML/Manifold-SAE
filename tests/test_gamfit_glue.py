@@ -51,10 +51,9 @@ import numpy as np
 import pytest
 import torch
 
-# These imports will be skipped at collection time if gamfit is not available.
-gamfit = pytest.importorskip("gamfit")
+import gamfit
 
-from manifold_sae.gamfit_glue import (  # noqa: E402
+from manifold_sae.gamfit_glue import (
     BasisSpec,
     ManifoldFit,
     _build_basis_materials,
@@ -208,7 +207,7 @@ def _basis_bytes(spec: BasisSpec) -> bytes:
 
 def _recon_only_fn(basis_bytes: bytes):
     def fn(*tensors_in_order):
-        recon, _reml, _lam, _edf = ManifoldFit.apply(*tensors_in_order, basis_bytes)
+        recon, _reml, _lam, _edf, _coef = ManifoldFit.apply(*tensors_in_order, basis_bytes)
         return recon
 
     return fn
@@ -307,7 +306,7 @@ def test_backward_masks_saturated_lambda():
     spec = BasisSpec(n_basis=K, init_lambda=1.0)
     bb = _basis_bytes(spec)
     a = amplitudes.detach().clone().requires_grad_(True)
-    recon, _, lambdas, _ = ManifoldFit.apply(positions, a, targets, bb)
+    recon, _, lambdas, _, _ = ManifoldFit.apply(positions, a, targets, bb)
     g = torch.zeros_like(recon)
     g[0, 0] = 1.0
     recon.backward(g)
@@ -339,7 +338,7 @@ def test_gradcheck_through_reml_and_lambdas():
     p, a, t = _enable_grad(positions, amplitudes, targets)
 
     def f(*xs):
-        recon, reml, lam, _edf = ManifoldFit.apply(*xs, bb)
+        recon, reml, lam, _edf, _coef = ManifoldFit.apply(*xs, bb)
         return recon, reml, lam
 
     assert torch.autograd.gradcheck(lambda x: f(x, amplitudes, targets), (p,), **_GRADCHECK_KW)

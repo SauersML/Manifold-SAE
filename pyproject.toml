@@ -28,7 +28,9 @@ dependencies = [
     "torch>=2.2",
     "numpy>=1.26",
     "tqdm>=4.66",
-    "gamfit>=0.1.64",
+    "gamfit>=0.1.67",
+    "matplotlib>=3.8",
+    "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]
@@ -38,16 +40,10 @@ llm = [
     "accelerate",
     "safetensors",
 ]
-plot = [
-    "matplotlib",
-]
 dev = [
     "pytest",
     "ruff",
 ]
-
-[project.scripts]
-manifold-sae = "manifold_sae.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["manifold_sae"]
