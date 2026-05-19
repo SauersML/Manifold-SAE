@@ -43,6 +43,7 @@ class ManifoldSAEConfig:
     sparsity_weight: float = 1e-3
     cumulant_weight: float = 1e-2   # 4th-moment ICA-style identifiability
     ortho_weight: float = 1e-2      # ||W_k^T W_k − I_R||² per feature
+    periodic: bool = False          # use periodic Duchon basis (gamfit 0.1.69+)
 
 
 @dataclass
@@ -78,8 +79,9 @@ class ManifoldSAE(nn.Module):
         super().__init__()
         self.config = config
         self.encoder = ManifoldEncoder(
-            input_dim=config.input_dim,
+            intrinsic_rank=config.intrinsic_rank,
             n_features=config.n_features,
+            input_dim=config.input_dim,
             top_k=config.top_k,
         )
         K = int(config.n_basis)
@@ -92,31 +94,30 @@ class ManifoldSAE(nn.Module):
         self.register_buffer("centers", torch.from_numpy(centers))
         self.register_buffer("penalty", torch.from_numpy(penalty))
 
-        # Persistent per-feature ambient subspace W_k ∈ R^(D, R). Initialized
-        # with orthonormal columns per feature so different features start
-        # in different ambient subspaces.
-        directions = torch.empty(F, D, R, dtype=torch.float32)
-        for k in range(F):
-            g = torch.randn(D, R)
-            q, _ = torch.linalg.qr(g)
-            directions[k] = q
-        self.directions = nn.Parameter(directions)
+        # Persistent per-feature ambient subspace W_k ∈ R^(D, R). Initialize
+        # so the UNION of all features' columns is one big orthonormal frame
+        # — no two features share an ambient direction at init. Maximum
+        # subspace separation breaks feature symmetry from the start.
+        Q, _ = torch.linalg.qr(torch.randn(D, F * R))   # (D, F*R) orthonormal
+        directions = Q.reshape(D, F, R).permute(1, 0, 2).contiguous()  # (F, D, R)
+        self.directions = nn.Parameter(directions.to(torch.float32))
 
     def forward(self, x: torch.Tensor) -> ManifoldSAEOutput:
-        z_raw, mask_soft, mask_binary = self.encoder(x)
-        # Soft per-batch min-max → positions in [eps, 1-eps] spanning the basis.
-        positions = _soft_rescale_positions(z_raw)
-
-        B, F = positions.shape
-        D = x.shape[1]
-        R = self.directions.shape[-1]
         x_dtype = x.dtype
-        dirs = self.directions.to(x_dtype)  # (F, D, R)
-        # Project x onto each feature's persistent ambient subspace.
+        dirs = self.directions.to(x_dtype)  # (F, D, R) — persistent W_k
+        # Encoder operates on raw x. The W_k learns purely from the
+        # reconstruction gradient — that path gave cleanly-recovered planted
+        # subspaces (cosine 0.96+) in earlier runs.
+        z_raw, mask_soft, mask_binary = self.encoder(x)
+        positions = _soft_rescale_positions(z_raw)
+        # Project x onto each feature's persistent ambient subspace for the
+        # per-feature gamfit target.
         y_proj = torch.einsum("bd,fdr->bfr", x, dirs)  # (B, F, R)
 
-        # gamfit per-batch REML solve in R-dim subspace (one inner solve, all
-        # features batched). REML auto-selects smoothing per feature.
+        B, F = positions.shape
+        R = dirs.shape[-1]
+
+        # gamfit per-batch REML solve in R-dim subspace.
         t_packed = positions.t().contiguous().view(-1).to(torch.float64)
         by_packed = mask_binary.t().contiguous().view(-1).to(torch.float64)
         y_packed = y_proj.permute(1, 0, 2).contiguous().view(F * B, R).to(torch.float64)
@@ -124,7 +125,9 @@ class ManifoldSAE(nn.Module):
         out = gt.gaussian_reml_fit_positions_batched(
             t_packed, y_packed, offsets,
             "duchon", self.centers, self.penalty,
-            basis_order=2, periodic=False,
+            basis_order=2,
+            periodic=self.config.periodic,
+            period=1.0 if self.config.periodic else None,
             by=by_packed,
         )
         fitted_intrinsic = out.fitted.view(F, B, R).to(x_dtype)  # (F, B, R)
@@ -202,7 +205,7 @@ def extract_feature_curves(
         if t_hi - t_lo < 1e-3:
             continue
         t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)  # (T, K)
+        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=sae.config.periodic)
         intrinsic_curve = phi_k @ coefficients[k]  # (T, R)
         ambient_curve = intrinsic_curve @ directions[k].T  # (T, D)
         curves[k] = ambient_curve
