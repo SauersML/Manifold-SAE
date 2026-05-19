@@ -64,7 +64,7 @@ class Config:
     intrinsic_rank: int = 4
     sparsity_weight: float = 1e-3
     ortho_weight: float = 1e-3
-    smoothness_weight: float = 1e-4
+    reml_weight: float = 1.0
 
     seed: int = 0
     output_dir: str = "runs/LLM_LIKE_STRESS"
@@ -226,8 +226,9 @@ def main(cfg: Config = Config()) -> int:
     sae_cfg = ManifoldSAEConfig(
         input_dim=X.shape[1], n_features=cfg.sae_features, n_basis=cfg.n_basis,
         top_k=cfg.top_k, intrinsic_rank=cfg.intrinsic_rank,
-        sparsity_weight=cfg.sparsity_weight, cumulant_weight=0.0,
-        ortho_weight=cfg.ortho_weight, smoothness_weight=cfg.smoothness_weight,
+        sparsity_weight=cfg.sparsity_weight,
+        ortho_weight=cfg.ortho_weight,
+        reml_weight=cfg.reml_weight,
         encoder_type="linear",
     )
     curve_sae = ManifoldSAE(sae_cfg).to(device)

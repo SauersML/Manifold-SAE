@@ -57,9 +57,8 @@ class Config:
     intrinsic_rank: int = 4
     sparsity_weight: float = 3e-4
     ortho_weight: float = 1e-3
-    smoothness_weight: float = 1e-4
+    reml_weight: float = 1.0
     continuous_amp: bool = False
-    curve_norm_weight: float = 0.0
 
     seed: int = 0
     output_dir: str = "runs/PURE_CURVE_BENCH"
@@ -180,11 +179,11 @@ def main(cfg: Config = Config()) -> int:
     sae_cfg = ManifoldSAEConfig(
         input_dim=X.shape[1], n_features=F_crv, n_basis=cfg.n_basis,
         top_k=K_crv, intrinsic_rank=cfg.intrinsic_rank,
-        sparsity_weight=cfg.sparsity_weight, cumulant_weight=0.0,
-        ortho_weight=cfg.ortho_weight, smoothness_weight=cfg.smoothness_weight,
+        sparsity_weight=cfg.sparsity_weight,
+        ortho_weight=cfg.ortho_weight,
+        reml_weight=cfg.reml_weight,
         encoder_type="linear",
         continuous_amp=cfg.continuous_amp,
-        curve_norm_weight=cfg.curve_norm_weight,
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())

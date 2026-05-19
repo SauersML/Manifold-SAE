@@ -45,7 +45,7 @@ class Config:
     lr: float = 1e-3
     sparsity_weight: float = 1e-3
     ortho_weight: float = 1e-3
-    smoothness_weight: float = 1e-4
+    reml_weight: float = 1.0
     seed: int = 0
     output_dir: str = "runs/LLM_CURVE_SAE"
     # corpus: built-in tiny dummy by default; override if you want real text
@@ -143,9 +143,8 @@ def main(cfg: Config = Config()) -> int:
         top_k=cfg.top_k,
         intrinsic_rank=cfg.intrinsic_rank,
         sparsity_weight=cfg.sparsity_weight,
-        cumulant_weight=0.0,
         ortho_weight=cfg.ortho_weight,
-        smoothness_weight=cfg.smoothness_weight,
+        reml_weight=cfg.reml_weight,
         encoder_type="linear",
     )
     print(f"[setup] SAE config: F={cfg.sae_features} R={cfg.intrinsic_rank} K={cfg.n_basis} topk={cfg.top_k}")
