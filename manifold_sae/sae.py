@@ -68,6 +68,9 @@ class ManifoldSAEConfig:
     encoder_type: str = "mlp"          # "mlp" | "linear"
     continuous_amp: bool = False
     periodic: bool = False             # use periodic Duchon basis (cyclic features)
+    init_lambda: float | None = None   # init for gamfit's REML λ-optimization;
+                                       # higher = biased toward smoother fits.
+                                       # None lets gamfit pick (default ~1e-4).
 
 
 @dataclass
@@ -193,6 +196,7 @@ class ManifoldSAE(nn.Module):
             periodic=self.config.periodic,
             period=1.0 if self.config.periodic else None,
             by=by_packed,
+            init_lambda=self.config.init_lambda,
         )
 
         # gamfit.fitted: (F*B, R) — per-feature subspace prediction at this batch's positions.
