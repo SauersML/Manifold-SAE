@@ -150,6 +150,8 @@ def main() -> int:
     parser.add_argument("--run-name", default=None, help="subdir under <working-dir>/runs/ for outputs")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="local JSON config (gitignored)")
     parser.add_argument("--submitted-by", default="manifold-sae", help="value for the submitted_by field")
+    parser.add_argument("--depends-on", action="append", default=[],
+                        help="job ID this submission should wait for (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="print the JSON spec without submitting")
     args = parser.parse_args()
 
@@ -189,6 +191,7 @@ def main() -> int:
             "working_dir": working_dir,
             "estimated_minutes": estimated_minutes,
             "tags": ["manifold-sae", args.experiment, args.git_ref],
+            "depends_on": args.depends_on,
         },
         "submitted_by": args.submitted_by,
     }
