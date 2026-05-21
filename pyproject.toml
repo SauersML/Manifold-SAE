@@ -25,11 +25,12 @@ classifiers = [
 ]
 
 dependencies = [
-    # torch 2.12+ ships CUDA-13 wheels by default, requiring a CUDA-13
-    # NVIDIA driver. Many clusters (and Colab T4) still run CUDA-12 drivers,
-    # which fail to initialize against torch 2.12 ("driver too old, found
-    # 12090"). Capping at <2.12 pulls the CUDA-12 wheel (torch 2.11.x). On
-    # a node with a CUDA-13 driver this cap is safe to lift.
+    # PyPI ships CUDA-13 wheels for torch 2.11+ (e.g. torch 2.11.0+cu130).
+    # On a host with a CUDA-12 driver (the cluster's libcuda reports 12.9,
+    # nodes' nvidia-smi advertises 13.0 but the driver runtime is older),
+    # +cu130 wheels fail to initialize CUDA. Force the +cu128 wheel via
+    # PyTorch's explicit index (see [[tool.uv.index]] below). Cap below
+    # 2.12 to be extra safe.
     "torch>=2.2,<2.12",
     "numpy>=1.26",
     "tqdm>=4.66",
@@ -52,6 +53,19 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["manifold_sae"]
+
+# Torch on PyPI defaults to the CUDA-13 (+cu130) wheel which fails on
+# hosts with a CUDA-12 driver. Force the +cu128 wheel via the explicit
+# PyTorch index. To use a different CUDA variant (cpu / cu124 / cu130),
+# either edit the URL below or override per-platform via
+# `tool.uv.sources` with a marker.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
 
 [tool.ruff]
 line-length = 100

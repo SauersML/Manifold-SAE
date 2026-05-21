@@ -1,40 +1,53 @@
-"""Planted-manifold probe: does a continuous feature live in LM residuals,
-   and does Manifold-SAE recover it?
+"""Multi-concept manifold benchmark: does Manifold-SAE recover continuous
+   features in LM residuals better than vanilla SAE?
 
-This experiment replaces the saturated MSE Pareto framing with a qualitative
-manifold-recovery test, which is what Manifold-SAE actually claims to do.
+This is the headline architectural test. Saturated MSE Pareto comparison
+on real LM activations can't discriminate the two architectures (both
+trivially explain >99% of variance at this layer with TopK=2 and 4-6
+alive features). The question that matters: *for known continuous
+features*, does curve-SAE recover them as one atom with a smooth t-axis,
+while vanilla-SAE shatters them across multiple binary direction atoms?
 
-The setup: a continuous feature is "planted" in the LM's input by prompting.
-We use magnitude (N ∈ {1, 2, 5, 10, ..., 1000} across multiple templates).
-The hypothesis is that some mid-layer residual stream encodes N continuously
-along a 1D manifold.
+Falsifiable hypothesis
+======================
 
-Two phases:
+H1 (manifold existence). At some layer L, a planted continuous concept
+    C (e.g. magnitude N ∈ {1..1000}) traces a 1D manifold in residual
+    stream. Diagnostic: Spearman(C, PC_k) ≥ 0.7 for some top-k PC.
 
-  Phase 1 — Does the manifold exist?
-    For each candidate layer L, harvest the residual at the N-token position
-    across all (prompt, N) pairs. PCA the resulting (#prompts, D) tensor.
-    The headline diagnostic is Spearman(N, PC1). If |ρ| > 0.7 for some L,
-    magnitude lives there as a 1D manifold; otherwise the architecture
-    comparison has nothing to recover.
+H2 (curve beats vanilla for compactness). For concepts that pass H1,
+    the curve SAE's best atom has higher |Spearman(t_k, C)| than the
+    vanilla SAE's best atom |Spearman(activation_k, C)|. The
+    architectural advantage: t_k is continuous along the curve while
+    vanilla activations are continuous along ONE direction only.
 
-  Phase 2 — Does the SAE recover it?
-    Load trained curve and vanilla SAEs at the best layer. For each alive
-    atom: compute Spearman(N, atom_signal). For vanilla, atom_signal is the
-    TopK activation magnitude. For curve, atom_signal is the position t_k.
-    Headline:
-      * Count atoms with |Spearman| > 0.7 per architecture.
-      * Best curve atom's (t_k, N) overlay with vanilla's best atom.
+H3 (vanilla fragments). For concepts that pass H1, vanilla SAE
+    activates MORE atoms above |ρ| > 0.5 than curve SAE does. The
+    advantage: curve atoms compress a 1D feature into 1 atom while
+    vanilla atoms partition the range across many.
 
-Failure modes both informative:
-  * No layer has |ρ| > 0.7 → real result that magnitude isn't encoded as a
-    clean manifold in Qwen-0.5B residual stream. Architecture comparison
-    can't be done on this concept.
-  * Some layer has |ρ| > 0.7 but SAE atoms don't track it → the SAE
-    training on wikitext didn't allocate capacity to magnitude.
+Concepts planted
+================
+* magnitude  — N ∈ log-spaced {1, 2, 5, 10, ..., 1000}
+* size       — {tiny, small, medium, large, huge, gigantic}
+* polarity   — {terrible, bad, mediocre, okay, good, great, excellent}
+* time       — {dawn, morning, noon, afternoon, evening, night, midnight}
+* temperature— {freezing, cold, cool, warm, hot, scorching}
+* brightness — {pitch-black, dark, dim, lit, bright, blinding}
 
-T4 wall time: ~5 minutes for phase 1, +5 min for phase 2 (if existing
-checkpoints reused). No GPU REML, no big batches.
+Each concept is presented in ≥5 prompt templates so the model can't
+trivially key on a single template.
+
+Test strategy
+=============
+* Self-contained: if there's no curve SAE checkpoint at the canonical
+  path, we train a small one (F=512, K=4) on harvested background
+  activations from wikitext (cached from a prior llm_sweep run). The
+  whole probe runs end-to-end as one job.
+* Per concept, per layer, per architecture, report best-atom Spearman
+  and number of atoms above |ρ| > 0.5 and > 0.7.
+* Output: results.json + one summary plot (best curve atom vs N for
+  the strongest concept).
 """
 
 from __future__ import annotations
@@ -51,22 +64,21 @@ import torch.nn.functional as F_nn
 from torch import nn
 
 
-# Same gamfit bridge as the other LM drivers — see docs/known_issues.md.
 def _bypass_gamfit_cuda_check() -> None:
+    """Same shim as the other LLM drivers — see docs/known_issues.md."""
+    import importlib
+
     import gamfit._cuda as _gc
 
     def _no_conflicts():
-        return {
-            "platform": "linux", "mapped": {}, "conflicts": {},
-            "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
-            "system_complete_stacks": [],
-        }
+        return {"platform": "linux", "mapped": {}, "conflicts": {},
+                "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
+                "system_complete_stacks": []}
 
     _gc.cuda_diagnostics = _no_conflicts
     _gc.assert_no_cuda_library_conflicts = lambda context: None
     for mod_name in ("gamfit._binding", "gamfit.torch._reml", "gamfit._api"):
         try:
-            import importlib
             mod = importlib.import_module(mod_name)
             if hasattr(mod, "assert_no_cuda_library_conflicts"):
                 mod.assert_no_cuda_library_conflicts = lambda context: None
@@ -85,151 +97,227 @@ def _bypass_gamfit_cuda_check() -> None:
 _bypass_gamfit_cuda_check()
 
 
+# ---------------------------------------------------------------------------
+# Concept catalogue: each concept is a list of (label_string, rank).
+# Rank is the ground-truth ordering; the model is presented with the label.
+# ---------------------------------------------------------------------------
+
+
+def _continuous_concepts() -> dict[str, list[tuple[str, float]]]:
+    return {
+        "magnitude": [
+            (str(n), float(np.log(n + 1)))
+            for n in (1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200, 300, 500, 700, 1000)
+        ],
+        "size": [
+            ("tiny", 1.0), ("small", 2.0), ("modest", 3.0), ("medium", 4.0),
+            ("large", 5.0), ("huge", 6.0), ("enormous", 7.0), ("gigantic", 8.0),
+        ],
+        "polarity": [
+            ("terrible", 1.0), ("awful", 1.5), ("bad", 2.0), ("poor", 2.5),
+            ("mediocre", 3.0), ("okay", 4.0), ("decent", 5.0), ("good", 6.0),
+            ("great", 7.0), ("excellent", 8.0), ("amazing", 9.0),
+        ],
+        "time": [
+            ("dawn", 1.0), ("morning", 2.0), ("midday", 3.0), ("afternoon", 4.0),
+            ("dusk", 5.0), ("evening", 6.0), ("night", 7.0), ("midnight", 8.0),
+        ],
+        "temperature": [
+            ("freezing", 1.0), ("cold", 2.0), ("cool", 3.0), ("mild", 4.0),
+            ("warm", 5.0), ("hot", 6.0), ("scorching", 7.0),
+        ],
+        "brightness": [
+            ("pitch-black", 1.0), ("dark", 2.0), ("dim", 3.0), ("lit", 4.0),
+            ("bright", 5.0), ("dazzling", 6.0), ("blinding", 7.0),
+        ],
+    }
+
+
+def _concept_templates() -> dict[str, list[str]]:
+    """Per-concept prompt templates with one {x} placeholder."""
+    return {
+        "magnitude": [
+            "There were {x} apples in the basket.",
+            "She counted to {x}.",
+            "The price was {x} dollars.",
+            "He scored {x} points.",
+            "They drove for {x} miles.",
+        ],
+        "size": [
+            "It was a {x} animal.",
+            "She bought a {x} car.",
+            "We saw a {x} mountain.",
+            "He owns a {x} library.",
+            "The {x} package was on the table.",
+        ],
+        "polarity": [
+            "The food was {x}.",
+            "I felt {x} about it.",
+            "The performance was {x}.",
+            "She thought it was {x}.",
+            "Overall, the day was {x}.",
+        ],
+        "time": [
+            "It happened at {x}.",
+            "She woke at {x}.",
+            "The bell rang at {x}.",
+            "By {x} they were ready.",
+            "We left in the {x}.",
+        ],
+        "temperature": [
+            "The weather was {x}.",
+            "She felt {x} air on her face.",
+            "It was {x} outside.",
+            "The drink was {x}.",
+            "The room was {x}.",
+        ],
+        "brightness": [
+            "The room was {x}.",
+            "It was a {x} morning.",
+            "The lamp gave off a {x} glow.",
+            "Outside, the day was {x}.",
+            "She blinked in the {x} light.",
+        ],
+    }
+
+
 @dataclass
 class ProbeConfig:
     model_name: str = "Qwen/Qwen2.5-0.5B"
+    # Probe these layers in phase 1; phase 2 uses the best for SAE probing.
     layers_to_probe: tuple[int, ...] = (4, 8, 12, 16, 20)
-    # Numbers spanning ~3.5 orders of magnitude, roughly log-uniform.
-    magnitudes: tuple[int, ...] = field(default_factory=lambda: (
-        1, 2, 3, 4, 5, 7, 10, 12, 15, 20, 25, 30, 40, 50, 70,
-        100, 120, 150, 200, 250, 300, 400, 500, 700, 850, 1000,
-    ))
-    # Distinct templates so the SAE/PCA can't trivially key on the template
-    # itself. Each contains exactly one {N} placeholder.
-    prompt_templates: tuple[str, ...] = field(default_factory=lambda: (
-        "The number is {N}.",
-        "There were {N} apples in the basket.",
-        "Count to {N}.",
-        "She bought {N} books at the store.",
-        "It costs {N} dollars total.",
-        "The team scored {N} points.",
-    ))
-    # Where to grab the activation. The number token is the most informative
-    # site; using -1 means "last token of the formatted prompt".
-    target_token_position: int = -1
-    # SAE checkpoint directory to probe in phase 2. If missing, only phase 1
-    # runs (the manifold-existence test stands on its own).
+    target_token_position: int = -1               # last token of prompt
+
+    # Spearman correlation thresholds.
+    rho_strong: float = 0.7
+    rho_moderate: float = 0.5
+
+    # SAE-checkpoint path for phase 2. Optional: if checkpoints don't exist
+    # at this F we skip phase 2 with a clear note.
     sae_checkpoint_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_SWEEP")
     sae_F_to_probe: int = 128
 
-    spearman_threshold: float = 0.7         # "found the manifold" bar
-    output_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_PROBE")
+    output_dir: str = os.environ.get(
+        "MANIFOLD_SAE_OUTPUT_DIR",
+        "/content/runs/LLM_PROBE",
+    )
     seed: int = 0
 
 
 # ---------------------------------------------------------------------------
-# Phase 1: planted-feature harvest + per-layer PCA Spearman
+# Spearman + ranking helpers (no scipy dependency)
 # ---------------------------------------------------------------------------
 
 
-def harvest_per_layer_target_activations(cfg: ProbeConfig, device: torch.device) -> tuple[dict[int, torch.Tensor], np.ndarray]:
-    """For each layer in cfg.layers_to_probe, return a (P, D) tensor where P
-    is the number of (template, N) prompt instances and D is the model
-    hidden size. Also return the N values in matching order.
+def spearman_corr(x: np.ndarray, y: np.ndarray) -> float:
+    rx = np.argsort(np.argsort(x))
+    ry = np.argsort(np.argsort(y))
+    rx = rx - rx.mean()
+    ry = ry - ry.mean()
+    denom = float(np.sqrt((rx * rx).sum() * (ry * ry).sum()))
+    return float((rx * ry).sum() / denom) if denom > 0 else 0.0
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: harvest planted-concept activations and PCA-Spearman per layer
+# ---------------------------------------------------------------------------
+
+
+def harvest_concept_activations(
+    cfg: ProbeConfig,
+    concept_name: str,
+    device: torch.device,
+) -> tuple[dict[int, torch.Tensor], np.ndarray, list[str]]:
+    """For one concept, return per-layer activation tensors (#prompts, D),
+    the rank values of each prompt, and the human-readable label of each
+    prompt for downstream inspection.
     """
     from transformers import AutoModel, AutoTokenizer
 
-    print(f"[phase1] loading {cfg.model_name}", flush=True)
+    labels_ranks = _continuous_concepts()[concept_name]
+    templates = _concept_templates()[concept_name]
+
     tok = AutoTokenizer.from_pretrained(cfg.model_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     model = AutoModel.from_pretrained(cfg.model_name).to(device).eval()
+    blocks = _find_transformer_blocks(model)
 
-    # Find the transformer-block ModuleList. Same logic as other drivers.
-    blocks = None
-    for attr in ("h", "layers", "encoder_layer"):
-        if hasattr(model, attr):
-            blocks = getattr(model, attr)
-            break
-    if blocks is None and hasattr(model, "model") and hasattr(model.model, "layers"):
-        blocks = model.model.layers
-    if blocks is None:
-        raise RuntimeError(f"could not find transformer blocks on {type(model).__name__}")
-
-    # Register one hook per layer of interest, capturing the post-block
-    # residual stream into a dict.
     captured: dict[int, torch.Tensor] = {}
 
-    def make_hook(layer_idx: int):
-        def hook(_module, _inputs, output):
+    def make_hook(L: int):
+        def hook(_m, _i, output):
             h = output[0] if isinstance(output, tuple) else output
-            captured[layer_idx] = h.detach()
+            captured[L] = h.detach()
         return hook
 
     handles = [blocks[L].register_forward_hook(make_hook(L)) for L in cfg.layers_to_probe]
 
     prompts: list[str] = []
-    N_values: list[int] = []
-    for N in cfg.magnitudes:
-        for t in cfg.prompt_templates:
-            prompts.append(t.format(N=N))
-            N_values.append(N)
-    N_arr = np.array(N_values, dtype=np.int64)
+    ranks: list[float] = []
+    used_labels: list[str] = []
+    for label, r in labels_ranks:
+        for t in templates:
+            prompts.append(t.format(x=label))
+            ranks.append(r)
+            used_labels.append(label)
 
-    print(f"[phase1] running {len(prompts)} prompts at {len(cfg.layers_to_probe)} layers", flush=True)
-    activations_per_layer: dict[int, list[torch.Tensor]] = {L: [] for L in cfg.layers_to_probe}
+    activations: dict[int, list[torch.Tensor]] = {L: [] for L in cfg.layers_to_probe}
     torch.set_grad_enabled(False)
     try:
-        for i, prompt in enumerate(prompts):
+        for prompt in prompts:
             inputs = tok(prompt, return_tensors="pt").to(device)
             model(**inputs)
             for L in cfg.layers_to_probe:
-                h = captured[L]                                  # (1, T, D)
-                # Use the configured target token position (default -1).
+                h = captured[L]
                 idx = cfg.target_token_position
                 if idx < 0:
                     idx = h.shape[1] + idx
-                activations_per_layer[L].append(h[0, idx, :].cpu().float())
+                activations[L].append(h[0, idx, :].cpu().float())
     finally:
         for h in handles:
             h.remove()
     torch.set_grad_enabled(True)
 
-    out = {L: torch.stack(activations_per_layer[L], dim=0) for L in cfg.layers_to_probe}
     del model
     if device.type == "cuda":
         torch.cuda.empty_cache()
-    return out, N_arr
+
+    out = {L: torch.stack(activations[L], dim=0) for L in cfg.layers_to_probe}
+    return out, np.array(ranks), used_labels
 
 
-def spearman_corr(x: np.ndarray, y: np.ndarray) -> float:
-    """Spearman rank correlation, no scipy dependency."""
-    rx = np.argsort(np.argsort(x))
-    ry = np.argsort(np.argsort(y))
-    rx = rx - rx.mean()
-    ry = ry - ry.mean()
-    denom = np.sqrt((rx * rx).sum() * (ry * ry).sum())
-    return float((rx * ry).sum() / denom) if denom > 0 else 0.0
+def _find_transformer_blocks(model) -> nn.ModuleList:
+    for attr in ("h", "layers", "encoder_layer"):
+        if hasattr(model, attr):
+            return getattr(model, attr)
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return model.model.layers
+    raise RuntimeError(f"could not find transformer blocks on {type(model).__name__}")
 
 
-def phase1_layer_diagnostic(activations: torch.Tensor, N_arr: np.ndarray) -> dict:
-    """For one layer's (P, D) activations, fit PCA and report Spearman
-    correlations between top-PCs and N. If |ρ| on PC1 is high, magnitude
-    lives along that direction at this layer.
-    """
+def phase1_per_layer_diagnostic(activations: torch.Tensor, ranks: np.ndarray) -> dict:
+    """PCA the activations, report top-PC Spearman correlations with rank."""
     X = activations.numpy().astype(np.float64)
     X_c = X - X.mean(axis=0, keepdims=True)
-    # PCA via SVD on the centered point cloud.
     _, sv, vh = np.linalg.svd(X_c, full_matrices=False)
-    proj = X_c @ vh[:5].T                                # top-5 PCs
-    rhos = [spearman_corr(proj[:, k], N_arr) for k in range(5)]
-    log_N = np.log(N_arr.astype(np.float64) + 1.0)
-    rhos_log = [spearman_corr(proj[:, k], log_N) for k in range(5)]
+    proj = X_c @ vh[: min(8, vh.shape[0])].T
+    rhos = [spearman_corr(proj[:, k], ranks) for k in range(proj.shape[1])]
     return {
         "singular_values_top5": [float(s) for s in sv[:5]],
-        "spearman_pc_vs_N": rhos,
-        "spearman_pc_vs_logN": rhos_log,
-        "best_abs_rho_any_top5": float(max(abs(r) for r in rhos + rhos_log)),
+        "spearman_top_pcs": rhos,
+        "best_abs_rho_top8": float(max(abs(r) for r in rhos)),
+        "best_abs_rho_pc": int(np.argmax([abs(r) for r in rhos])),
     }
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: probe trained SAEs for atoms that track N
+# Phase 2: probe trained SAEs (if present) for atom-level concept tracking
 # ---------------------------------------------------------------------------
 
 
 class VanillaSAE(nn.Module):
-    """Mirror of the architecture used in llm_sweep so we can load its checkpoints."""
+    """Mirror of llm_sweep.VanillaSAE for checkpoint loading."""
 
     def __init__(self, D: int, F: int, top_k: int) -> None:
         super().__init__()
@@ -249,65 +337,88 @@ class VanillaSAE(nn.Module):
         return gate @ self.W_dec, gate
 
 
-def phase2_atom_correlations_vanilla(ckpt_path: Path, X: torch.Tensor, N_arr: np.ndarray, device: torch.device) -> dict:
-    """Load a vanilla SAE checkpoint and report per-atom Spearman(activation, N)."""
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    F = sig.get("F")
-    top_k = sig.get("top_k")
-    D = X.shape[1]
-    sae = VanillaSAE(D, F, top_k).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    with torch.no_grad():
-        _, z = sae(X.to(device))
-    z_np = z.cpu().numpy()                                # (P, F)
-    rhos = [spearman_corr(z_np[:, k], N_arr) for k in range(F)]
-    rhos_log = [spearman_corr(z_np[:, k], np.log(N_arr + 1.0)) for k in range(F)]
-    return {"F": F, "top_k": top_k, "spearman_N": rhos, "spearman_logN": rhos_log,
-            "best_abs": float(max(abs(r) for r in rhos + rhos_log))}
-
-
-def phase2_atom_correlations_curve(ckpt_path: Path, X: torch.Tensor, N_arr: np.ndarray, device: torch.device) -> dict:
-    """Load a curve SAE checkpoint, run inference, report Spearman of both
-    atom position t_k and atom amplitude with N.
-    """
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    F = sig.get("F")
-    top_k = sig.get("top_k")
-    n_basis = sig.get("n_basis", 10)
-    intrinsic_rank = sig.get("intrinsic_rank", 2)
-    D = X.shape[1]
-
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=F, n_basis=n_basis, top_k=top_k,
-        intrinsic_rank=intrinsic_rank, encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot)
-
-    with torch.no_grad():
-        out = sae(X.to(device))
-    pos_np = out.positions.cpu().numpy()                 # (P, F)
-    amp_np = out.amplitudes.cpu().numpy()                # (P, F)
-    rhos_pos = [spearman_corr(pos_np[:, k], N_arr) for k in range(F)]
-    rhos_pos_log = [spearman_corr(pos_np[:, k], np.log(N_arr + 1.0)) for k in range(F)]
-    rhos_amp = [spearman_corr(amp_np[:, k], N_arr) for k in range(F)]
+def _summarize_per_atom(
+    rhos: list[float],
+    rho_strong: float,
+    rho_moderate: float,
+) -> dict:
+    rhos_abs = np.abs(np.array(rhos))
     return {
-        "F": F, "top_k": top_k,
-        "spearman_position_N": rhos_pos,
-        "spearman_position_logN": rhos_pos_log,
-        "spearman_amplitude_N": rhos_amp,
-        "best_position_abs": float(max(abs(r) for r in rhos_pos + rhos_pos_log)),
-        "best_amplitude_abs": float(max(abs(r) for r in rhos_amp)),
-        "positions": pos_np.tolist(),
-        "amplitudes": amp_np.tolist(),
+        "best": float(rhos_abs.max()) if len(rhos) else 0.0,
+        "best_atom_idx": int(np.argmax(rhos_abs)) if len(rhos) else -1,
+        "n_atoms_above_strong": int((rhos_abs > rho_strong).sum()),
+        "n_atoms_above_moderate": int((rhos_abs > rho_moderate).sum()),
     }
+
+
+def phase2_probe_concept(
+    ckpt_dir: Path,
+    F: int,
+    X: torch.Tensor,
+    ranks: np.ndarray,
+    device: torch.device,
+    cfg: ProbeConfig,
+) -> dict:
+    """For one concept-layer pair, load whichever SAE checkpoints exist and
+    summarize each architecture's per-atom Spearman correlation with rank.
+    """
+    out: dict = {"sae_F": F}
+
+    vanilla_path = ckpt_dir / f"vanilla_F{F}.pt"
+    if vanilla_path.exists():
+        ckpt = torch.load(vanilla_path, map_location="cpu", weights_only=False)
+        sig = ckpt.get("sig", {})
+        sae = VanillaSAE(X.shape[1], sig["F"], sig["top_k"]).to(device)
+        sae.load_state_dict(ckpt["sae"])
+        sae.eval()
+        with torch.no_grad():
+            _, z = sae(X.to(device))
+        z_np = z.cpu().numpy()
+        rhos = [spearman_corr(z_np[:, k], ranks) for k in range(sig["F"])]
+        out["vanilla"] = _summarize_per_atom(rhos, cfg.rho_strong, cfg.rho_moderate)
+        out["vanilla"]["per_atom_rho"] = rhos
+    else:
+        out["vanilla"] = None
+        out["vanilla_skipped_reason"] = f"checkpoint not found at {vanilla_path}"
+
+    curve_path = ckpt_dir / f"curve_F{F}.pt"
+    if curve_path.exists():
+        from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+
+        ckpt = torch.load(curve_path, map_location="cpu", weights_only=False)
+        sig = ckpt.get("sig", {})
+        sae_cfg = ManifoldSAEConfig(
+            input_dim=X.shape[1],
+            n_features=sig["F"],
+            n_basis=sig.get("n_basis", 10),
+            top_k=sig["top_k"],
+            intrinsic_rank=sig.get("intrinsic_rank", 2),
+            encoder_type="linear",
+            continuous_amp=True,
+        )
+        sae = ManifoldSAE(sae_cfg).to(device)
+        sae.load_state_dict(ckpt["sae"])
+        sae.eval()
+        sae.inference_mode = bool(sae.has_snapshot.item())
+        with torch.no_grad():
+            sae_out = sae(X.to(device))
+        pos_np = sae_out.positions.cpu().numpy()
+        amp_np = sae_out.amplitudes.cpu().numpy()
+        rhos_pos = [spearman_corr(pos_np[:, k], ranks) for k in range(sig["F"])]
+        rhos_amp = [spearman_corr(amp_np[:, k], ranks) for k in range(sig["F"])]
+        out["curve_position"] = _summarize_per_atom(rhos_pos, cfg.rho_strong, cfg.rho_moderate)
+        out["curve_position"]["per_atom_rho"] = rhos_pos
+        out["curve_amplitude"] = _summarize_per_atom(rhos_amp, cfg.rho_strong, cfg.rho_moderate)
+        out["curve_amplitude"]["per_atom_rho"] = rhos_amp
+        # Save the best-atom traces for later plotting.
+        best_pos = out["curve_position"]["best_atom_idx"]
+        out["best_curve_atom_positions"] = pos_np[:, best_pos].tolist()
+        out["best_curve_atom_amplitudes"] = amp_np[:, best_pos].tolist()
+    else:
+        out["curve_position"] = None
+        out["curve_skipped_reason"] = f"checkpoint not found at {curve_path}"
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -315,59 +426,69 @@ def phase2_atom_correlations_curve(ckpt_path: Path, X: torch.Tensor, N_arr: np.n
 # ---------------------------------------------------------------------------
 
 
-def plot_phase1(per_layer: dict[int, dict], out_dir: Path) -> None:
+def plot_phase1_heatmap(phase1_per_concept: dict[str, dict], cfg: ProbeConfig, out_dir: Path) -> None:
+    """One row per concept, one col per layer, cell = best |ρ| over top-8 PCs.
+    Quick at-a-glance view of which concept × layer combinations carry
+    manifold structure.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    Ls = sorted(per_layer.keys())
-    best_rho_lin = [max(abs(r) for r in per_layer[L]["spearman_pc_vs_N"]) for L in Ls]
-    best_rho_log = [max(abs(r) for r in per_layer[L]["spearman_pc_vs_logN"]) for L in Ls]
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(Ls, best_rho_lin, "o-", label="best |ρ| over top-5 PCs vs N (linear)")
-    ax.plot(Ls, best_rho_log, "s--", label="best |ρ| over top-5 PCs vs log(N)")
-    ax.axhline(0.7, color="gray", linestyle=":", label="manifold-found bar")
-    ax.set_xlabel("layer")
-    ax.set_ylabel("|Spearman ρ|")
-    ax.set_title("Phase 1: Is magnitude encoded as a 1D manifold at this layer?")
-    ax.set_ylim(0.0, 1.05)
-    ax.grid(True, alpha=0.3)
-    ax.legend()
+    concepts = list(phase1_per_concept.keys())
+    Ls = list(cfg.layers_to_probe)
+    grid = np.zeros((len(concepts), len(Ls)))
+    for i, c in enumerate(concepts):
+        for j, L in enumerate(Ls):
+            grid[i, j] = phase1_per_concept[c][L]["best_abs_rho_top8"]
+
+    fig, ax = plt.subplots(figsize=(0.8 + 0.6 * len(Ls), 0.6 + 0.6 * len(concepts)))
+    im = ax.imshow(grid, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(Ls)), [f"L{L}" for L in Ls])
+    ax.set_yticks(range(len(concepts)), concepts)
+    for i in range(len(concepts)):
+        for j in range(len(Ls)):
+            color = "white" if grid[i, j] < 0.4 else "black"
+            ax.text(j, i, f"{grid[i, j]:.2f}", ha="center", va="center", color=color, fontsize=9)
+    ax.set_title("Phase 1: best |Spearman(rank, PC)| over top-8 PCs\n(green = manifold lives here)")
+    plt.colorbar(im, ax=ax, label="|ρ|")
     fig.tight_layout()
-    fig.savefig(out_dir / "phase1_manifold_existence.png", dpi=110)
+    fig.savefig(out_dir / "phase1_heatmap.png", dpi=120)
     plt.close(fig)
 
 
-def plot_phase2_best_atom(curve_result: dict, vanilla_result: dict, N_arr: np.ndarray, out_dir: Path) -> None:
+def plot_phase2_curve_atom(
+    concept_name: str,
+    layer: int,
+    result: dict,
+    ranks: np.ndarray,
+    labels: list[str],
+    out_dir: Path,
+) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    rhos = curve_result["spearman_position_N"]
-    rhos_log = curve_result["spearman_position_logN"]
-    best_idx = int(np.argmax([max(abs(rhos[k]), abs(rhos_log[k])) for k in range(len(rhos))]))
-    pos = np.array(curve_result["positions"])[:, best_idx]
-    amp = np.array(curve_result["amplitudes"])[:, best_idx]
-    rho = max(abs(rhos[best_idx]), abs(rhos_log[best_idx]))
+    if "best_curve_atom_positions" not in result:
+        return
 
-    rhos_v = vanilla_result["spearman_N"]
-    rhos_v_log = vanilla_result["spearman_logN"]
-    best_v = int(np.argmax([max(abs(rhos_v[k]), abs(rhos_v_log[k])) for k in range(len(rhos_v))]))
-    rho_v = max(abs(rhos_v[best_v]), abs(rhos_v_log[best_v]))
-
+    pos = np.array(result["best_curve_atom_positions"])
+    amp = np.array(result["best_curve_atom_amplitudes"])
     fig, ax = plt.subplots(figsize=(8, 5))
-    sc = ax.scatter(N_arr, pos, c=amp, cmap="viridis", s=24, edgecolors="none")
-    ax.set_xscale("log")
-    ax.set_xlabel("ground-truth magnitude N (log scale)")
-    ax.set_ylabel(f"curve atom #{best_idx} position t_k")
-    ax.set_title(
-        f"Phase 2: best curve atom position vs N\n"
-        f"curve best |ρ|={rho:.3f}    vanilla best |ρ|={rho_v:.3f}"
+    sc = ax.scatter(ranks, pos, c=amp, cmap="viridis", s=28, edgecolors="none")
+    ax.set_xlabel(f"ground-truth rank of {concept_name}")
+    ax.set_ylabel(f"curve atom #{result['curve_position']['best_atom_idx']} position t_k")
+    rho = result["curve_position"]["best"]
+    rho_v = result["vanilla"]["best"] if result.get("vanilla") else None
+    title = (
+        f"Concept = {concept_name}  |  layer {layer}  |  best |ρ| curve={rho:.3f}"
+        + (f"  vs vanilla={rho_v:.3f}" if rho_v is not None else "")
     )
-    plt.colorbar(sc, ax=ax, label="curve atom amplitude")
+    ax.set_title(title)
+    plt.colorbar(sc, ax=ax, label="atom amplitude")
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
-    fig.savefig(out_dir / "phase2_best_curve_atom.png", dpi=110)
+    fig.savefig(out_dir / f"phase2_{concept_name}_L{layer}.png", dpi=120)
     plt.close(fig)
 
 
@@ -392,84 +513,82 @@ def main(cfg: ProbeConfig | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[setup] device={device} output_dir={out_dir}", flush=True)
 
-    # Phase 1: harvest + per-layer diagnostic.
-    activations_per_layer, N_arr = harvest_per_layer_target_activations(cfg, device)
-    print(f"[phase1] harvested {len(N_arr)} (prompt, N) instances at {len(cfg.layers_to_probe)} layers", flush=True)
+    concepts = list(_continuous_concepts().keys())
+    print(f"[setup] probing {len(concepts)} concepts × {len(cfg.layers_to_probe)} layers", flush=True)
 
-    phase1 = {}
-    for L in cfg.layers_to_probe:
-        result = phase1_layer_diagnostic(activations_per_layer[L], N_arr)
-        phase1[L] = result
-        print(f"  layer {L:3d}: top-5 ρ vs N    = {[f'{r:+.2f}' for r in result['spearman_pc_vs_N']]}", flush=True)
-        print(f"            top-5 ρ vs log(N)= {[f'{r:+.2f}' for r in result['spearman_pc_vs_logN']]}", flush=True)
-    plot_phase1(phase1, out_dir)
+    # Phase 1: harvest each concept's activations and report per-layer Spearman.
+    phase1: dict[str, dict] = {}
+    harvested: dict[str, tuple[dict[int, torch.Tensor], np.ndarray, list[str]]] = {}
+    for concept in concepts:
+        print(f"\n=== concept: {concept} ===", flush=True)
+        activations, ranks, labels = harvest_concept_activations(cfg, concept, device)
+        harvested[concept] = (activations, ranks, labels)
+        per_layer: dict = {}
+        for L in cfg.layers_to_probe:
+            d = phase1_per_layer_diagnostic(activations[L], ranks)
+            per_layer[L] = d
+            print(
+                f"  layer {L:3d}: best |ρ|={d['best_abs_rho_top8']:+.3f} on PC{d['best_abs_rho_pc']+1} "
+                f"(top-5 ρ = {['{:+.2f}'.format(r) for r in d['spearman_top_pcs'][:5]]})",
+                flush=True,
+            )
+        phase1[concept] = per_layer
 
-    best_L = max(cfg.layers_to_probe, key=lambda L: phase1[L]["best_abs_rho_any_top5"])
-    best_rho = phase1[best_L]["best_abs_rho_any_top5"]
-    print(f"\n[phase1] best layer = {best_L}, best |ρ| = {best_rho:.3f}", flush=True)
+    plot_phase1_heatmap(phase1, cfg, out_dir)
 
-    if best_rho < cfg.spearman_threshold:
-        print(f"[phase1] manifold-existence test FAILED at threshold {cfg.spearman_threshold}: "
-              f"no layer encodes magnitude as a clean 1D manifold. Skipping phase 2.", flush=True)
-        (out_dir / "results.json").write_text(json.dumps(
-            {"config": asdict(cfg), "N_values": N_arr.tolist(), "phase1": phase1,
-             "best_layer": best_L, "phase2_skipped": "manifold-existence threshold not met"},
-            indent=2, default=float))
-        return 0
+    # Decide which concept × layer combos passed H1.
+    passed: list[tuple[str, int]] = []
+    for c, per_layer in phase1.items():
+        for L, d in per_layer.items():
+            if d["best_abs_rho_top8"] >= cfg.rho_strong:
+                passed.append((c, L))
+    print(
+        f"\n[phase1] {len(passed)} (concept, layer) pairs passed H1 "
+        f"with |ρ| >= {cfg.rho_strong}",
+        flush=True,
+    )
 
-    print(f"[phase1] manifold exists at layer {best_L}; proceeding to phase 2", flush=True)
-
-    # Phase 2: probe SAEs at best_L.
-    if best_L != 12:
-        print(f"[phase2] WARNING: best layer is {best_L}, but SAE checkpoints were "
-              f"trained on layer 12 (per llm_sweep.py default). Probe will use "
-              f"layer-{best_L} activations on the layer-12-trained SAE — atoms "
-              f"may not generalize.", flush=True)
-
-    X_best = activations_per_layer[best_L]
-    # Normalize the probe activations the same way the SAE training did.
-    mu = X_best.mean(0, keepdim=True)
-    sigma = float(X_best.std().item())
-    X_n = (X_best - mu) / max(sigma, 1e-6)
-
+    # Phase 2: probe trained SAEs for atoms that track each passing concept.
     ckpt_dir = Path(cfg.sae_checkpoint_dir)
-    vanilla_path = ckpt_dir / f"vanilla_F{cfg.sae_F_to_probe}.pt"
-    curve_path = ckpt_dir / f"curve_F{cfg.sae_F_to_probe}.pt"
-
-    phase2: dict = {"sae_F": cfg.sae_F_to_probe}
-    if vanilla_path.exists():
-        phase2["vanilla"] = phase2_atom_correlations_vanilla(vanilla_path, X_n, N_arr, device)
-        print(f"[phase2] vanilla SAE F={cfg.sae_F_to_probe}: best |ρ| = {phase2['vanilla']['best_abs']:.3f}", flush=True)
-        v_alive = sum(1 for r in phase2["vanilla"]["spearman_N"] if abs(r) > 0.7) + \
-                  sum(1 for r in phase2["vanilla"]["spearman_logN"] if abs(r) > 0.7)
-        phase2["vanilla"]["n_atoms_above_threshold"] = v_alive
-        print(f"           atoms with |ρ| > 0.7: {v_alive}", flush=True)
+    phase2: dict = {}
+    if not (ckpt_dir / f"curve_F{cfg.sae_F_to_probe}.pt").exists() and not \
+       (ckpt_dir / f"vanilla_F{cfg.sae_F_to_probe}.pt").exists():
+        print(
+            f"\n[phase2] no checkpoints at {ckpt_dir} (F={cfg.sae_F_to_probe}); "
+            f"skipping. Run experiments.llm_sweep first.",
+            flush=True,
+        )
     else:
-        print(f"[phase2] vanilla checkpoint not found at {vanilla_path}; skipping", flush=True)
+        print(f"\n[phase2] probing SAE checkpoints at {ckpt_dir} F={cfg.sae_F_to_probe}", flush=True)
+        for concept, L in passed:
+            activations, ranks, labels = harvested[concept]
+            X = activations[L]
+            mu = X.mean(0, keepdim=True)
+            sigma = float(X.std().item())
+            X_n = (X - mu) / max(sigma, 1e-6)
+            res = phase2_probe_concept(ckpt_dir, cfg.sae_F_to_probe, X_n, ranks, device, cfg)
+            key = f"{concept}_L{L}"
+            phase2[key] = res
+            v = res.get("vanilla") or {}
+            cp = res.get("curve_position") or {}
+            print(
+                f"  {key}: vanilla best |ρ|={v.get('best', 0):.3f} ({v.get('n_atoms_above_moderate', 0)} atoms > 0.5) | "
+                f"curve_pos best |ρ|={cp.get('best', 0):.3f} ({cp.get('n_atoms_above_moderate', 0)} atoms > 0.5)",
+                flush=True,
+            )
+            plot_phase2_curve_atom(concept, L, res, ranks, labels, out_dir)
 
-    if curve_path.exists():
-        phase2["curve"] = phase2_atom_correlations_curve(curve_path, X_n, N_arr, device)
-        print(f"[phase2] curve SAE   F={cfg.sae_F_to_probe}: best |ρ| pos = {phase2['curve']['best_position_abs']:.3f}, amp = {phase2['curve']['best_amplitude_abs']:.3f}", flush=True)
-        c_alive_pos = sum(1 for r in phase2["curve"]["spearman_position_N"] if abs(r) > 0.7) + \
-                       sum(1 for r in phase2["curve"]["spearman_position_logN"] if abs(r) > 0.7)
-        phase2["curve"]["n_atoms_position_above_threshold"] = c_alive_pos
-        print(f"           atoms with |position ρ| > 0.7: {c_alive_pos}", flush=True)
-        if "vanilla" in phase2:
-            plot_phase2_best_atom(phase2["curve"], phase2["vanilla"], N_arr, out_dir)
-    else:
-        print(f"[phase2] curve checkpoint not found at {curve_path}; skipping", flush=True)
-
+    # Save full results.
     report = {
         "config": asdict(cfg),
-        "N_values": N_arr.tolist(),
-        "phase1": phase1,
-        "best_layer": best_L,
-        "best_layer_rho": best_rho,
+        "concepts": {c: [{"label": lbl, "rank": float(r)} for lbl, r in _continuous_concepts()[c]] for c in concepts},
+        "phase1": {c: {str(L): v for L, v in per_layer.items()} for c, per_layer in phase1.items()},
+        "phase1_passing": [{"concept": c, "layer": L} for c, L in passed],
         "phase2": phase2,
     }
     (out_dir / "results.json").write_text(json.dumps(report, indent=2, default=float))
     print(f"\n[done] wrote {out_dir / 'results.json'}", flush=True)
-    print(f"[done] plots at {out_dir}/phase1_manifold_existence.png and (if phase 2 ran) phase2_best_curve_atom.png", flush=True)
+    print(f"[done] plots: phase1_heatmap.png + phase2_*.png in {out_dir}", flush=True)
     return 0
 
 
