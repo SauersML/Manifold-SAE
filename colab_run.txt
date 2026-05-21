@@ -1,10 +1,18 @@
 # Paste into one Colab cell. Runtime → Change runtime type → T4 GPU first.
-# Self-contained: uses absolute paths so it's safe to re-run after the
-# script's working directory has been deleted.
+# LD_PRELOAD forces SONAME deduplication on cuBLAS so gamfit's CUDA
+# safety check passes — both vanilla SAE and curve SAE then train on GPU.
 
 %cd /content
 !nvidia-smi | head -5
 !rm -rf /content/Manifold-SAE
 !git clone -q https://github.com/SauersML/Manifold-SAE.git /content/Manifold-SAE
 !pip install -q "gamfit>=0.1.81" transformers datasets scipy
-!cd /content/Manifold-SAE && python -m experiments.llm_real
+
+# Find the torch-bundled cuBLAS and preload it so glibc dlopen uses it
+# for every subsequent cuBLAS load (system + bundled both map to one
+# file handle). Resolves gamfit's dual-stack conflict.
+import nvidia.cublas, os
+CUBLAS = os.path.join(os.path.dirname(nvidia.cublas.__file__), "lib", "libcublas.so.12")
+print("LD_PRELOAD:", CUBLAS)
+
+!cd /content/Manifold-SAE && LD_PRELOAD={CUBLAS} python -m experiments.llm_real
