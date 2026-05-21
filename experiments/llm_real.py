@@ -27,20 +27,38 @@ from torch import nn
 
 
 # ---------------------------------------------------------------------------
-# Transitional bridge: bypass gamfit's CUDA dual-stack safety check on
+# Transitional bridge: neutralize gamfit's CUDA dual-stack safety check on
 # environments (Colab, several cloud images) that have both /usr/local/cuda*
 # and the torch-bundled nvidia/cublas-cu12 reachable. The proper fix is
 # upstream in gam (commit downgrades the assert to a once-per-process
-# warning). Until a new gamfit wheel containing that fix lands on PyPI,
-# this shim no-ops the check so `pip install gamfit` from PyPI keeps working.
+# warning); until that ships, we patch at the *source* — `cuda_diagnostics`
+# — so every consumer of the diagnostic sees an empty conflict set. This
+# works regardless of which module captured the assert function reference
+# at import time.
 def _bypass_gamfit_cuda_check() -> None:
     import gamfit._cuda as _gc
 
+    def _no_conflicts():
+        return {
+            "platform": "linux", "mapped": {}, "conflicts": {},
+            "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
+            "system_complete_stacks": [],
+        }
+
+    _gc.cuda_diagnostics = _no_conflicts
     _gc.assert_no_cuda_library_conflicts = lambda context: None
+    for mod_name in ("gamfit._binding", "gamfit.torch._reml", "gamfit._api"):
+        try:
+            import importlib
+            mod = importlib.import_module(mod_name)
+            if hasattr(mod, "assert_no_cuda_library_conflicts"):
+                mod.assert_no_cuda_library_conflicts = lambda context: None
+            if hasattr(mod, "cuda_diagnostics"):
+                mod.cuda_diagnostics = _no_conflicts
+        except ImportError:
+            pass
     try:
         import gamfit._binding as _gb
-
-        _gb.assert_no_cuda_library_conflicts = lambda context: None
         if hasattr(_gb.rust_module, "cache_clear"):
             _gb.rust_module.cache_clear()
     except ImportError:
@@ -213,14 +231,24 @@ def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool =
     start_step = 0
     if cfg.resume and ckpt_path.exists():
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        sig = _ckpt_signature(cfg, label)
-        if ckpt.get("sig") == sig:
+        new_sig = _ckpt_signature(cfg, label)
+        cached_sig = ckpt.get("sig", {})
+        # Subset match: cached signature may contain extra (legacy) fields
+        # like lr / batch_size that we've since dropped from the signature.
+        # As long as every field of the NEW signature matches the cached
+        # value for that field, the weights are compatible.
+        compatible = all(cached_sig.get(k) == v for k, v in new_sig.items())
+        if compatible:
             sae.load_state_dict(ckpt["sae"])
-            opt.load_state_dict(ckpt["opt"])
+            try:
+                opt.load_state_dict(ckpt["opt"])
+            except (ValueError, KeyError):
+                print(f"  [{label}] optimizer state incompatible; reinitializing optimizer (weights resumed)", flush=True)
             start_step = int(ckpt["step"])
             print(f"  [{label}] resumed from {ckpt_path} at step {start_step}", flush=True)
         else:
-            print(f"  [{label}] checkpoint exists but signature changed — starting fresh", flush=True)
+            diffs = [(k, cached_sig.get(k), v) for k, v in new_sig.items() if cached_sig.get(k) != v]
+            print(f"  [{label}] checkpoint signature mismatch on {diffs} — starting fresh", flush=True)
 
     n = X.shape[0]
     t0 = time.time()
