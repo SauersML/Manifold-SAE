@@ -86,7 +86,12 @@ class Config:
     n_features: int = 4096
     top_k: int = 32
     n_steps: int = 4000
+    # batch_size is used for vanilla SAE. The curve SAE has its own batch
+    # because gamfit's batched REML packs F·B rows into one design matrix
+    # and refuses to densify above ~300 MiB. With F=4096, B=1024 the design
+    # is 4.2M×K → ~320 MiB. Keep curve batch small enough that F·B·K·8 < 300 MiB.
     batch_size: int = 1024
+    batch_size_curve: int = 128       # F·B = 4096·128 = 524K rows; ~40 MiB densified
     lr: float = 1e-3
     sae_n_basis: int = 10
     sae_intrinsic_rank: int = 2
@@ -251,13 +256,14 @@ def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool =
             print(f"  [{label}] checkpoint signature mismatch on {diffs} — starting fresh", flush=True)
 
     n = X.shape[0]
+    batch_size = cfg.batch_size_curve if is_curve else cfg.batch_size
     t0 = time.time()
     log_every = max(cfg.n_steps // 10, 1)
     if start_step >= cfg.n_steps:
         print(f"  [{label}] already trained for {start_step} steps (target {cfg.n_steps}); skipping", flush=True)
         return 0.0
     for step in range(start_step, cfg.n_steps):
-        idx = torch.randint(0, n, (cfg.batch_size,), device=X.device)
+        idx = torch.randint(0, n, (batch_size,), device=X.device)
         batch = X[idx]
         opt.zero_grad(set_to_none=True)
         if is_curve:
