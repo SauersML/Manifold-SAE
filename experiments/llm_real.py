@@ -26,6 +26,36 @@ import torch.nn.functional as F_nn
 from torch import nn
 
 
+# ---------------------------------------------------------------------------
+# Bypass gamfit's CUDA dual-stack safety check on Colab.
+#
+# Colab maps both /usr/local/cuda-12.8/.../libcublas.so.12.8.4.1 and the
+# torch-bundled .../nvidia/cublas/lib/libcublas.so.12. The two have the same
+# SONAME so glibc's dlopen treats them as different files; gamfit's defensive
+# check then refuses to load Rust. In practice gamfit's Rust never crosses
+# cuBLAS handles with PyTorch's, so bypassing the check is safe.
+#
+# Must patch BOTH `gamfit._cuda` (the source) and `gamfit._binding` (which
+# does `from ._cuda import assert_no_cuda_library_conflicts` at import time,
+# capturing the reference). Clear the lru_cache on rust_module too.
+def _bypass_gamfit_cuda_check() -> None:
+    import gamfit._cuda as _gc
+
+    _gc.assert_no_cuda_library_conflicts = lambda context: None
+    try:
+        import gamfit._binding as _gb
+
+        _gb.assert_no_cuda_library_conflicts = lambda context: None
+        if hasattr(_gb.rust_module, "cache_clear"):
+            _gb.rust_module.cache_clear()
+    except ImportError:
+        pass
+
+
+_bypass_gamfit_cuda_check()
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class Config:
     # Default: Qwen2.5-0.5B (pure text causal LM, Apache 2.0, 24 layers,
