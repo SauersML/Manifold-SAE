@@ -102,7 +102,14 @@ class SweepConfig:
 
     # Training (curve is CPU-bound — keep small)
     n_steps_vanilla: int = 1500
-    n_steps_curve: int = 800
+    # Bumped 800 → 2000 after the amp²·curve fix. Existing curve checkpoints
+    # were trained to 800 under the buggy forward; under the corrected
+    # forward the encoder's saturated amp values produce useless recon and
+    # need to re-calibrate. Warm-start resumes from step 800 and trains 1200
+    # additional steps under the corrected forward. Pure re-training from
+    # scratch (delete /content/runs/LLM_SWEEP/curve_F*.pt) is also fine —
+    # the encoder learns proper amp values from clean init in 1500-2000 steps.
+    n_steps_curve: int = 2000
     batch_size_vanilla: int = 1024
     snapshot_density_mib: int = 150          # densified-design ceiling for gamfit
     lr: float = 1e-3
