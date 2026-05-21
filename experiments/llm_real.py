@@ -191,17 +191,21 @@ class VanillaSAE(nn.Module):
 
 
 def _ckpt_signature(cfg: Config, label: str) -> dict:
-    return {
+    """Structural-only signature: changing lr / batch_size / n_steps does NOT
+    invalidate a checkpoint (the weights stay loadable; training simply
+    continues). Only fields that change the model's shape are included.
+    """
+    sig: dict[str, object] = {
         "label": label,
         "model_name": cfg.model_name,
         "layer": cfg.layer,
         "n_features": cfg.n_features,
         "top_k": cfg.top_k,
-        "batch_size": cfg.batch_size,
-        "lr": cfg.lr,
-        "sae_n_basis": cfg.sae_n_basis,
-        "sae_intrinsic_rank": cfg.sae_intrinsic_rank,
     }
+    if label == "curve":
+        sig["sae_n_basis"] = cfg.sae_n_basis
+        sig["sae_intrinsic_rank"] = cfg.sae_intrinsic_rank
+    return sig
 
 
 def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool = False, sae_cfg=None) -> float:
@@ -266,21 +270,31 @@ def main(cfg: Config | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[setup] device={device}  output_dir={out_dir}", flush=True)
 
-    # Cache harvested activations so re-runs are fast.
+    # Cache harvested activations. Reuse rule: same (model, layer, dataset,
+    # seq_len) AND cached has at least n_tokens rows. Asking for FEWER tokens
+    # is satisfied by slicing the cache; only asking for MORE tokens (or
+    # changing model/layer/dataset) triggers re-harvest.
     act_path = out_dir / "activations.pt"
-    act_sig = {"model_name": cfg.model_name, "layer": cfg.layer, "n_tokens": cfg.n_tokens,
-               "text_dataset": cfg.text_dataset, "text_subset": cfg.text_subset, "seq_len": cfg.seq_len}
+    act_struct = {
+        "model_name": cfg.model_name,
+        "layer": cfg.layer,
+        "text_dataset": cfg.text_dataset,
+        "text_subset": cfg.text_subset,
+        "seq_len": cfg.seq_len,
+    }
+    X = None
     if cfg.resume and act_path.exists():
         cached = torch.load(act_path, map_location="cpu", weights_only=False)
-        if cached.get("sig") == act_sig:
-            X = cached["X"]
-            print(f"[harvest] loaded cached activations from {act_path}: shape={tuple(X.shape)}", flush=True)
+        cached_struct = {k: cached.get("sig", {}).get(k) for k in act_struct}
+        cached_n = int(cached["X"].shape[0]) if "X" in cached else 0
+        if cached_struct == act_struct and cached_n >= cfg.n_tokens:
+            X = cached["X"][: cfg.n_tokens]
+            print(f"[harvest] reusing cached activations from {act_path}: cached={cached_n} requested={cfg.n_tokens} shape={tuple(X.shape)}", flush=True)
         else:
-            X = harvest_activations(cfg, device)
-            torch.save({"X": X, "sig": act_sig}, act_path)
-    else:
+            print(f"[harvest] cache mismatch (struct equal={cached_struct == act_struct}, cached_n={cached_n} < {cfg.n_tokens}); re-harvesting", flush=True)
+    if X is None:
         X = harvest_activations(cfg, device)
-        torch.save({"X": X, "sig": act_sig}, act_path)
+        torch.save({"X": X, "sig": {**act_struct, "n_tokens": int(X.shape[0])}}, act_path)
     mu = X.mean(0, keepdim=True)
     sigma = float(X.std().item())
     X_n = ((X - mu) / max(sigma, 1e-6)).to(device)
