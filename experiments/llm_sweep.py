@@ -24,6 +24,7 @@ where the architectural advantage becomes visible.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field, replace
@@ -123,7 +124,9 @@ class SweepConfig:
     plot_F: int = 256                        # which F's atoms to plot
     plot_t_resolution: int = 96
 
-    output_dir: str = "/content/runs/LLM_SWEEP"
+    # Env var override lets a job submitter (e.g. heimdall_jobs/submit.py)
+    # point outputs at a working-dir tree without code edits.
+    output_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_SWEEP")
     resume: bool = True
     seed: int = 0
 

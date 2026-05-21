@@ -16,3 +16,9 @@ activations/
 .vscode/
 .idea/
 .scratch/
+
+# Heimdall submitter — never commit site-specific config
+heimdall_jobs/*.local
+heimdall_jobs/heimdall.local.json
+heimdall_jobs/local.env
+.env

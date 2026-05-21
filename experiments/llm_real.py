@@ -100,7 +100,9 @@ class Config:
     eval_n: int = 8192
     # Use an absolute path outside the repo so checkpoints survive
     # `rm -rf /content/Manifold-SAE` in the Colab setup cell.
-    output_dir: str = "/content/runs/LLM_REAL"
+    # Env var override lets a job submitter point outputs at any working-dir
+    # tree without code edits. See heimdall_jobs/submit.py.
+    output_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_REAL")
     seed: int = 0
     # Warm-start: if a checkpoint exists at <output_dir>/checkpoint.pt with
     # a matching config, resume (model + optimizer + step count). Set
