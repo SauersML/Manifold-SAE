@@ -629,6 +629,13 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     snap_n = snapshot_batch_size(F, cfg.sae_n_basis, cfg.snapshot_density_mib)
     snap = X_n[: snap_n]
     print(f"  [snapshot] fitting REML on {snap_n} tokens (~{F*snap_n*cfg.sae_n_basis*8/1024**2:.0f} MiB densified)", flush=True)
+    # Capture training-mode reconstruction on the snapshot batch BEFORE
+    # update_snapshot so we can diagnose locked-vs-training MSE divergence
+    # post hoc. If snapshot_training_mse is close to mse_c but locked_mse
+    # is far, the issue is in the locked forward path or the rescale fix.
+    with torch.no_grad():
+        snapshot_training_recon = curve(snap)
+        snapshot_training_mse = float(((snapshot_training_recon.reconstruction - snap) ** 2).mean())
     curve.update_snapshot(snap)
     # Re-save curve checkpoint *after* update_snapshot so the locked
     # buffers (B_locked, lam_locked, soft_min_locked, soft_max_locked,
@@ -643,6 +650,15 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         tmp.replace(ckpt_path)
         print(f"  [snapshot] re-saved {ckpt_path} with snapshot buffers", flush=True)
     curve.inference_mode = True
+    # Lock-and-cache health check: eval inference-mode on the SAME snapshot
+    # batch. If this differs from snapshot_training_mse, the locked forward
+    # path is broken; if it matches, the lock-and-cache architecturally
+    # generalizes only to the snapshot data, not to chunks drawn from outside.
+    with torch.no_grad():
+        out_snap_inf = curve(snap)
+        snapshot_locked_mse = float(((out_snap_inf.reconstruction - snap) ** 2).mean())
+    print(f"  [diag] training-fwd on snapshot batch: mse={snapshot_training_mse:.4f}", flush=True)
+    print(f"  [diag] locked-fwd   on snapshot batch: mse={snapshot_locked_mse:.4f}", flush=True)
     mse_locked, _ = eval_curve(curve, X_eval, F, cfg.eval_chunk)
     curve.inference_mode = False
 
@@ -658,6 +674,8 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         "curve_params_M": n_c / 1e6, "curve_train_s": t_c,
         "curve_locked_mse": mse_locked,
         "curve_locked_explained": 1 - mse_locked / var,
+        "snapshot_training_mse": snapshot_training_mse,
+        "snapshot_locked_mse": snapshot_locked_mse,
     }
 
     # Per-PC reconstruction quality on the top-K PCs of X_eval — the
