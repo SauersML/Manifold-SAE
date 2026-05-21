@@ -69,12 +69,19 @@ def resolve(key: str, cli_value: str | None, env_var: str, config: dict[str, Any
     return default
 
 
-def build_command(experiment: str, git_url: str, git_ref: str, working_dir: str) -> str:
+def build_command(experiment: str, git_url: str, git_ref: str, working_dir: str, require_cuda: bool = False) -> str:
     """Single shell string. Bootstraps uv, clones/pulls Manifold-SAE,
     installs deps with the LLM extra, runs experiments.<experiment>.
     Output dir comes from MSAE_OUTPUT_DIR env var so the experiment
     writes under the caller's working_dir tree.
     """
+    require_cuda_export = (
+        "# Submitter requested GPUs — make the experiment FAIL FAST if CUDA\n"
+        "# isn't actually visible, instead of silently running on CPU.\n"
+        "export MSAE_REQUIRE_CUDA=1"
+        if require_cuda else
+        "# CPU-only run: not asserting CUDA availability."
+    )
     return rf"""
 set -euo pipefail
 
@@ -103,6 +110,7 @@ uv sync --extra llm
 
 export MANIFOLD_SAE_OUTPUT_DIR="$OUTPUT"
 export PYTHONUNBUFFERED=1
+{require_cuda_export}
 
 echo "[submit] running experiments.{experiment}"
 uv run python -u -m experiments.{experiment}
@@ -157,7 +165,7 @@ def main() -> int:
             "name": f"manifold-sae-{args.experiment}",
             "command": (
                 f"export MSAE_RUN_NAME={run_name!r}\n"
-                + build_command(args.experiment, git_url, args.git_ref, working_dir)
+                + build_command(args.experiment, git_url, args.git_ref, working_dir, require_cuda=(gpus > 0))
             ),
             "gpus": gpus,
             "node": node,

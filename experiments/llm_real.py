@@ -304,6 +304,12 @@ def main(cfg: Config | None = None) -> int:
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if os.environ.get("MSAE_REQUIRE_CUDA") == "1" and device.type != "cuda":
+        raise RuntimeError(
+            f"MSAE_REQUIRE_CUDA=1 but torch.cuda.is_available()=False "
+            f"(torch.version.cuda={torch.version.cuda!r}). Likely a torch/driver "
+            f"mismatch — pin torch in pyproject.toml to match the host driver."
+        )
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[setup] device={device}  output_dir={out_dir}", flush=True)

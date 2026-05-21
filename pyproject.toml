@@ -25,7 +25,12 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=2.2",
+    # torch 2.12+ ships CUDA-13 wheels by default, requiring a CUDA-13
+    # NVIDIA driver. Many clusters (and Colab T4) still run CUDA-12 drivers,
+    # which fail to initialize against torch 2.12 ("driver too old, found
+    # 12090"). Capping at <2.12 pulls the CUDA-12 wheel (torch 2.11.x). On
+    # a node with a CUDA-13 driver this cap is safe to lift.
+    "torch>=2.2,<2.12",
     "numpy>=1.26",
     "tqdm>=4.66",
     "gamfit>=0.1.67",

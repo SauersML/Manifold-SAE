@@ -749,6 +749,15 @@ def main(cfg: SweepConfig | None = None) -> int:
     torch.manual_seed(cfg.seed)
     np.random.seed(cfg.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if os.environ.get("MSAE_REQUIRE_CUDA") == "1" and device.type != "cuda":
+        raise RuntimeError(
+            "MSAE_REQUIRE_CUDA=1 but torch.cuda.is_available()=False. "
+            f"torch.version.cuda={torch.version.cuda!r}. "
+            "Likely a torch/driver mismatch (e.g. torch 2.12 ships CUDA-13 "
+            "wheels and the host driver is CUDA-12). Pin torch in pyproject.toml "
+            "to match the host's nvidia-smi driver version, or unset "
+            "MSAE_REQUIRE_CUDA for a deliberate CPU run."
+        )
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[setup] device={device} output_dir={out_dir}", flush=True)
