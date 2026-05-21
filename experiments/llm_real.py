@@ -76,22 +76,22 @@ class Config:
     # standard forward hooks. Qwen3.5 is multimodal and behaves differently.
     model_name: str = "Qwen/Qwen2.5-0.5B"
     layer: int = 12  # mid for 24-layer Qwen2.5-0.5B
-    n_tokens: int = 200_000
+    n_tokens: int = 80_000
     seq_len: int = 256
     text_dataset: str = "wikitext"
     text_subset: str = "wikitext-2-raw-v1"
     text_split: str = "train"
     min_text_len: int = 200
     max_texts: int = 4000
-    n_features: int = 4096
-    top_k: int = 32
-    n_steps: int = 4000
-    # batch_size is used for vanilla SAE. The curve SAE has its own batch
-    # because gamfit's batched REML packs F·B rows into one design matrix
-    # and refuses to densify above ~300 MiB. With F=4096, B=1024 the design
-    # is 4.2M×K → ~320 MiB. Keep curve batch small enough that F·B·K·8 < 300 MiB.
+    n_features: int = 2048
+    top_k: int = 24
+    # vanilla is fast on GPU; curve does gamfit REML per batch (currently on
+    # CPU due to the cuBLAS dual-stack issue) so fewer steps + smaller batch
+    # keep total run time under ~15 min on T4 + 1 CPU core.
+    n_steps: int = 3000
+    n_steps_curve: int = 1500
     batch_size: int = 1024
-    batch_size_curve: int = 128       # F·B = 4096·128 = 524K rows; ~40 MiB densified
+    batch_size_curve: int = 128       # F·B = 2048·128 = 262K rows; ~20 MiB densified
     lr: float = 1e-3
     sae_n_basis: int = 10
     sae_intrinsic_rank: int = 2
@@ -257,12 +257,13 @@ def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool =
 
     n = X.shape[0]
     batch_size = cfg.batch_size_curve if is_curve else cfg.batch_size
+    n_steps = cfg.n_steps_curve if is_curve else cfg.n_steps
     t0 = time.time()
-    log_every = max(cfg.n_steps // 10, 1)
-    if start_step >= cfg.n_steps:
-        print(f"  [{label}] already trained for {start_step} steps (target {cfg.n_steps}); skipping", flush=True)
+    log_every = max(n_steps // 10, 1)
+    if start_step >= n_steps:
+        print(f"  [{label}] already trained for {start_step} steps (target {n_steps}); skipping", flush=True)
         return 0.0
-    for step in range(start_step, cfg.n_steps):
+    for step in range(start_step, n_steps):
         idx = torch.randint(0, n, (batch_size,), device=X.device)
         batch = X[idx]
         opt.zero_grad(set_to_none=True)
@@ -282,7 +283,7 @@ def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool =
         if step % log_every == 0:
             print(f"  [{label} step {step:5d}] mse={mse.item():.4e}", flush=True)
     torch.save(
-        {"sae": sae.state_dict(), "opt": opt.state_dict(), "step": cfg.n_steps, "sig": _ckpt_signature(cfg, label)},
+        {"sae": sae.state_dict(), "opt": opt.state_dict(), "step": n_steps, "sig": _ckpt_signature(cfg, label)},
         ckpt_path,
     )
     print(f"  [{label}] saved checkpoint to {ckpt_path}", flush=True)
