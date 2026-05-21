@@ -1,19 +1,30 @@
 """Curve SAE vs vanilla TopK SAE on real LM residual-stream activations.
 
-Harvests activations from gpt2-small (or any HF causal LM) on a text
-corpus, trains both architectures at matched dictionary size, reports
-explained variance + alive features + lock-and-cache feedforward check.
+Three-phase orchestration to dodge Colab's dual-CUDA-stack issue
+(both system and torch-bundled cuBLAS mapped → gamfit refuses to load):
 
-Run from a Colab T4 cell as::
+  1. parent process (GPU OK): harvest residual-stream activations from
+     gpt2, train vanilla TopK SAE, dump activations + vanilla results.
+  2. parent process spawns a subprocess with CUDA_VISIBLE_DEVICES=''
+     so the child's torch doesn't map CUDA libs at all. The child
+     loads gamfit cleanly, trains the curve SAE on CPU, dumps results.
+  3. parent merges the two result files and prints the head-to-head.
+
+Run from Colab with::
 
     !cd /content/Manifold-SAE && python -m experiments.llm_real
 
-or import and call ``main(Config(...))`` to override defaults.
+or directly::
+
+    !cd /content/Manifold-SAE && python -m experiments.llm_real --phase=curve_only
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -39,7 +50,9 @@ class Config:
     n_features: int = 4096
     top_k: int = 32
     n_steps: int = 4000
+    n_steps_curve: int = 2000  # curve SAE on CPU is slow; fewer steps
     batch_size: int = 1024
+    batch_size_curve: int = 256
     lr: float = 1e-3
     sae_n_basis: int = 10
     sae_intrinsic_rank: int = 2
@@ -51,7 +64,7 @@ class Config:
 
 
 # ---------------------------------------------------------------------------
-# Activation harvest
+# Activation harvest (parent, GPU)
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +105,8 @@ def harvest_activations(cfg: Config, device: torch.device) -> torch.Tensor:
     X = torch.cat(chunks, dim=0)[: cfg.n_tokens]
     print(f"[harvest] X shape: {tuple(X.shape)}  mean={X.mean():.3f}  std={X.std():.3f}", flush=True)
     del model
-    torch.cuda.empty_cache() if device.type == "cuda" else None
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
     return X
 
 
@@ -121,11 +135,11 @@ class VanillaSAE(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Training
+# Training loops
 # ---------------------------------------------------------------------------
 
 
-def train_sae(sae, X, cfg: Config, label: str, is_curve: bool = False, sae_cfg=None) -> float:
+def train_vanilla(sae, X, cfg: Config, label: str = "vanilla") -> float:
     opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
     n = X.shape[0]
     t0 = time.time()
@@ -134,17 +148,9 @@ def train_sae(sae, X, cfg: Config, label: str, is_curve: bool = False, sae_cfg=N
         idx = torch.randint(0, n, (cfg.batch_size,), device=X.device)
         batch = X[idx]
         opt.zero_grad(set_to_none=True)
-        if is_curve:
-            from manifold_sae.losses import total_loss
-
-            out = sae(batch)
-            losses = total_loss(out, batch, sae_cfg)
-            loss = losses["total"]
-            mse = losses["mse"]
-        else:
-            recon, z = sae(batch)
-            mse = ((recon - batch) ** 2).mean()
-            loss = mse + 3e-4 * z.abs().mean()
+        recon, z = sae(batch)
+        mse = ((recon - batch) ** 2).mean()
+        loss = mse + 3e-4 * z.abs().mean()
         loss.backward()
         nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         opt.step()
@@ -153,31 +159,76 @@ def train_sae(sae, X, cfg: Config, label: str, is_curve: bool = False, sae_cfg=N
     return time.time() - t0
 
 
+def train_curve(sae, X, cfg: Config, sae_cfg, label: str = "curve") -> float:
+    from manifold_sae.losses import total_loss
+
+    opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
+    n = X.shape[0]
+    t0 = time.time()
+    log_every = max(cfg.n_steps_curve // 10, 1)
+    for step in range(cfg.n_steps_curve):
+        idx = torch.randint(0, n, (cfg.batch_size_curve,), device=X.device)
+        batch = X[idx]
+        opt.zero_grad(set_to_none=True)
+        out = sae(batch)
+        losses = total_loss(out, batch, sae_cfg)
+        losses["total"].backward()
+        nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
+        opt.step()
+        if step % log_every == 0:
+            print(f"  [{label} step {step:5d}] mse={losses['mse'].item():.4e}", flush=True)
+    return time.time() - t0
+
+
 # ---------------------------------------------------------------------------
-# Main
+# Phases
 # ---------------------------------------------------------------------------
 
 
-def main(cfg: Config = Config()) -> int:
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
+def run_gpu_phase(cfg: Config, out_dir: Path) -> dict:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[setup] device={device}", flush=True)
-    out_dir = Path(cfg.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[gpu-phase] device={device}", flush=True)
 
     X = harvest_activations(cfg, device)
     mu = X.mean(0, keepdim=True)
     sigma = float(X.std().item())
-    X_n = ((X - mu) / max(sigma, 1e-6)).to(device)
-    D = X_n.shape[1]
+    X_n = (X - mu) / max(sigma, 1e-6)
     var = float(X_n.var().item())
+    torch.save({"X_n": X_n, "var": var, "mu": mu, "sigma": sigma}, out_dir / "activations.pt")
+    print(f"[gpu-phase] saved activations to {out_dir / 'activations.pt'}", flush=True)
 
     print("\n[vanilla] training", flush=True)
-    vanilla = VanillaSAE(D, cfg.n_features, cfg.top_k).to(device)
-    t_v = train_sae(vanilla, X_n, cfg, "vanilla", is_curve=False)
+    vanilla = VanillaSAE(X_n.shape[1], cfg.n_features, cfg.top_k).to(device)
+    X_n_dev = X_n.to(device)
+    t_v = train_vanilla(vanilla, X_n_dev, cfg)
 
-    print("\n[curve] training (gamfit REML each batch)", flush=True)
+    print("\n[vanilla] evaluating", flush=True)
+    eval_batch = X_n_dev[: min(cfg.eval_n, X_n_dev.shape[0])]
+    with torch.no_grad():
+        recon_v, z_v = vanilla(eval_batch)
+        mse_v = float(((recon_v - eval_batch) ** 2).mean())
+        alive_v = int((z_v > 0).any(0).sum())
+
+    print(f"[vanilla] MSE={mse_v:.4f}  expl={1-mse_v/var:.3f}  alive={alive_v}/{cfg.n_features}", flush=True)
+    return {
+        "var": var,
+        "vanilla": {"mse": mse_v, "explained": 1 - mse_v / var, "alive": alive_v, "train_seconds": t_v, "n_features": cfg.n_features},
+    }
+
+
+def run_curve_phase(cfg: Config, out_dir: Path) -> dict:
+    """Runs in a subprocess with CUDA_VISIBLE_DEVICES='' so torch doesn't
+    map CUDA libs and gamfit's Rust loader doesn't trip its dual-stack
+    safety check. Loads activations from disk, trains curve SAE on CPU.
+    """
+    device = torch.device("cpu")
+    print(f"[curve-phase] device={device} (CUDA_VISIBLE_DEVICES='{os.environ.get('CUDA_VISIBLE_DEVICES', '')}')", flush=True)
+
+    data = torch.load(out_dir / "activations.pt", weights_only=False)
+    X_n = data["X_n"]
+    var = float(data["var"])
+    D = X_n.shape[1]
+
     from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
 
     sae_cfg = ManifoldSAEConfig(
@@ -192,39 +243,73 @@ def main(cfg: Config = Config()) -> int:
         continuous_amp=True,
     )
     curve = ManifoldSAE(sae_cfg).to(device)
-    t_c = train_sae(curve, X_n, cfg, "curve", is_curve=True, sae_cfg=sae_cfg)
+    print(f"[curve] training ({cfg.n_steps_curve} steps, batch={cfg.batch_size_curve})", flush=True)
+    t_c = train_curve(curve, X_n, cfg, sae_cfg)
 
-    print("\n[eval]", flush=True)
     eval_batch = X_n[: min(cfg.eval_n, X_n.shape[0])]
+    print("[curve] evaluating", flush=True)
     with torch.no_grad():
-        recon_v, z_v = vanilla(eval_batch)
-        mse_v = float(((recon_v - eval_batch) ** 2).mean())
-        alive_v = int((z_v > 0).any(0).sum())
         out_c = curve(eval_batch)
         mse_c = float(((out_c.reconstruction - eval_batch) ** 2).mean())
         alive_c = int((out_c.amplitudes > 1e-3).any(0).sum())
-    print(f"vanilla: MSE={mse_v:.4f}  expl={1-mse_v/var:.3f}  alive={alive_v}/{cfg.n_features}  train_s={t_v:.0f}", flush=True)
-    print(f"curve  : MSE={mse_c:.4f}  expl={1-mse_c/var:.3f}  alive={alive_c}/{cfg.n_features}  train_s={t_c:.0f}", flush=True)
 
-    print("\n[snapshot] lock-and-cache the curve SAE", flush=True)
+    print("[curve] lock-and-cache", flush=True)
     curve.update_snapshot(eval_batch)
     curve.inference_mode = True
     with torch.no_grad():
         out_inf = curve(eval_batch)
         mse_inf = float(((out_inf.reconstruction - eval_batch) ** 2).mean())
-    print(f"locked snapshot recon MSE={mse_inf:.4f}", flush=True)
 
-    report = {
-        "config": asdict(cfg),
-        "var": var,
-        "vanilla": {"mse": mse_v, "explained": 1 - mse_v / var, "alive": alive_v, "train_seconds": t_v},
-        "curve": {"mse": mse_c, "explained": 1 - mse_c / var, "alive": alive_c, "train_seconds": t_c, "locked_mse": mse_inf},
+    print(f"[curve] MSE={mse_c:.4f}  expl={1-mse_c/var:.3f}  alive={alive_c}/{cfg.n_features}  locked_mse={mse_inf:.4f}", flush=True)
+    return {
+        "curve": {"mse": mse_c, "explained": 1 - mse_c / var, "alive": alive_c, "train_seconds": t_c, "locked_mse": mse_inf, "n_features": cfg.n_features},
     }
-    (out_dir / "results.json").write_text(json.dumps(report, indent=2, default=float))
-    print(f"\nwrote {out_dir / 'results.json'}", flush=True)
-    print(json.dumps(report, indent=2, default=float), flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Main: orchestrate phases
+# ---------------------------------------------------------------------------
+
+
+def main(cfg: Config | None = None, phase: str = "auto") -> int:
+    if cfg is None:
+        cfg = Config()
+    out_dir = Path(cfg.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[setup] phase={phase}  output_dir={out_dir}", flush=True)
+
+    if phase == "curve_only":
+        # Subprocess invocation. CUDA_VISIBLE_DEVICES is set externally.
+        report = run_curve_phase(cfg, out_dir)
+        (out_dir / "curve_results.json").write_text(json.dumps(report, indent=2, default=float))
+        return 0
+
+    # phase == "auto": run GPU phase, then spawn CPU subprocess for curve.
+    gpu_report = run_gpu_phase(cfg, out_dir)
+    (out_dir / "gpu_results.json").write_text(json.dumps(gpu_report, indent=2, default=float))
+
+    print("\n[main] spawning curve-SAE subprocess (CPU, no CUDA libs)", flush=True)
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    result = subprocess.run(
+        [sys.executable, "-m", "experiments.llm_real", "--phase=curve_only"],
+        env=env, check=False,
+    )
+    if result.returncode != 0:
+        print(f"[main] curve subprocess failed (exit {result.returncode})", flush=True)
+        return result.returncode
+
+    curve_report = json.loads((out_dir / "curve_results.json").read_text())
+    full = {"config": asdict(cfg), **gpu_report, **curve_report}
+    (out_dir / "results.json").write_text(json.dumps(full, indent=2, default=float))
+
+    print("\n========== FINAL ==========", flush=True)
+    print(json.dumps(full, indent=2, default=float), flush=True)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--phase", default="auto", choices=["auto", "curve_only"])
+    args = parser.parse_args()
+    sys.exit(main(phase=args.phase))
