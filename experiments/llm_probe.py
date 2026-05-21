@@ -192,9 +192,14 @@ class ProbeConfig:
     rho_strong: float = 0.7
     rho_moderate: float = 0.5
 
-    # SAE-checkpoint path for phase 2. Optional: if checkpoints don't exist
-    # at this F we skip phase 2 with a clear note.
-    sae_checkpoint_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_SWEEP")
+    # SAE-checkpoint path for phase 2. Reads MSAE_SWEEP_DIR if set
+    # (typical: cluster job points at the sibling llm_sweep run dir),
+    # otherwise tries MANIFOLD_SAE_OUTPUT_DIR which is the probe's own
+    # output dir (only useful if checkpoints were dropped there manually).
+    sae_checkpoint_dir: str = os.environ.get(
+        "MSAE_SWEEP_DIR",
+        os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/LLM_SWEEP"),
+    )
     sae_F_to_probe: int = 128
 
     output_dir: str = os.environ.get(

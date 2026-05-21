@@ -152,6 +152,9 @@ def main() -> int:
     parser.add_argument("--submitted-by", default="manifold-sae", help="value for the submitted_by field")
     parser.add_argument("--depends-on", action="append", default=[],
                         help="job ID this submission should wait for (repeatable)")
+    parser.add_argument("--sweep-dir-of", default=None,
+                        help="run-name of a prior sweep whose checkpoints this job should probe "
+                             "(sets MSAE_SWEEP_DIR=<working-dir>/runs/<value>)")
     parser.add_argument("--dry-run", action="store_true", help="print the JSON spec without submitting")
     args = parser.parse_args()
 
@@ -184,6 +187,8 @@ def main() -> int:
             "name": f"manifold-sae-{args.experiment}",
             "command": (
                 f"export MSAE_RUN_NAME={run_name!r}\n"
+                + (f"export MSAE_SWEEP_DIR={working_dir!r}/runs/{args.sweep_dir_of!r}\n"
+                   if args.sweep_dir_of else "")
                 + build_command(args.experiment, git_url, args.git_ref, working_dir, require_cuda=(gpus > 0))
             ),
             "gpus": gpus,
