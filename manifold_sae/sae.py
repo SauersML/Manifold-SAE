@@ -90,18 +90,35 @@ class ManifoldSAEOutput:
     monotonicity_loss: torch.Tensor
 
 
-def _soft_rescale_positions(z_raw: torch.Tensor, beta: float = 10.0, eps: float = 1e-4) -> torch.Tensor:
-    """Smooth per-batch min-max normalization of unbounded scalar logits to [0, 1].
+def _soft_rescale_positions(
+    z_raw: torch.Tensor,
+    beta: float = 10.0,
+    eps: float = 1e-4,
+    *,
+    frozen_min: torch.Tensor | None = None,
+    frozen_max: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Smooth min-max normalization of unbounded scalar logits to [0, 1].
 
-    Gauge-fixes the position so atoms see positions spanning the basis domain —
-    no init-clustering pathology. λ_k and B_k are reparam-invariant under
-    monotone rescaling of t, so this is lossless. O(B·F) work, no parameters.
+    Training mode (frozen_min / frozen_max both None): compute soft min/max
+    over the current batch's z_raw per feature. λ_k and B_k are reparam-
+    invariant under monotone rescaling of t, so this is a lossless gauge fix.
+
+    Inference mode (snapshot frozen): use the per-feature (min, max) captured
+    when the SAE was snapshotted. Same input → same position regardless of
+    batch composition, so the locked B is consulted at consistent positions.
+
+    Returns (t, soft_min, soft_max) — the rescaled positions plus the stats
+    used. Caller stashes the stats at snapshot time.
     """
-    soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)
-    soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)
+    if frozen_min is not None and frozen_max is not None:
+        soft_min, soft_max = frozen_min, frozen_max
+    else:
+        soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)
+        soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)
     span = (soft_max - soft_min).clamp(min=1e-6)
     t = (z_raw - soft_min.unsqueeze(0)) / span.unsqueeze(0)
-    return t.clamp(eps, 1.0 - eps)
+    return t.clamp(eps, 1.0 - eps), soft_min, soft_max
 
 
 class ManifoldSAE(nn.Module):
@@ -142,9 +159,15 @@ class ManifoldSAE(nn.Module):
         self.b_dec = nn.Parameter(torch.zeros(D, dtype=torch.float32))
 
         # Locked snapshot buffers. Filled by `update_snapshot`; consulted in
-        # eval-mode if `inference_mode=True`.
+        # eval-mode if `inference_mode=True`. Both the curve coefficients AND
+        # the per-feature soft-rescale stats are frozen — without freezing the
+        # rescale, the same input token would get different positions in
+        # different batches (the soft min/max is per-batch), and the locked B
+        # would consult the wrong place on its curve.
         self.register_buffer("B_locked", torch.zeros(F, K, R, dtype=torch.float64))
         self.register_buffer("lam_locked", torch.ones(F, dtype=torch.float64))
+        self.register_buffer("soft_min_locked", torch.zeros(F, dtype=torch.float32))
+        self.register_buffer("soft_max_locked", torch.ones(F, dtype=torch.float32))
         self.register_buffer("has_snapshot", torch.tensor(False))
         self.inference_mode = False  # set True after lock_and_cache
 
@@ -159,11 +182,21 @@ class ManifoldSAE(nn.Module):
         x_centered = x - b_dec
         y_proj = torch.einsum("bd,fdr->bfr", x_centered, dirs)  # (B, F, R)
         z_raw, mask_soft, mask_binary = self.encoder(x_centered, y_proj)
-        positions = _soft_rescale_positions(z_raw)
-        B, F = positions.shape
 
-        if self.inference_mode and bool(self.has_snapshot):
+        in_inference = self.inference_mode and bool(self.has_snapshot)
+        if in_inference:
+            positions, _, _ = _soft_rescale_positions(
+                z_raw,
+                frozen_min=self.soft_min_locked.to(z_raw.dtype),
+                frozen_max=self.soft_max_locked.to(z_raw.dtype),
+            )
             return self._forward_inference(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
+
+        positions, soft_min, soft_max = _soft_rescale_positions(z_raw)
+        # Stash on `self` so update_snapshot can pick them up after the
+        # forward pass without re-running encoder math.
+        self._last_soft_min = soft_min.detach()
+        self._last_soft_max = soft_max.detach()
         return self._forward_training(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
 
     def _forward_training(
@@ -334,6 +367,12 @@ class ManifoldSAE(nn.Module):
             out = self(reference_batch)
             self.B_locked.copy_(out.coefficients.detach().to(torch.float64))
             self.lam_locked.copy_(out.lam.detach().to(torch.float64))
+            # Freeze the per-feature soft-rescale stats captured during the
+            # forward pass on the reference batch. Without this, inference
+            # would re-derive a different (min, max) per inference batch and
+            # the locked B would be consulted at the wrong positions.
+            self.soft_min_locked.copy_(self._last_soft_min.detach().to(torch.float32))
+            self.soft_max_locked.copy_(self._last_soft_max.detach().to(torch.float32))
             self.has_snapshot.fill_(True)
         finally:
             self.train(was_training)

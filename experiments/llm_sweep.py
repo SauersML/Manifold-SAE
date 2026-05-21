@@ -84,11 +84,15 @@ class SweepConfig:
     min_text_len: int = 200
     max_texts: int = 4000
 
-    # F values to sweep — small to where curve advantage shows, up to where
-    # vanilla saturates. Pick top_k as ~1.5% of F (matches standard SAE practice).
-    F_values: tuple[int, ...] = (64, 128, 256, 512, 1024)
-    top_k_ratio: float = 1.0 / 64.0
-    top_k_min: int = 4
+    # F values to sweep — pushed small so per-atom geometry matters. At larger
+    # F (and the default Qwen 0.5B layer-12 signal) both architectures saturate
+    # at >99% explained variance; the architectural difference only shows up
+    # where atoms are scarce and each one has to compress.
+    F_values: tuple[int, ...] = (16, 32, 64, 128, 256, 512)
+    # Aggressive sparsity. At F=16 with TopK=2, both SAEs are starved — the
+    # comparison stops being saturated and becomes diagnostic.
+    top_k_min: int = 2
+    top_k_ratio: float = 1.0 / 128.0
 
     # Architecture
     sae_n_basis: int = 10
@@ -279,11 +283,16 @@ def snapshot_batch_size(F: int, K: int, density_mib: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def extract_curves_2d(sae, t_grid: torch.Tensor, n_atoms: int) -> tuple[np.ndarray, list[int]]:
+@torch.no_grad()
+def extract_curves_2d(sae, t_grid: torch.Tensor, n_atoms: int) -> tuple[np.ndarray, list[int], np.ndarray]:
     """Sample each alive curve atom on a fine t grid, project to 2D PCA.
 
-    Returns (curves_2d, atom_indices) where curves_2d has shape
-    (n_chosen, T, 2) and atom_indices lists the SAE feature indices chosen.
+    Returns (curves_2d, atom_indices, intrinsic_dim) where:
+      - curves_2d has shape (n_chosen, T, 2)
+      - atom_indices lists the SAE feature indices chosen
+      - intrinsic_dim per chosen atom is `second_sv / first_sv` of g_k(t)
+        across t — 0 means "flat line" (architecturally equivalent to vanilla),
+        1 means "fully 2D curve" (architecturally distinct from vanilla)
     """
     import gamfit.torch as gt
 
@@ -293,17 +302,38 @@ def extract_curves_2d(sae, t_grid: torch.Tensor, n_atoms: int) -> tuple[np.ndarr
     g_intrinsic = torch.einsum("tk,fkr->ftr", phi, sae.B_locked)          # (F, T, R)
     g_ambient = torch.einsum("ftr,fdr->ftd", g_intrinsic, sae.directions.to(torch.float64))  # (F, T, D)
 
-    # Choose features with the largest curve-Frobenius (i.e. "most alive on the snapshot").
     norms = g_ambient.reshape(g_ambient.shape[0], -1).norm(dim=1).cpu().numpy()
     chosen = list(np.argsort(-norms)[:n_atoms])
-    out = np.zeros((len(chosen), t.shape[0], 2), dtype=np.float64)
+    out_curves = np.zeros((len(chosen), t.shape[0], 2), dtype=np.float64)
+    intrinsic = np.zeros(len(chosen), dtype=np.float64)
     for i, k in enumerate(chosen):
         gk = g_ambient[k].cpu().numpy()
         gk_c = gk - gk.mean(axis=0, keepdims=True)
-        _, _, vh = np.linalg.svd(gk_c, full_matrices=False)
+        _, sv, vh = np.linalg.svd(gk_c, full_matrices=False)
         pcs = vh[:2]
-        out[i] = gk_c @ pcs.T
-    return out, [int(k) for k in chosen]
+        out_curves[i] = gk_c @ pcs.T
+        if len(sv) >= 2 and sv[0] > 1e-12:
+            intrinsic[i] = float(sv[1] / sv[0])
+    return out_curves, [int(k) for k in chosen], intrinsic
+
+
+@torch.no_grad()
+def per_pc_explained(X_eval: torch.Tensor, recon: torch.Tensor, k: int = 64) -> np.ndarray:
+    """Variance explained on the top-k principal components of X_eval.
+
+    Saturated reconstruction quality (overall MSE ≈ 0) masks per-direction
+    differences. The head of the PC spectrum is easy; the tail is where
+    atom geometry actually matters. Returns (k,) array of explained
+    fraction per PC, from largest to smallest variance.
+    """
+    X_c = X_eval - X_eval.mean(0, keepdim=True)
+    _, _, Vt = torch.linalg.svd(X_c, full_matrices=False)
+    pcs = Vt[:k]                                          # (k, D)
+    proj_X = X_c @ pcs.t()                                # (B, k)
+    proj_r = (recon - X_eval.mean(0, keepdim=True)) @ pcs.t()
+    var_X = (proj_X ** 2).mean(0)
+    err = ((proj_X - proj_r) ** 2).mean(0)
+    return (1.0 - err / var_X.clamp(min=1e-12)).cpu().numpy()
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +382,8 @@ def plot_alive(results: list[dict], out_dir: Path) -> None:
     plt.close(fig)
 
 
-def plot_curves(curves_2d: np.ndarray, atom_indices: list[int], F: int, out_dir: Path) -> None:
+def plot_curves(curves_2d: np.ndarray, atom_indices: list[int], F: int, out_dir: Path,
+                intrinsic_dim: np.ndarray) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -368,14 +399,89 @@ def plot_curves(curves_2d: np.ndarray, atom_indices: list[int], F: int, out_dir:
         ax.plot(c[:, 0], c[:, 1], "o-", color="C0", markersize=2)
         ax.scatter([c[0, 0]], [c[0, 1]], color="green", s=30, label="t=0", zorder=5)
         ax.scatter([c[-1, 0]], [c[-1, 1]], color="red", s=30, label="t=1", zorder=5)
-        ax.set_title(f"atom #{atom_indices[i]}")
+        ax.set_title(f"atom #{atom_indices[i]}  σ₂/σ₁={intrinsic_dim[i]:.2f}")
         ax.set_aspect("equal", adjustable="datalim")
         ax.grid(True, alpha=0.3)
     for i in range(n, rows * cols):
         axes[i // cols, i % cols].axis("off")
-    fig.suptitle(f"Learned curve atoms at F={F} (2D PCA of g_k(t) over t∈[0,1])")
+    fig.suptitle(
+        f"Learned curve atoms at F={F} (2D PCA of g_k(t) over t∈[0,1])\n"
+        f"σ₂/σ₁ ≈ 0 means atom is essentially a line (equivalent to vanilla SAE direction); "
+        f"σ₂/σ₁ ≈ 1 means genuinely 2D curve"
+    )
     fig.tight_layout()
     fig.savefig(out_dir / "curves.png", dpi=110)
+    plt.close(fig)
+
+
+@torch.no_grad()
+def plot_intrinsic_dim_hist(sae, F: int, out_dir: Path) -> None:
+    """Distribution of σ₂/σ₁ across ALL alive atoms (not just the rendered 9).
+
+    Tells you whether the curve SAE is actually using its 2D intrinsic
+    capacity or collapsing to vanilla-SAE-style direction atoms.
+    """
+    import gamfit.torch as gt
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    device = next(sae.parameters()).device
+    t = torch.linspace(0.02, 0.98, 64, dtype=torch.float64, device=device)
+    phi = gt.duchon_basis_1d(t, sae.centers, m=2, periodic=False)
+    g = torch.einsum("tk,fkr->ftr", phi, sae.B_locked)
+    amb = torch.einsum("ftr,fdr->ftd", g, sae.directions.to(torch.float64)).cpu().numpy()
+
+    ratios = []
+    norms = []
+    for k in range(amb.shape[0]):
+        gk_c = amb[k] - amb[k].mean(0, keepdims=True)
+        _, sv, _ = np.linalg.svd(gk_c, full_matrices=False)
+        norms.append(float(np.linalg.norm(amb[k])))
+        if len(sv) >= 2 and sv[0] > 1e-12:
+            ratios.append(float(sv[1] / sv[0]))
+
+    norms = np.array(norms)
+    alive_thresh = max(1e-6, float(np.percentile(norms, 50)) * 0.1)
+    ratios_alive = np.array(ratios)[norms[: len(ratios)] > alive_thresh]
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    if len(ratios_alive) > 0:
+        ax.hist(ratios_alive, bins=30, range=(0, 1), color="C0")
+    ax.set_xlabel("σ₂ / σ₁  (rank-2-ness of curve in ambient)")
+    ax.set_ylabel("count")
+    ax.set_xlim(0, 1)
+    ax.set_title(
+        f"Curve-atom intrinsic dimensionality at F={F}\n"
+        f"{len(ratios_alive)} alive atoms; far-left bin = essentially-vanilla atoms"
+    )
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "intrinsic_dim.png", dpi=110)
+    plt.close(fig)
+
+
+def plot_per_pc(results: list[dict], out_dir: Path) -> None:
+    """For each F, plot explained-variance per PC. The first ~10 PCs are
+    trivial; PCs 20-50 are where the architectures diverge.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for r in results:
+        F = r["F"]
+        ax.plot(r["per_pc_vanilla"], "-", alpha=0.7, label=f"vanilla F={F}")
+        ax.plot(r["per_pc_curve"], "--", alpha=0.7, label=f"curve   F={F}")
+    ax.set_xlabel("principal-component index (top = largest variance)")
+    ax.set_ylabel("explained variance on this PC")
+    ax.set_title("Per-PC reconstruction quality (saturation-aware comparison)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(ncol=2, fontsize=8)
+    ax.set_ylim(-0.05, 1.05)
+    fig.tight_layout()
+    fig.savefig(out_dir / "per_pc.png", dpi=110)
     plt.close(fig)
 
 
@@ -461,20 +567,41 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         "curve_locked_explained": 1 - mse_locked / var,
     }
 
+    # Per-PC reconstruction quality on the top-K PCs of X_eval — the
+    # discriminating metric when overall MSE is saturated.
+    pc_k = min(64, X_eval.shape[1])
+    with torch.no_grad():
+        recon_v, _ = vanilla(X_eval)
+        pc_v = per_pc_explained(X_eval, recon_v, k=pc_k)
+        # Curve: chunked recon for memory
+        recon_c = torch.empty_like(X_eval)
+        for start in range(0, X_eval.shape[0], cfg.eval_chunk):
+            x = X_eval[start : start + cfg.eval_chunk]
+            recon_c[start : start + cfg.eval_chunk] = curve(x).reconstruction
+        pc_c = per_pc_explained(X_eval, recon_c, k=pc_k)
+    result["per_pc_vanilla"] = pc_v.tolist()
+    result["per_pc_curve"] = pc_c.tolist()
+
     if do_visualize:
         print(f"  [viz] extracting curve atoms + positions for F={F}", flush=True)
-        curve.inference_mode = True  # use locked B for visualization
+        curve.inference_mode = True
         t_grid = torch.linspace(0.01, 0.99, cfg.plot_t_resolution, dtype=torch.float64)
-        curves_2d, atom_indices = extract_curves_2d(curve, t_grid, cfg.plot_n_atoms)
-        plot_curves(curves_2d, atom_indices, F, out_dir)
+        curves_2d, atom_indices, intrinsic_dim = extract_curves_2d(curve, t_grid, cfg.plot_n_atoms)
+        plot_curves(curves_2d, atom_indices, F, out_dir, intrinsic_dim)
+        result["plotted_atom_intrinsic_dim"] = intrinsic_dim.tolist()
 
-        # Position distribution on the eval batch
         curve.inference_mode = False
         with torch.no_grad():
             out = curve(X_eval[: min(2048, X_eval.shape[0])])
             positions = out.positions.detach().cpu().numpy()
             alive = ((out.amplitudes > 1e-3).any(0).cpu().numpy()).nonzero()[0]
         plot_positions(positions, alive, F, out_dir)
+
+        # Curve dimensionality: histogram of (σ₂/σ₁) across ALL alive atoms.
+        # 0 = essentially a line (equivalent to vanilla); near 1 = genuine 2D
+        # curve. Tells you whether the curve SAE is actually using its
+        # intrinsic rank or collapsing to vanilla behavior.
+        plot_intrinsic_dim_hist(curve, F, out_dir)
 
     return result
 
@@ -529,6 +656,7 @@ def main(cfg: SweepConfig | None = None) -> int:
 
     plot_pareto(results, out_dir)
     plot_alive(results, out_dir)
+    plot_per_pc(results, out_dir)
 
     print("\n=========== Summary ===========", flush=True)
     print(f"{'F':>6} {'top_k':>6}  {'van expl':>9}  {'crv expl':>9}  {'lock expl':>10}  {'van alive':>10}  {'crv alive':>10}")
