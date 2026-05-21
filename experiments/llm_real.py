@@ -352,23 +352,50 @@ def main(cfg: Config | None = None) -> int:
     t_c = train_sae(curve, X_n, cfg, "curve", out_dir / "curve_ckpt.pt", is_curve=True, sae_cfg=sae_cfg)
 
     print("\n[eval]", flush=True)
-    eval_batch = X_n[: min(cfg.eval_n, X_n.shape[0])]
+    eval_n = min(cfg.eval_n, X_n.shape[0])
+    eval_batch = X_n[:eval_n]
+
+    # Vanilla SAE: GPU, batch the whole eval at once.
     with torch.no_grad():
         recon_v, z_v = vanilla(eval_batch)
         mse_v = float(((recon_v - eval_batch) ** 2).mean())
         alive_v = int((z_v > 0).any(0).sum())
-        out_c = curve(eval_batch)
-        mse_c = float(((out_c.reconstruction - eval_batch) ** 2).mean())
-        alive_c = int((out_c.amplitudes > 1e-3).any(0).sum())
+
+    # Curve SAE: gamfit refuses to densify F·B·K above ~300 MiB. Chunk the
+    # eval forward into batches matching cfg.batch_size_curve and average MSE
+    # token-wise. Alive features are tracked via OR across chunks.
+    sq_sum = 0.0
+    n_tok = 0
+    alive_mask = torch.zeros(cfg.n_features, dtype=torch.bool, device=device)
+    with torch.no_grad():
+        for start in range(0, eval_n, cfg.batch_size_curve):
+            chunk = eval_batch[start : start + cfg.batch_size_curve]
+            out_c = curve(chunk)
+            sq_sum += float(((out_c.reconstruction - chunk) ** 2).sum())
+            n_tok += chunk.numel()
+            alive_mask |= (out_c.amplitudes > 1e-3).any(0)
+    mse_c = sq_sum / max(n_tok, 1)
+    alive_c = int(alive_mask.sum())
     print(f"vanilla: MSE={mse_v:.4f}  expl={1-mse_v/var:.3f}  alive={alive_v}/{cfg.n_features}  train_s={t_v:.0f}", flush=True)
     print(f"curve  : MSE={mse_c:.4f}  expl={1-mse_c/var:.3f}  alive={alive_c}/{cfg.n_features}  train_s={t_c:.0f}", flush=True)
 
+    # Lock-and-cache snapshot: also chunk-safe. Use the first batch_size_curve
+    # tokens as the snapshot reference set (a held-out sample of representative
+    # data is what gamfit's REML needs).
     print("\n[snapshot] lock-and-cache the curve SAE", flush=True)
-    curve.update_snapshot(eval_batch)
+    snapshot_batch = X_n[: cfg.batch_size_curve]
+    curve.update_snapshot(snapshot_batch)
     curve.inference_mode = True
+
+    sq_sum_inf = 0.0
+    n_tok_inf = 0
     with torch.no_grad():
-        out_inf = curve(eval_batch)
-        mse_inf = float(((out_inf.reconstruction - eval_batch) ** 2).mean())
+        for start in range(0, eval_n, cfg.batch_size_curve):
+            chunk = eval_batch[start : start + cfg.batch_size_curve]
+            out_inf = curve(chunk)
+            sq_sum_inf += float(((out_inf.reconstruction - chunk) ** 2).sum())
+            n_tok_inf += chunk.numel()
+    mse_inf = sq_sum_inf / max(n_tok_inf, 1)
     print(f"locked snapshot recon MSE={mse_inf:.4f}", flush=True)
 
     report = {
