@@ -212,13 +212,42 @@ class VanillaSAE(nn.Module):
 # ---------------------------------------------------------------------------
 
 
+def _ckpt_sig(F: int, top_k: int, label: str, sae_cfg_dict: dict | None = None) -> dict:
+    sig = {"label": label, "F": F, "top_k": top_k}
+    if sae_cfg_dict is not None:
+        sig["n_basis"] = sae_cfg_dict.get("n_basis")
+        sig["intrinsic_rank"] = sae_cfg_dict.get("intrinsic_rank")
+    return sig
+
+
 def train_one(sae, X, n_steps: int, batch_size: int, lr: float, label: str,
+              ckpt_path: Path | None = None, resume: bool = True, sig: dict | None = None,
               is_curve: bool = False, sae_cfg=None) -> float:
+    """Train one SAE. If a matching checkpoint exists, resume from the saved
+    step (and skip entirely if already trained for n_steps)."""
     opt = torch.optim.Adam(sae.parameters(), lr=lr)
+    start_step = 0
+    if resume and ckpt_path is not None and ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        cached_sig = ckpt.get("sig", {})
+        if all(cached_sig.get(k) == v for k, v in (sig or {}).items()):
+            sae.load_state_dict(ckpt["sae"])
+            try:
+                opt.load_state_dict(ckpt["opt"])
+            except (ValueError, KeyError):
+                print(f"    [{label}] optimizer state mismatched; reinitializing", flush=True)
+            start_step = int(ckpt["step"])
+            print(f"    [{label}] resumed from {ckpt_path} at step {start_step}", flush=True)
+        else:
+            print(f"    [{label}] checkpoint sig mismatch — starting fresh", flush=True)
+
     n = X.shape[0]
     t0 = time.time()
     log_every = max(n_steps // 5, 1)
-    for step in range(n_steps):
+    if start_step >= n_steps:
+        print(f"    [{label}] already trained to step {start_step} (target {n_steps}); skipping", flush=True)
+        return 0.0
+    for step in range(start_step, n_steps):
         idx = torch.randint(0, n, (batch_size,), device=X.device)
         batch = X[idx]
         opt.zero_grad(set_to_none=True)
@@ -237,6 +266,9 @@ def train_one(sae, X, n_steps: int, batch_size: int, lr: float, label: str,
         opt.step()
         if step % log_every == 0:
             print(f"    [{label} step {step:5d}] mse={mse.item():.4e}", flush=True)
+    if ckpt_path is not None:
+        torch.save({"sae": sae.state_dict(), "opt": opt.state_dict(), "step": n_steps, "sig": sig}, ckpt_path)
+        print(f"    [{label}] saved checkpoint to {ckpt_path}", flush=True)
     return time.time() - t0
 
 
@@ -524,8 +556,14 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     # --- Vanilla
     vanilla = VanillaSAE(D, F, top_k).to(device)
     n_v = sum(p.numel() for p in vanilla.parameters())
-    t_v = train_one(vanilla, X_n, cfg.n_steps_vanilla, cfg.batch_size_vanilla, cfg.lr,
-                    f"van[F={F}]", is_curve=False)
+    t_v = train_one(
+        vanilla, X_n, cfg.n_steps_vanilla, cfg.batch_size_vanilla, cfg.lr,
+        f"van[F={F}]",
+        ckpt_path=out_dir / f"vanilla_F{F}.pt",
+        resume=cfg.resume,
+        sig=_ckpt_sig(F, top_k, "vanilla"),
+        is_curve=False,
+    )
     X_eval = X_n[: min(cfg.eval_n, X_n.shape[0])]
     mse_v, alive_v = eval_vanilla(vanilla, X_eval, F)
 
@@ -540,8 +578,14 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())
-    t_c = train_one(curve, X_n, cfg.n_steps_curve, bsc, cfg.lr,
-                    f"crv[F={F}]", is_curve=True, sae_cfg=sae_cfg)
+    t_c = train_one(
+        curve, X_n, cfg.n_steps_curve, bsc, cfg.lr,
+        f"crv[F={F}]",
+        ckpt_path=out_dir / f"curve_F{F}.pt",
+        resume=cfg.resume,
+        sig=_ckpt_sig(F, top_k, "curve", {"n_basis": cfg.sae_n_basis, "intrinsic_rank": cfg.sae_intrinsic_rank}),
+        is_curve=True, sae_cfg=sae_cfg,
+    )
     mse_c, alive_c = eval_curve(curve, X_eval, F, cfg.eval_chunk)
 
     # --- Lock-and-cache with a properly-sized snapshot batch
