@@ -1,8 +1,10 @@
 # Paste into one Colab cell. Runtime → Change runtime type → T4 GPU first.
-# The script handles the gamfit/CUDA conflict internally by spawning the
-# curve-SAE phase as a CUDA-less subprocess.
+# Self-contained: uses absolute paths so it's safe to re-run after the
+# script's working directory has been deleted.
 
+%cd /content
 !nvidia-smi | head -5
-!cd /content && rm -rf Manifold-SAE && git clone -q https://github.com/SauersML/Manifold-SAE.git
+!rm -rf /content/Manifold-SAE
+!git clone -q https://github.com/SauersML/Manifold-SAE.git /content/Manifold-SAE
 !pip install -q "gamfit>=0.1.81" transformers datasets scipy
 !cd /content/Manifold-SAE && python -m experiments.llm_real
