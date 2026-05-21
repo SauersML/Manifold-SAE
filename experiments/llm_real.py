@@ -28,8 +28,8 @@ from torch import nn
 
 @dataclass
 class Config:
-    model_name: str = "gpt2"
-    layer: int = 6
+    model_name: str = "Qwen/Qwen3.5-0.8B-Base"
+    layer: int = 12  # mid layer for ~24-layer 0.8B models; tune per model
     n_tokens: int = 200_000
     seq_len: int = 256
     text_dataset: str = "wikitext"
@@ -47,8 +47,14 @@ class Config:
     sae_sparsity_weight: float = 3e-4
     sae_ortho_weight: float = 1e-3
     eval_n: int = 8192
-    output_dir: str = "runs/LLM_REAL"
+    # Use an absolute path outside the repo so checkpoints survive
+    # `rm -rf /content/Manifold-SAE` in the Colab setup cell.
+    output_dir: str = "/content/runs/LLM_REAL"
     seed: int = 0
+    # Warm-start: if a checkpoint exists at <output_dir>/checkpoint.pt with
+    # a matching config, resume (model + optimizer + step count). Set
+    # resume=False to force a fresh run.
+    resume: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -127,12 +133,41 @@ class VanillaSAE(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-def train_sae(sae, X, cfg: Config, label: str, is_curve: bool = False, sae_cfg=None) -> float:
+def _ckpt_signature(cfg: Config, label: str) -> dict:
+    return {
+        "label": label,
+        "model_name": cfg.model_name,
+        "layer": cfg.layer,
+        "n_features": cfg.n_features,
+        "top_k": cfg.top_k,
+        "batch_size": cfg.batch_size,
+        "lr": cfg.lr,
+        "sae_n_basis": cfg.sae_n_basis,
+        "sae_intrinsic_rank": cfg.sae_intrinsic_rank,
+    }
+
+
+def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool = False, sae_cfg=None) -> float:
     opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
+    start_step = 0
+    if cfg.resume and ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        sig = _ckpt_signature(cfg, label)
+        if ckpt.get("sig") == sig:
+            sae.load_state_dict(ckpt["sae"])
+            opt.load_state_dict(ckpt["opt"])
+            start_step = int(ckpt["step"])
+            print(f"  [{label}] resumed from {ckpt_path} at step {start_step}", flush=True)
+        else:
+            print(f"  [{label}] checkpoint exists but signature changed — starting fresh", flush=True)
+
     n = X.shape[0]
     t0 = time.time()
     log_every = max(cfg.n_steps // 10, 1)
-    for step in range(cfg.n_steps):
+    if start_step >= cfg.n_steps:
+        print(f"  [{label}] already trained for {start_step} steps (target {cfg.n_steps}); skipping", flush=True)
+        return 0.0
+    for step in range(start_step, cfg.n_steps):
         idx = torch.randint(0, n, (cfg.batch_size,), device=X.device)
         batch = X[idx]
         opt.zero_grad(set_to_none=True)
@@ -151,6 +186,11 @@ def train_sae(sae, X, cfg: Config, label: str, is_curve: bool = False, sae_cfg=N
         opt.step()
         if step % log_every == 0:
             print(f"  [{label} step {step:5d}] mse={mse.item():.4e}", flush=True)
+    torch.save(
+        {"sae": sae.state_dict(), "opt": opt.state_dict(), "step": cfg.n_steps, "sig": _ckpt_signature(cfg, label)},
+        ckpt_path,
+    )
+    print(f"  [{label}] saved checkpoint to {ckpt_path}", flush=True)
     return time.time() - t0
 
 
@@ -169,7 +209,21 @@ def main(cfg: Config | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"[setup] device={device}  output_dir={out_dir}", flush=True)
 
-    X = harvest_activations(cfg, device)
+    # Cache harvested activations so re-runs are fast.
+    act_path = out_dir / "activations.pt"
+    act_sig = {"model_name": cfg.model_name, "layer": cfg.layer, "n_tokens": cfg.n_tokens,
+               "text_dataset": cfg.text_dataset, "text_subset": cfg.text_subset, "seq_len": cfg.seq_len}
+    if cfg.resume and act_path.exists():
+        cached = torch.load(act_path, map_location="cpu", weights_only=False)
+        if cached.get("sig") == act_sig:
+            X = cached["X"]
+            print(f"[harvest] loaded cached activations from {act_path}: shape={tuple(X.shape)}", flush=True)
+        else:
+            X = harvest_activations(cfg, device)
+            torch.save({"X": X, "sig": act_sig}, act_path)
+    else:
+        X = harvest_activations(cfg, device)
+        torch.save({"X": X, "sig": act_sig}, act_path)
     mu = X.mean(0, keepdim=True)
     sigma = float(X.std().item())
     X_n = ((X - mu) / max(sigma, 1e-6)).to(device)
@@ -178,7 +232,7 @@ def main(cfg: Config | None = None) -> int:
 
     print("\n[vanilla] training", flush=True)
     vanilla = VanillaSAE(D, cfg.n_features, cfg.top_k).to(device)
-    t_v = train_sae(vanilla, X_n, cfg, "vanilla", is_curve=False)
+    t_v = train_sae(vanilla, X_n, cfg, "vanilla", out_dir / "vanilla_ckpt.pt", is_curve=False)
 
     print("\n[curve] training (gamfit REML each batch, GPU)", flush=True)
     from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
@@ -189,7 +243,7 @@ def main(cfg: Config | None = None) -> int:
         encoder_type="linear", continuous_amp=True,
     )
     curve = ManifoldSAE(sae_cfg).to(device)
-    t_c = train_sae(curve, X_n, cfg, "curve", is_curve=True, sae_cfg=sae_cfg)
+    t_c = train_sae(curve, X_n, cfg, "curve", out_dir / "curve_ckpt.pt", is_curve=True, sae_cfg=sae_cfg)
 
     print("\n[eval]", flush=True)
     eval_batch = X_n[: min(cfg.eval_n, X_n.shape[0])]
