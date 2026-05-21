@@ -42,7 +42,11 @@ class ManifoldEncoderLinear(nn.Module):
 
         D = input_dim
         F = n_features
-        H = hidden_dim if hidden_dim is not None else max(4 * D, 2 * F)
+        # H = 4·D by default (vanilla TopK SAE convention). DO NOT scale
+        # with F — that makes the encoder O(F²) and infeasible at LLM
+        # scale (F=100K → 20B params just for the heads). Override via
+        # hidden_dim when you actually want a bigger trunk.
+        H = hidden_dim if hidden_dim is not None else 4 * D
         self.hidden_dim = H
 
         self.norm = nn.LayerNorm(D)

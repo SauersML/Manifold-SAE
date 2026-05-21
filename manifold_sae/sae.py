@@ -299,7 +299,10 @@ class ManifoldSAE(nn.Module):
         when data demands non-monotone (e.g. parabola).
         """
         principal = y_proj[..., 0]                                 # (B, F)
-        mask_f = (mask_binary.detach() > 0.5).to(positions.dtype)
+        # Threshold > 0 catches continuous-amp firings (softplus output
+        # of the active TopK lane can be any positive value). The old
+        # > 0.5 threshold dropped low-amplitude active firings.
+        mask_f = (mask_binary.detach() > 0).to(positions.dtype)
         mass = mask_f.sum(dim=0).clamp(min=1.0)
         p_mean = (positions * mask_f).sum(dim=0) / mass
         q_mean = (principal * mask_f).sum(dim=0) / mass

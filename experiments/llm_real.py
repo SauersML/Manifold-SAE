@@ -28,8 +28,11 @@ from torch import nn
 
 @dataclass
 class Config:
-    model_name: str = "Qwen/Qwen3.5-0.8B-Base"
-    layer: int = 12  # mid layer for ~24-layer 0.8B models; tune per model
+    # Default: Qwen2.5-0.5B (pure text causal LM, Apache 2.0, 24 layers,
+    # hidden_size=896, Qwen2 tokenizer). Verified to work with AutoModel +
+    # standard forward hooks. Qwen3.5 is multimodal and behaves differently.
+    model_name: str = "Qwen/Qwen2.5-0.5B"
+    layer: int = 12  # mid for 24-layer Qwen2.5-0.5B
     n_tokens: int = 200_000
     seq_len: int = 256
     text_dataset: str = "wikitext"
@@ -63,6 +66,10 @@ class Config:
 
 
 def harvest_activations(cfg: Config, device: torch.device) -> torch.Tensor:
+    """Collect residual-stream activations from one layer using a forward
+    hook on that block's output. Avoids ``output_hidden_states=True`` which
+    materializes all 25 layers' activations in memory per batch.
+    """
     from datasets import load_dataset
     from transformers import AutoModel, AutoTokenizer
 
@@ -72,6 +79,28 @@ def harvest_activations(cfg: Config, device: torch.device) -> torch.Tensor:
         tok.pad_token = tok.eos_token
     model = AutoModel.from_pretrained(cfg.model_name).to(device).eval()
 
+    # Find the transformer-block module list and pick our target layer.
+    # Supports gpt2 (.h[i]), Qwen2/Qwen3/Llama/Mistral (.layers[i]).
+    blocks = None
+    for attr in ("h", "layers", "encoder_layer"):
+        if hasattr(model, attr):
+            blocks = getattr(model, attr)
+            break
+    if blocks is None and hasattr(model, "model") and hasattr(model.model, "layers"):
+        blocks = model.model.layers
+    if blocks is None:
+        raise RuntimeError(f"could not find transformer blocks on {type(model).__name__}")
+    if cfg.layer < 0 or cfg.layer >= len(blocks):
+        raise ValueError(f"layer {cfg.layer} out of range for model with {len(blocks)} blocks")
+
+    captured = {}
+
+    def hook(_module, _inputs, output):
+        # Block outputs are typically a tuple (hidden_state, ...) or a single tensor.
+        captured["h"] = output[0] if isinstance(output, tuple) else output
+
+    handle = blocks[cfg.layer].register_forward_hook(hook)
+
     print(f"[harvest] loading text: {cfg.text_dataset}/{cfg.text_subset}", flush=True)
     ds = load_dataset(cfg.text_dataset, cfg.text_subset, split=cfg.text_split)
     texts = [t for t in ds["text"] if len(t) > cfg.min_text_len][: cfg.max_texts]
@@ -79,22 +108,25 @@ def harvest_activations(cfg: Config, device: torch.device) -> torch.Tensor:
     chunks = []
     n_collected = 0
     torch.set_grad_enabled(False)
-    print(f"[harvest] collecting {cfg.n_tokens:,} tokens at layer {cfg.layer}", flush=True)
-    for i in range(0, len(texts), 8):
-        if n_collected >= cfg.n_tokens:
-            break
-        batch = tok(
-            texts[i : i + 8],
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=cfg.seq_len,
-        ).to(device)
-        out = model(**batch, output_hidden_states=True)
-        h = out.hidden_states[cfg.layer]
-        mask = batch["attention_mask"].bool()
-        chunks.append(h[mask].cpu().float())
-        n_collected += int(mask.sum())
+    print(f"[harvest] collecting {cfg.n_tokens:,} tokens at layer {cfg.layer} (block {cfg.layer} of {len(blocks)})", flush=True)
+    try:
+        for i in range(0, len(texts), 8):
+            if n_collected >= cfg.n_tokens:
+                break
+            batch = tok(
+                texts[i : i + 8],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=cfg.seq_len,
+            ).to(device)
+            model(**batch)
+            h = captured["h"]
+            mask = batch["attention_mask"].bool()
+            chunks.append(h[mask].cpu().float())
+            n_collected += int(mask.sum())
+    finally:
+        handle.remove()
     torch.set_grad_enabled(True)
     X = torch.cat(chunks, dim=0)[: cfg.n_tokens]
     print(f"[harvest] X shape: {tuple(X.shape)}  mean={X.mean():.3f}  std={X.std():.3f}", flush=True)
