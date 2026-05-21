@@ -6,7 +6,7 @@
 !nvidia-smi | head -5
 !rm -rf /content/Manifold-SAE
 !git clone -q https://github.com/SauersML/Manifold-SAE.git /content/Manifold-SAE
-!pip install -q "gamfit>=0.1.81" transformers datasets scipy
+!pip install -q -U "gamfit>=0.1.81" "transformers>=4.50" datasets scipy
 
 # Find the torch-bundled cuBLAS and preload it so glibc dlopen uses it
 # for every subsequent cuBLAS load (system + bundled both map to one
