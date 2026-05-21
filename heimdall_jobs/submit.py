@@ -106,7 +106,24 @@ if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 export PATH="$HOME/.local/bin:$PATH"
-uv sync --extra llm
+
+# Refuse to trust the cached venv across runs. uv sync's "resolved in 1ms"
+# fast-path can silently keep stale wheels even when the lock changed —
+# I hit this with torch 2.12 surviving a pin to <2.12. Cost of a clean
+# install is ~30s + a few GB of download; cost of running on the wrong
+# torch on a cluster job is hours of wasted compute. Pin .venv to the
+# lock hash so we only reinstall when something actually changed.
+LOCK_HASH=$(sha256sum uv.lock 2>/dev/null | awk '{{print $1}}')
+STAMP=".venv/.heimdall_lock_hash"
+if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP" 2>/dev/null)" != "$LOCK_HASH" ]; then
+    echo "[submit] lock hash changed (or no venv) — clean install"
+    rm -rf .venv
+    uv sync --extra llm
+    echo "$LOCK_HASH" > "$STAMP"
+else
+    echo "[submit] venv up to date with uv.lock (hash $LOCK_HASH)"
+    uv sync --extra llm
+fi
 
 export MANIFOLD_SAE_OUTPUT_DIR="$OUTPUT"
 export PYTHONUNBUFFERED=1
