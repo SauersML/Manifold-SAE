@@ -232,10 +232,16 @@ class ManifoldSAE(nn.Module):
             init_lambda=self.config.init_lambda,
         )
 
-        # gamfit.fitted: (F*B, R) — per-feature subspace prediction at this batch's positions.
+        # gamfit.fitted = by * (phi @ B). gamfit's `fitted` is ALREADY
+        # multiplied by the `by` weighting we passed (= mask_binary). So
+        # `fitted` per feature per token equals `amp * curve(t)`, which is
+        # exactly the SAE's intended contribution. DO NOT multiply by
+        # mask_binary again — that gave `amp^2 * curve(t)` and diverged
+        # from inference-mode reconstruction (which has only one `amp`
+        # factor). Bug only visible under `continuous_amp=True` because
+        # binary mask satisfies mask^2 == mask.
         fitted = fit.fitted.view(F, B, R).to(x_dtype)
-        # SAE reconstruction: lift each feature's fit to ambient, gated by amplitude.
-        contribution = torch.einsum("fbr,fdr->bfd", fitted * mask_binary.t().unsqueeze(-1), dirs)
+        contribution = torch.einsum("fbr,fdr->bfd", fitted, dirs)
         recon = contribution.sum(dim=1) + b_dec.unsqueeze(0)
 
         # Identification: per-feature column ortho + cross-feature off-block ortho.
