@@ -155,6 +155,9 @@ def main() -> int:
     parser.add_argument("--sweep-dir-of", default=None,
                         help="run-name of a prior sweep whose checkpoints this job should probe "
                              "(sets MSAE_SWEEP_DIR=<working-dir>/runs/<value>)")
+    parser.add_argument("--env", action="append", default=[],
+                        help="extra env var as KEY=VALUE injected into the job command "
+                             "(repeatable; e.g. --env MSAE_LAYER=18 --env MSAE_MODEL=Qwen/Qwen2.5-1.5B)")
     parser.add_argument("--dry-run", action="store_true", help="print the JSON spec without submitting")
     args = parser.parse_args()
 
@@ -189,6 +192,10 @@ def main() -> int:
                 f"export MSAE_RUN_NAME={run_name!r}\n"
                 + (f"export MSAE_SWEEP_DIR={working_dir!r}/runs/{args.sweep_dir_of!r}\n"
                    if args.sweep_dir_of else "")
+                + "".join(
+                    f"export {kv.split('=', 1)[0]}={kv.split('=', 1)[1]!r}\n"
+                    for kv in args.env if "=" in kv
+                )
                 + build_command(args.experiment, git_url, args.git_ref, working_dir, require_cuda=(gpus > 0))
             ),
             "gpus": gpus,
