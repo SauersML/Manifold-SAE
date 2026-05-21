@@ -35,48 +35,17 @@ import torch
 import torch.nn.functional as F_nn
 from torch import nn
 
-
-# ---------------------------------------------------------------------------
-# Same gamfit dual-cuBLAS bridge as llm_real.py — see docs/known_issues.md.
-def _bypass_gamfit_cuda_check() -> None:
-    import gamfit._cuda as _gc
-
-    def _no_conflicts():
-        return {
-            "platform": "linux", "mapped": {}, "conflicts": {},
-            "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
-            "system_complete_stacks": [],
-        }
-
-    _gc.cuda_diagnostics = _no_conflicts
-    _gc.assert_no_cuda_library_conflicts = lambda context: None
-    for mod_name in ("gamfit._binding", "gamfit.torch._reml", "gamfit._api"):
-        try:
-            import importlib
-            mod = importlib.import_module(mod_name)
-            if hasattr(mod, "assert_no_cuda_library_conflicts"):
-                mod.assert_no_cuda_library_conflicts = lambda context: None
-            if hasattr(mod, "cuda_diagnostics"):
-                mod.cuda_diagnostics = _no_conflicts
-        except ImportError:
-            pass
-    try:
-        import gamfit._binding as _gb
-        if hasattr(_gb.rust_module, "cache_clear"):
-            _gb.rust_module.cache_clear()
-    except ImportError:
-        pass
-
-
-_bypass_gamfit_cuda_check()
-# ---------------------------------------------------------------------------
+from manifold_sae._cluster_bridge import bypass_gamfit_cuda_check
+bypass_gamfit_cuda_check()
 
 
 @dataclass
 class SweepConfig:
     # LM + harvest
-    model_name: str = "Qwen/Qwen2.5-0.5B"
-    layer: int = 12
+    model_name: str = os.environ.get("MSAE_MODEL", "Qwen/Qwen2.5-0.5B")
+    # Layer to harvest from. Set via env so a single cluster submission
+    # can run sweeps at multiple layers as separate jobs.
+    layer: int = int(os.environ.get("MSAE_LAYER", "12"))
     n_tokens: int = 80_000
     seq_len: int = 256
     text_dataset: str = "wikitext"

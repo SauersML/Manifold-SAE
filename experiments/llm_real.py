@@ -27,47 +27,8 @@ import torch.nn.functional as F_nn
 from torch import nn
 
 
-# ---------------------------------------------------------------------------
-# Transitional bridge: neutralize gamfit's CUDA dual-stack safety check on
-# environments (Colab, several cloud images) that have both /usr/local/cuda*
-# and the torch-bundled nvidia/cublas-cu12 reachable. The proper fix is
-# upstream in gam (commit downgrades the assert to a once-per-process
-# warning); until that ships, we patch at the *source* — `cuda_diagnostics`
-# — so every consumer of the diagnostic sees an empty conflict set. This
-# works regardless of which module captured the assert function reference
-# at import time.
-def _bypass_gamfit_cuda_check() -> None:
-    import gamfit._cuda as _gc
-
-    def _no_conflicts():
-        return {
-            "platform": "linux", "mapped": {}, "conflicts": {},
-            "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
-            "system_complete_stacks": [],
-        }
-
-    _gc.cuda_diagnostics = _no_conflicts
-    _gc.assert_no_cuda_library_conflicts = lambda context: None
-    for mod_name in ("gamfit._binding", "gamfit.torch._reml", "gamfit._api"):
-        try:
-            import importlib
-            mod = importlib.import_module(mod_name)
-            if hasattr(mod, "assert_no_cuda_library_conflicts"):
-                mod.assert_no_cuda_library_conflicts = lambda context: None
-            if hasattr(mod, "cuda_diagnostics"):
-                mod.cuda_diagnostics = _no_conflicts
-        except ImportError:
-            pass
-    try:
-        import gamfit._binding as _gb
-        if hasattr(_gb.rust_module, "cache_clear"):
-            _gb.rust_module.cache_clear()
-    except ImportError:
-        pass
-
-
-_bypass_gamfit_cuda_check()
-# ---------------------------------------------------------------------------
+from manifold_sae._cluster_bridge import bypass_gamfit_cuda_check
+bypass_gamfit_cuda_check()
 
 
 @dataclass

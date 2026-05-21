@@ -24,48 +24,14 @@ that's the head-to-head LLM-applicability proof at scale.
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import sys
 import time
 
+from manifold_sae._cluster_bridge import bypass_gamfit_cuda_check
 
-def _bypass_gamfit_cuda_check() -> None:
-    """Cluster nodes have both pip-bundled CUDA libs AND a system CUDA in
-    /usr/local/cuda-*; gamfit's pre-flight check refuses on dual-stack.
-    The actual catastrophe condition (cross-library handle ownership)
-    doesn't happen in practice because cudarc resolves all gamfit cuBLAS
-    symbols through one process-wide handle. Downgrade the check to a
-    no-op. The Rust runtime already warns-only on this in current gam.
-    """
-    import gamfit._cuda as _gc
-
-    def _no_conflicts():
-        return {"platform": "linux", "mapped": {}, "conflicts": {},
-                "packaged_nvidia_roots": [], "packaged_complete_stacks": [],
-                "system_complete_stacks": []}
-
-    _gc.cuda_diagnostics = _no_conflicts
-    _gc.assert_no_cuda_library_conflicts = lambda context: None
-    for mod_name in ("gamfit._binding", "gamfit.torch._reml", "gamfit._api"):
-        try:
-            mod = importlib.import_module(mod_name)
-            if hasattr(mod, "assert_no_cuda_library_conflicts"):
-                mod.assert_no_cuda_library_conflicts = lambda context: None
-            if hasattr(mod, "cuda_diagnostics"):
-                mod.cuda_diagnostics = _no_conflicts
-        except ImportError:
-            pass
-    try:
-        import gamfit._binding as _gb
-        if hasattr(_gb.rust_module, "cache_clear"):
-            _gb.rust_module.cache_clear()
-    except ImportError:
-        pass
-
-
-_bypass_gamfit_cuda_check()
+bypass_gamfit_cuda_check()
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
