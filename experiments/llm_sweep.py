@@ -220,11 +220,23 @@ def _ckpt_sig(F: int, top_k: int, label: str, sae_cfg_dict: dict | None = None) 
     return sig
 
 
+def _save_ckpt(sae, opt, step: int, sig: dict, path: Path) -> None:
+    """Atomic write: save to tmp then rename, so a crash mid-save doesn't
+    leave a half-written checkpoint that breaks the next resume."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    torch.save({"sae": sae.state_dict(), "opt": opt.state_dict(), "step": step, "sig": sig}, tmp)
+    tmp.replace(path)
+
+
 def train_one(sae, X, n_steps: int, batch_size: int, lr: float, label: str,
               ckpt_path: Path | None = None, resume: bool = True, sig: dict | None = None,
+              ckpt_every: int = 200,
               is_curve: bool = False, sae_cfg=None) -> float:
-    """Train one SAE. If a matching checkpoint exists, resume from the saved
-    step (and skip entirely if already trained for n_steps)."""
+    """Train one SAE. Per-step warm-start with periodic checkpoint save:
+      - Resume from saved (step, weights, optimizer) if checkpoint matches sig.
+      - Save snapshot every ckpt_every steps so a crash mid-training preserves
+        progress (atomic write — partial saves never corrupt the file).
+      - Skip entirely if already trained to n_steps."""
     opt = torch.optim.Adam(sae.parameters(), lr=lr)
     start_step = 0
     if resume and ckpt_path is not None and ckpt_path.exists():
@@ -266,8 +278,11 @@ def train_one(sae, X, n_steps: int, batch_size: int, lr: float, label: str,
         opt.step()
         if step % log_every == 0:
             print(f"    [{label} step {step:5d}] mse={mse.item():.4e}", flush=True)
+        # Periodic checkpoint save (atomic via tmp+rename).
+        if ckpt_path is not None and (step + 1) % ckpt_every == 0 and (step + 1) < n_steps:
+            _save_ckpt(sae, opt, step + 1, sig or {}, ckpt_path)
     if ckpt_path is not None:
-        torch.save({"sae": sae.state_dict(), "opt": opt.state_dict(), "step": n_steps, "sig": sig}, ckpt_path)
+        _save_ckpt(sae, opt, n_steps, sig or {}, ckpt_path)
         print(f"    [{label}] saved checkpoint to {ckpt_path}", flush=True)
     return time.time() - t0
 
@@ -553,6 +568,28 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     bsc = max(32, min(512, cfg.snapshot_density_mib * 1024 * 1024 // (F * cfg.sae_n_basis * 8)))
     print(f"  D={D}  F={F}  top_k={top_k}  batch_size_curve={bsc}", flush=True)
 
+    # Per-F eval cache. If a previous run completed this F with the same
+    # structural config, just return the saved result and skip everything.
+    eval_cache_path = out_dir / f"eval_F{F}.json"
+    eval_sig = {
+        "F": F, "top_k": top_k, "n_steps_vanilla": cfg.n_steps_vanilla,
+        "n_steps_curve": cfg.n_steps_curve, "batch_size_curve": bsc,
+        "n_basis": cfg.sae_n_basis, "intrinsic_rank": cfg.sae_intrinsic_rank,
+        "eval_n": cfg.eval_n,
+    }
+    if cfg.resume and eval_cache_path.exists():
+        cached = json.loads(eval_cache_path.read_text())
+        if all(cached.get("eval_sig", {}).get(k) == v for k, v in eval_sig.items()):
+            # Viz hasn't been redone for this re-run, but the metrics are saved.
+            # Only re-run the run when do_visualize=True and the viz output is
+            # missing — otherwise return the cache verbatim.
+            need_viz = do_visualize and not (out_dir / "curves.png").exists()
+            if not need_viz:
+                print(f"  [F={F}] eval cache hit at {eval_cache_path}; skipping retrain+eval", flush=True)
+                return cached["result"]
+            else:
+                print(f"  [F={F}] eval cache hit but viz missing; rebuilding curve SAE for viz only", flush=True)
+
     # --- Vanilla
     vanilla = VanillaSAE(D, F, top_k).to(device)
     n_v = sum(p.numel() for p in vanilla.parameters())
@@ -588,14 +625,26 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     )
     mse_c, alive_c = eval_curve(curve, X_eval, F, cfg.eval_chunk)
 
-    # --- Lock-and-cache with a properly-sized snapshot batch
+    # --- Lock-and-cache with a properly-sized snapshot batch.
     snap_n = snapshot_batch_size(F, cfg.sae_n_basis, cfg.snapshot_density_mib)
     snap = X_n[: snap_n]
     print(f"  [snapshot] fitting REML on {snap_n} tokens (~{F*snap_n*cfg.sae_n_basis*8/1024**2:.0f} MiB densified)", flush=True)
     curve.update_snapshot(snap)
+    # Re-save curve checkpoint *after* update_snapshot so the locked
+    # buffers (B_locked, lam_locked, soft_min_locked, soft_max_locked,
+    # has_snapshot) persist across re-runs — next invocation reloads
+    # the snapshot-ready SAE without re-fitting.
+    ckpt_path = out_dir / f"curve_F{F}.pt"
+    if cfg.resume and ckpt_path.exists():
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        ckpt["sae"] = curve.state_dict()
+        tmp = ckpt_path.with_suffix(ckpt_path.suffix + ".tmp")
+        torch.save(ckpt, tmp)
+        tmp.replace(ckpt_path)
+        print(f"  [snapshot] re-saved {ckpt_path} with snapshot buffers", flush=True)
     curve.inference_mode = True
     mse_locked, _ = eval_curve(curve, X_eval, F, cfg.eval_chunk)
-    curve.inference_mode = False  # leave training-mode accessible for visualization extraction
+    curve.inference_mode = False
 
     print(f"  [F={F}] vanilla MSE={mse_v:.4f} expl={1-mse_v/var:.3f} alive={alive_v}/{F} params={n_v/1e6:.1f}M", flush=True)
     print(f"  [F={F}] curve   MSE={mse_c:.4f} expl={1-mse_c/var:.3f} alive={alive_c}/{F} params={n_c/1e6:.1f}M", flush=True)
@@ -647,6 +696,10 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         # intrinsic rank or collapsing to vanilla behavior.
         plot_intrinsic_dim_hist(curve, F, out_dir)
 
+    # Per-F eval cache: write the full result dict + structural signature.
+    # On the next re-run, run_one_F sees this file and returns immediately
+    # without retraining, snapshotting, or re-evaluating.
+    eval_cache_path.write_text(json.dumps({"eval_sig": eval_sig, "result": result}, indent=2, default=float))
     return result
 
 
