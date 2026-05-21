@@ -1,0 +1,12 @@
+# Paste into one Colab cell. Runtime → Change runtime type → T4 GPU first.
+# Thin wrapper: clone repo, install deps, run the experiment module.
+# Edit experiments/llm_real.py locally and push to iterate.
+
+!nvidia-smi | head -5
+!cd /content && rm -rf Manifold-SAE && git clone -q https://github.com/SauersML/Manifold-SAE.git
+!pip install -q "gamfit>=0.1.81" transformers datasets scipy
+
+import os, sys
+os.chdir("/content/Manifold-SAE")
+sys.path.insert(0, "/content/Manifold-SAE")
+!python -m experiments.llm_real
