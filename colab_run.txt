@@ -1,11 +1,12 @@
 # Paste into one Colab cell. Runtime → Change runtime type → T4 GPU first.
-# Self-contained: clones repo, installs latest gamfit + transformers, runs.
-# Warm-starts from /content/runs/LLM_REAL/ (persists across repo refreshes).
+# Runs experiments/llm_sweep.py: F-sweep over 5 dictionary sizes + plots.
+# Output: /content/runs/LLM_SWEEP/{pareto,alive,curves,positions}.png + results.json
+# Warm-starts the activation harvest across re-runs (cached on /content/runs/).
 
 %cd /content
 !nvidia-smi | head -5
 !rm -rf /content/Manifold-SAE
 !git clone -q https://github.com/SauersML/Manifold-SAE.git /content/Manifold-SAE
-!pip install -q -U gamfit "transformers>=4.50" datasets scipy
+!pip install -q -U gamfit "transformers>=4.50" datasets scipy matplotlib
 !python -c "import gamfit, transformers; print('gamfit', gamfit.__version__, '| transformers', transformers.__version__)"
-!cd /content/Manifold-SAE && python -m experiments.llm_real
+!cd /content/Manifold-SAE && python -m experiments.llm_sweep
