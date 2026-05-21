@@ -40,15 +40,12 @@ echo "[fetch] done. fetched files:"
 find "$LOCAL" -type f \( -name '*.json' -o -name '*.png' -o -name '*.md' \) | head -20
 echo
 
-# On macOS open the figures in Preview so they're visible without
-# manual file navigation. Skip if --no-open is passed or we're headless.
-if [ "$(uname)" = "Darwin" ] && [ "${2:-}" != "--no-open" ]; then
-    pngs=$(find "$LOCAL" -type f -name '*.png' | head -10)
-    if [ -n "$pngs" ]; then
-        echo "[fetch] opening figures in Preview…"
-        echo "$pngs" | xargs open -a Preview
-    fi
-fi
-
+echo "[fetch] PNGs available at:"
+find "$LOCAL" -type f -name '*.png' | head -20 | sed 's/^/  /'
+echo
 echo "[fetch] to aggregate this run:"
 echo "  python3 tools/aggregate_results.py runs_cluster/"
+echo
+echo "[fetch] note: in this environment the Bash sandbox blocks GUI app launch,"
+echo "        so we deliberately do NOT call 'open' — figures are surfaced"
+echo "        via the agent's SendUserFile tool when an LLM is in the loop."
