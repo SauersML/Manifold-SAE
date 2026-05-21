@@ -212,8 +212,16 @@ class VanillaSAE(nn.Module):
 # ---------------------------------------------------------------------------
 
 
+# Bump this whenever SAE forward semantics change in a way that invalidates
+# trained weights. v2: fixed the amp²·curve(t) bug in the curve SAE training
+# forward (gamfit's `fitted` is already amp-weighted; we were multiplying
+# by mask_binary a second time). Old checkpoints had learned amp values
+# under the buggy semantic and must be re-trained.
+SAE_SCHEMA_VERSION = 2
+
+
 def _ckpt_sig(F: int, top_k: int, label: str, sae_cfg_dict: dict | None = None) -> dict:
-    sig = {"label": label, "F": F, "top_k": top_k}
+    sig = {"label": label, "F": F, "top_k": top_k, "schema": SAE_SCHEMA_VERSION}
     if sae_cfg_dict is not None:
         sig["n_basis"] = sae_cfg_dict.get("n_basis")
         sig["intrinsic_rank"] = sae_cfg_dict.get("intrinsic_rank")
@@ -572,6 +580,7 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     # structural config, just return the saved result and skip everything.
     eval_cache_path = out_dir / f"eval_F{F}.json"
     eval_sig = {
+        "schema": SAE_SCHEMA_VERSION,
         "F": F, "top_k": top_k, "n_steps_vanilla": cfg.n_steps_vanilla,
         "n_steps_curve": cfg.n_steps_curve, "batch_size_curve": bsc,
         "n_basis": cfg.sae_n_basis, "intrinsic_rank": cfg.sae_intrinsic_rank,

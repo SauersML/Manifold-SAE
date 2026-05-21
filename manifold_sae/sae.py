@@ -90,6 +90,9 @@ class ManifoldSAEOutput:
     monotonicity_loss: torch.Tensor
 
 
+_SAE_SCHEMA_VERSION = 2  # bump when forward semantics change → invalidates checkpoints
+
+
 def _soft_rescale_positions(
     z_raw: torch.Tensor,
     beta: float = 10.0,
@@ -97,6 +100,7 @@ def _soft_rescale_positions(
     *,
     frozen_min: torch.Tensor | None = None,
     frozen_max: torch.Tensor | None = None,
+    weights: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Smooth min-max normalization of unbounded scalar logits to [0, 1].
 
@@ -113,6 +117,20 @@ def _soft_rescale_positions(
     """
     if frozen_min is not None and frozen_max is not None:
         soft_min, soft_max = frozen_min, frozen_max
+    elif weights is not None:
+        # Firing-weighted soft min/max: rescale stats are computed using
+        # only positions where the feature actually fires. Without this,
+        # non-firing positions dominate the min/max for sparse features
+        # (most positions are noise for that feature). Numerically:
+        # logsumexp(β·z + log(w)) is equivalent to soft-max over the
+        # positions weighted by w. Dead features (weights ≈ 0 everywhere)
+        # fall back to the default [0, 1] range.
+        log_w = torch.log(weights.clamp(min=1e-6))
+        soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw + log_w, dim=0)
+        soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw + log_w, dim=0)
+        active = weights.sum(dim=0) > 1e-6
+        soft_min = torch.where(active, soft_min, torch.zeros_like(soft_min))
+        soft_max = torch.where(active, soft_max, torch.ones_like(soft_max))
     else:
         soft_max = (1.0 / beta) * torch.logsumexp(beta * z_raw, dim=0)
         soft_min = -(1.0 / beta) * torch.logsumexp(-beta * z_raw, dim=0)
@@ -192,9 +210,9 @@ class ManifoldSAE(nn.Module):
             )
             return self._forward_inference(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
 
-        positions, soft_min, soft_max = _soft_rescale_positions(z_raw)
-        # Stash on `self` so update_snapshot can pick them up after the
-        # forward pass without re-running encoder math.
+        # Firing-weighted soft min/max so the rescale is dominated by
+        # positions where the feature actually fires.
+        positions, soft_min, soft_max = _soft_rescale_positions(z_raw, weights=mask_binary.detach())
         self._last_soft_min = soft_min.detach()
         self._last_soft_max = soft_max.detach()
         return self._forward_training(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
@@ -373,13 +391,35 @@ class ManifoldSAE(nn.Module):
             out = self(reference_batch)
             self.B_locked.copy_(out.coefficients.detach().to(torch.float64))
             self.lam_locked.copy_(out.lam.detach().to(torch.float64))
-            # Freeze the per-feature soft-rescale stats captured during the
-            # forward pass on the reference batch. Without this, inference
-            # would re-derive a different (min, max) per inference batch and
-            # the locked B would be consulted at the wrong positions.
             self.soft_min_locked.copy_(self._last_soft_min.detach().to(torch.float32))
             self.soft_max_locked.copy_(self._last_soft_max.detach().to(torch.float32))
             self.has_snapshot.fill_(True)
+
+            # Self-test: training-mode recon and locked-mode recon on the
+            # same snapshot batch MUST agree. If they don't, the locked
+            # path has a bug (e.g. the gamfit-fitted-includes-by issue we
+            # had); fail loudly here rather than silently report wrong
+            # locked MSE downstream.
+            training_recon = out.reconstruction.detach()
+            self.inference_mode = True
+            try:
+                with torch.no_grad():
+                    locked_out = self(reference_batch)
+                    locked_recon = locked_out.reconstruction
+                    diff = (training_recon - locked_recon).abs().max().item()
+                    ref_scale = training_recon.abs().mean().clamp(min=1e-6).item()
+                    rel = diff / ref_scale
+                    if rel > 1e-3:
+                        raise RuntimeError(
+                            f"update_snapshot self-test FAILED: training and locked "
+                            f"reconstructions diverged by max_abs={diff:.4e} "
+                            f"(relative to ref_scale {ref_scale:.4e}: {rel:.4e}). "
+                            f"This means the locked forward path's math differs from "
+                            f"the training path — locked MSE will be wrong. Likely "
+                            f"a regression in `_forward_inference`."
+                        )
+            finally:
+                self.inference_mode = was_inference_mode
         finally:
             self.train(was_training)
             self.inference_mode = was_inference_mode
