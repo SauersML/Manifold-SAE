@@ -25,6 +25,7 @@ that's the head-to-head LLM-applicability proof at scale.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -82,6 +83,17 @@ SCENARIOS = [
         sparsity_per_token=8, n_samples=60_000,
         sae_features=64, top_k=12,
         n_steps=6000, batch_size=256, lr=1e-3,
+        n_basis=12, intrinsic_rank=4,
+    ),
+    # LM-scale-ish: D matches Qwen2.5-0.5B's hidden size; F matches what
+    # a real SAE would use at this width. Designed to exercise B200
+    # GEMM, not just CPU REML — bigger batch, more steps, denser data.
+    Scenario(
+        name="xlarge",
+        d_ambient=896, n_curve_features=128, n_curve_anchors=64,
+        sparsity_per_token=12, n_samples=120_000,
+        sae_features=128, top_k=16,
+        n_steps=8000, batch_size=512, lr=1e-3,
         n_basis=12, intrinsic_rank=4,
     ),
 ]
@@ -206,7 +218,12 @@ def hungarian_chamfer(gt_curves: np.ndarray, learned_curves: np.ndarray) -> dict
 def run_scenario(s: Scenario, seed: int = 0, output_dir: str = "runs/REALISTIC") -> dict:
     torch.manual_seed(seed); np.random.seed(seed)
     out_dir = Path(output_dir) / s.name; out_dir.mkdir(parents=True, exist_ok=True)
-    device = torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if os.environ.get("MSAE_REQUIRE_CUDA") == "1" and device.type != "cuda":
+        raise RuntimeError(
+            f"MSAE_REQUIRE_CUDA=1 but torch.cuda.is_available()=False "
+            f"(torch.version.cuda={torch.version.cuda!r})."
+        )
     print(f"\n=========== Scenario: {s.name} ===========", flush=True)
     print(f"  D={s.d_ambient}  GT_features={s.n_curve_features}  anchors={s.n_curve_anchors}", flush=True)
     print(f"  sparsity/token={s.sparsity_per_token}  samples={s.n_samples}", flush=True)
@@ -291,7 +308,8 @@ def run_scenario(s: Scenario, seed: int = 0, output_dir: str = "runs/REALISTIC")
 
 
 def main():
-    output_dir = "runs/REALISTIC"
+    # Env override lets a Heimdall submitter redirect outputs.
+    output_dir = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "runs/REALISTIC")
     all_reports = {}
     for s in SCENARIOS:
         all_reports[s.name] = run_scenario(s, seed=0, output_dir=output_dir)
