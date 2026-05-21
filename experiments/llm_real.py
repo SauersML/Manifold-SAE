@@ -27,17 +27,12 @@ from torch import nn
 
 
 # ---------------------------------------------------------------------------
-# Bypass gamfit's CUDA dual-stack safety check on Colab.
-#
-# Colab maps both /usr/local/cuda-12.8/.../libcublas.so.12.8.4.1 and the
-# torch-bundled .../nvidia/cublas/lib/libcublas.so.12. The two have the same
-# SONAME so glibc's dlopen treats them as different files; gamfit's defensive
-# check then refuses to load Rust. In practice gamfit's Rust never crosses
-# cuBLAS handles with PyTorch's, so bypassing the check is safe.
-#
-# Must patch BOTH `gamfit._cuda` (the source) and `gamfit._binding` (which
-# does `from ._cuda import assert_no_cuda_library_conflicts` at import time,
-# capturing the reference). Clear the lru_cache on rust_module too.
+# Transitional bridge: bypass gamfit's CUDA dual-stack safety check on
+# environments (Colab, several cloud images) that have both /usr/local/cuda*
+# and the torch-bundled nvidia/cublas-cu12 reachable. The proper fix is
+# upstream in gam (commit downgrades the assert to a once-per-process
+# warning). Until a new gamfit wheel containing that fix lands on PyPI,
+# this shim no-ops the check so `pip install gamfit` from PyPI keeps working.
 def _bypass_gamfit_cuda_check() -> None:
     import gamfit._cuda as _gc
 
