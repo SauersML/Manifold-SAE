@@ -58,11 +58,16 @@ class SweepConfig:
     # F (and the default Qwen 0.5B layer-12 signal) both architectures saturate
     # at >99% explained variance; the architectural difference only shows up
     # where atoms are scarce and each one has to compress.
-    F_values: tuple[int, ...] = (16, 32, 64, 128, 256, 512)
+    # Override via MSAE_F_VALUES="16,32,64,128" for cluster experiments.
+    F_values: tuple[int, ...] = tuple(
+        int(x) for x in os.environ.get("MSAE_F_VALUES", "16,32,64,128,256,512").split(",")
+    )
     # Aggressive sparsity. At F=16 with TopK=2, both SAEs are starved — the
-    # comparison stops being saturated and becomes diagnostic.
-    top_k_min: int = 2
-    top_k_ratio: float = 1.0 / 128.0
+    # comparison stops being saturated and becomes diagnostic. For
+    # overcomplete-dictionary regimes set MSAE_TOPK_RATIO=0.02 (2% sparsity,
+    # standard SAE practice).
+    top_k_min: int = int(os.environ.get("MSAE_TOPK_MIN", "2"))
+    top_k_ratio: float = float(os.environ.get("MSAE_TOPK_RATIO", str(1.0 / 128.0)))
 
     # Architecture
     sae_n_basis: int = 10
