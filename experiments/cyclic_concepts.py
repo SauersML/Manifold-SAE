@@ -357,10 +357,10 @@ def plot_task_circle(task: str, X_n: torch.Tensor, result_idx: list[int],
     centers = sae_c.centers
     import gamfit.torch as gt
     phi = gt.duchon_basis_1d(t_grid, centers, m=2, periodic=False).cpu().numpy()
-    B = sae_c.B_locked[best_atom].cpu().numpy()           # (K, R)
+    B = sae_c.B_locked[best_atom].detach().cpu().numpy()           # (K, R)
     g = phi @ B                                            # (100, R)
     # Lift to ambient via the atom's directions
-    dirs = sae_c.directions[best_atom].cpu().numpy()      # (D, R)
+    dirs = sae_c.directions[best_atom].detach().cpu().numpy()      # (D, R)
     g_ambient = g @ dirs.T                                 # (100, D)
     g_proj = (g_ambient - centroids.mean(0, keepdims=True)) @ Vt[:3].T
 
