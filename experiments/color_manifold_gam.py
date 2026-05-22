@@ -288,68 +288,30 @@ def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple
 
 
 # =============================================================================
-# Smoothing-parameter selection via GCV + golden-section search
+# Smoothing-parameter selection via gamfit's REML primitive
 # =============================================================================
 def reml_fit(Phi: np.ndarray, Z: np.ndarray, P: np.ndarray,
-              init_log_lambda: float = 0.0,
-              lo: float = -12.0, hi: float = 12.0,
-              n_steps: int = 35) -> tuple[np.ndarray, float]:
+              init_log_lambda: float = 0.0) -> tuple[np.ndarray, float]:
     """Fit coefficients B (K, R) for the multi-output smooth Z = Phi · B + ε
-    with penalty λ · β' P β. The smoothing parameter log λ ∈ [lo, hi] is
-    selected by GCV — closely related to REML for Gaussian fits, with a
-    cleaner monotone-bracket-friendly objective:
+    with penalty λ · β' P β. The smoothing parameter λ is chosen by
+    **gamfit's closed-form REML** (Rust core) — the principled criterion
+    for Gaussian smooths, strictly better than the GCV/Newton hand-rolls.
 
-        GCV(λ) = N · ‖Z − Z_hat‖² / (N − tr H(λ))²
-        tr H  = K − λ · tr(A⁻¹ P),    A = Phi'Phi + λP
-
-    Minimization by golden-section search over log λ. Robust: monotone
-    bracket avoids the saddle/oscillation issues a Newton step on the
-    REML score has near collinear bases.
-
-    `init_log_lambda` is retained for API back-compat — golden-section
-    doesn't use it, but downstream call sites pass it.
+    Inputs are numpy; conversion to torch + back is local. The penalty is
+    symmetrized for safety (gamfit's REML solver requires symmetry).
     """
-    _ = init_log_lambda
-    N, K = Phi.shape
-    PhitPhi = Phi.T @ Phi
-    PhitZ = Phi.T @ Z
-    eye_jitter = 1e-10 * np.eye(K)
-
-    def gcv(log_lambda: float) -> float:
-        lam = math.exp(log_lambda)
-        A = PhitPhi + lam * P + eye_jitter
-        try:
-            B = np.linalg.solve(A, PhitZ)
-            tr_AinvP = float(np.trace(np.linalg.solve(A, P)))
-        except np.linalg.LinAlgError:
-            return float("inf")
-        tr_H = K - lam * tr_AinvP                                # effective dof
-        denom = max(N - tr_H, 1e-6) ** 2
-        Z_hat = Phi @ B
-        ss_res = float(((Z - Z_hat) ** 2).sum())
-        return N * ss_res / denom
-
-    # Golden-section search over [lo, hi]
-    GOLDEN = (math.sqrt(5.0) - 1.0) / 2.0                         # 1/φ ≈ 0.618
-    a, b = lo, hi
-    c = b - GOLDEN * (b - a)
-    dpt = a + GOLDEN * (b - a)
-    fc, fd = gcv(c), gcv(dpt)
-    for _ in range(n_steps):
-        if fc < fd:
-            b = dpt; dpt = c; fd = fc
-            c = b - GOLDEN * (b - a); fc = gcv(c)
-        else:
-            a = c; c = dpt; fc = fd
-            dpt = a + GOLDEN * (b - a); fd = gcv(dpt)
-        if abs(b - a) < 1e-3:
-            break
-    log_lambda_opt = 0.5 * (a + b)
-
-    lam = math.exp(log_lambda_opt)
-    A = PhitPhi + lam * P + eye_jitter
-    B = np.linalg.solve(A, PhitZ)
-    return B, log_lambda_opt
+    import gamfit.torch as gt
+    P_sym = 0.5 * (P + P.T)
+    init_lam = float(math.exp(init_log_lambda)) if init_log_lambda is not None else None
+    x_t = torch.from_numpy(np.ascontiguousarray(Phi, dtype=np.float64))
+    y_t = torch.from_numpy(np.ascontiguousarray(Z, dtype=np.float64))
+    p_t = torch.from_numpy(np.ascontiguousarray(P_sym, dtype=np.float64))
+    with torch.no_grad():
+        out = gt.gaussian_reml_fit(x_t, y_t, p_t, init_lambda=init_lam)
+    B = out.coefficients.detach().cpu().numpy()
+    lam = float(out.lam.item())
+    log_lambda = math.log(max(lam, 1e-30))
+    return B, log_lambda
 
 
 def ridge_fit(Phi: np.ndarray, Z: np.ndarray, alpha: float = 1e-3) -> np.ndarray:
