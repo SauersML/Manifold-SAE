@@ -446,8 +446,8 @@ def probe_classification(sae, model_name: str, layer: int, cfg: Config, device) 
     n_train = int(0.8 * len(y))
     tr, te = perm[:n_train], perm[n_train:]
 
-    probe_raw = LogisticRegression(max_iter=500, multi_class="multinomial").fit(raw_features[tr], y[tr])
-    probe_sae = LogisticRegression(max_iter=500, multi_class="multinomial").fit(sae_features[tr], y[tr])
+    probe_raw = LogisticRegression(max_iter=500).fit(raw_features[tr], y[tr])
+    probe_sae = LogisticRegression(max_iter=500).fit(sae_features[tr], y[tr])
     return {
         "concept": cfg.concept,
         "n_classes": len(set(y)),
@@ -490,10 +490,17 @@ def main() -> int:
     sae = load_curve_sae(Path(cfg.checkpoint), D, device)
     print(f"[setup] loaded SAE F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
 
+    # Save partial results after each benchmark so a later crash doesn't
+    # lose the earlier work.
+    accumulated = {"config": asdict(cfg)}
+    def save():
+        (out_dir / "results.json").write_text(json.dumps(accumulated, indent=2, default=float))
+
     print("\n=== Benchmark 1: polysemy ===", flush=True)
     poly = polysemy_per_atom(sae, X_n, tokens, cfg, device)
     print(f"  n_analyzed={poly['n_analyzed']}  monosemantic={poly['n_monosemantic']}  "
           f"polysemantic={poly['n_polysemantic']}  mean_polysemy_k={poly['mean_polysemy']:.2f}", flush=True)
+    accumulated["polysemy"] = poly; save()
 
     print("\n=== Benchmark 2: cross-layer transfer ===", flush=True)
     other_layers_X_n = {L: (X_layers[L] - X_layers[L].mean(0, keepdim=True)) /
@@ -503,23 +510,26 @@ def main() -> int:
     for L, r in xl.items():
         print(f"  layer {L}: mean|ρ|={r['mean_abs_corr']:.3f}  "
               f"atoms above 0.3: {r['n_atoms_above_0.3']}/{r['n_atoms_evaluated']}", flush=True)
+    accumulated["cross_layer_transfer"] = xl; save()
 
     print("\n=== Benchmark 3: adversarial atom maximization ===", flush=True)
-    adv = adversarial_max(sae, cfg.model_name, cfg.layer, cfg, device)
-    print(f"  optimized {len(adv.get('per_atom', []))} atoms", flush=True)
+    try:
+        adv = adversarial_max(sae, cfg.model_name, cfg.layer, cfg, device)
+        print(f"  optimized {len(adv.get('per_atom', []))} atoms", flush=True)
+        accumulated["adversarial_max"] = adv; save()
+    except Exception as e:
+        print(f"  [skipped] {e}", flush=True)
+        accumulated["adversarial_max"] = {"error": str(e)}; save()
 
     print("\n=== Benchmark 4: probe classification (magnitude) ===", flush=True)
-    probe = probe_classification(sae, cfg.model_name, cfg.layer, cfg, device)
-    print(f"  raw acc: train={probe['accuracy_raw_train']:.3f}  test={probe['accuracy_raw_test']:.3f}", flush=True)
-    print(f"  SAE acc: train={probe['accuracy_sae_train']:.3f}  test={probe['accuracy_sae_test']:.3f}", flush=True)
-
-    (out_dir / "results.json").write_text(json.dumps({
-        "config": asdict(cfg),
-        "polysemy": poly,
-        "cross_layer_transfer": xl,
-        "adversarial_max": adv,
-        "probe_classification": probe,
-    }, indent=2, default=float))
+    try:
+        probe = probe_classification(sae, cfg.model_name, cfg.layer, cfg, device)
+        print(f"  raw acc: train={probe['accuracy_raw_train']:.3f}  test={probe['accuracy_raw_test']:.3f}", flush=True)
+        print(f"  SAE acc: train={probe['accuracy_sae_train']:.3f}  test={probe['accuracy_sae_test']:.3f}", flush=True)
+        accumulated["probe_classification"] = probe; save()
+    except Exception as e:
+        print(f"  [skipped] {e}", flush=True)
+        accumulated["probe_classification"] = {"error": str(e)}; save()
     print(f"\n[done] {out_dir / 'results.json'}", flush=True)
     return 0
 

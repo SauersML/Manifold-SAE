@@ -145,7 +145,9 @@ def dbscan_cluster_features(firing: np.ndarray, cfg: Config) -> dict:
     cols = firing / (np.linalg.norm(firing, axis=0, keepdims=True) + 1e-9)
     sim = cols.T @ cols                                            # (F, F)
     # Convert to distance: 1 - |sim| (treat negative correlations as similar too — same axis).
-    dist = 1.0 - np.abs(sim)
+    # Clip to [0, ∞) — sklearn DBSCAN's precomputed-distance check rejects
+    # negatives, and float32 noise on unit-norm cosines can give |sim| > 1.
+    dist = np.clip(1.0 - np.abs(sim), 0.0, None)
     np.fill_diagonal(dist, 0.0)
     # DBSCAN on the precomputed distance
     db = DBSCAN(eps=cfg.dbscan_eps, min_samples=cfg.dbscan_min_samples,
