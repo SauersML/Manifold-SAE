@@ -25,7 +25,9 @@ Optional values (with defaults)
                               Manifold-SAE GitHub URL — safe to bake in)
   MSAE_NODE                   target node label (default: empty — must
                               be set by site config)
-  MSAE_GPUS                   GPU count to request (default: 0)
+  MSAE_GPUS                   GPU count to request (default: 1; Manifold-SAE
+                              is single-GPU so requesting 8 just serializes
+                              the queue without speeding anything up)
   MSAE_DEFAULT_MINUTES        estimated_minutes default (default: 120)
 
 Use ``--dry-run`` to print the JSON spec without submitting. Anyone
@@ -166,7 +168,9 @@ def main() -> int:
     working_dir = resolve("working_dir", args.working_dir, "MSAE_WORKING_DIR", config)
     node = resolve("node", args.node, "MSAE_NODE", config, default="")
     git_url = resolve("git_url", args.git_url, "MSAE_GIT_URL", config, default=DEFAULT_GIT_URL)
-    gpus_str = resolve("gpus", str(args.gpus) if args.gpus is not None else None, "MSAE_GPUS", config, default="0")
+    # Default gpus=1 (single-GPU Manifold-SAE; requesting more just serializes
+    # the cluster queue with no actual benefit).
+    gpus_str = resolve("gpus", str(args.gpus) if args.gpus is not None else None, "MSAE_GPUS", config, default="1")
     minutes_str = resolve("estimated_minutes",
                           str(args.estimated_minutes) if args.estimated_minutes is not None else None,
                           "MSAE_DEFAULT_MINUTES", config, default="120")
