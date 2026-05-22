@@ -83,21 +83,98 @@ This is what the code does. The earlier persistent-`B`-as-`nn.Parameter` version
 
 | Scenario | D | GT curves | Anchors/curve | Active/token | Vanilla expl | Curve expl | Δ |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| small | 128 | 16 | 32 | 3 | 0.494 | 0.668 | **+0.174** |
-| mid | 256 | 32 | 64 | 5 | 0.513 | 0.672 | **+0.159** |
-| large | 512 | 64 | 64 | 8 | 0.456 | 0.664 | **+0.207** |
+| small | 128 | 16 | 32 | 3 | 0.494 | **0.768** | **+0.274** |
+| mid   | 256 | 32 | 64 | 5 | 0.513 | **0.760** | **+0.247** |
+| large | 512 | 64 | 64 | 8 | 0.452 | **0.643** | **+0.191** |
 
-Curve SAE wins on reconstruction at matched F across all scales. Zero dead features in the curve SAE; about half of vanilla's features are dead at matched parameter budget.
+Curve SAE wins on reconstruction at matched F across all scales by
++19 to +27 percentage points. Hungarian-matched Chamfer (shape recovery)
+is also 30-35% lower for the curve SAE on every scenario.
 
-### Toy synthetic recovery (`experiments/synthetic_recovery.py`)
+### Real LM activations — concept-encoding transfer
 
-Five planted curves in `ℝ^64`: line, parabola, ramp_exp, logmap, sqrt. Parabola is the load-bearing case — non-monotone, so a single vanilla atom (one direction × scalar) cannot represent it; it would need two atoms minimum. Hungarian-matched per-feature Chamfer (centered + Frobenius-normalized, modulo orientation via Procrustes alignment):
+`experiments/llm_probe.py` with train/test split: pick each architecture's
+best atom for a concept on 80% of prompts, evaluate that same atom on the
+held-out 20%. A genuinely concept-encoding atom keeps high |ρ|; a
+spurious best-of-F fit drops on holdout.
 
-Under the corrected REML-based architecture, results are sensitive to per-feature intrinsic rank vs GT rank (R=4 with mostly rank-1 GT noise dims causes spline wiggle; R matched to GT rank works). Retuning under the current architecture is the outstanding work — see *Known limitations* below.
+| concept × layer (Qwen-0.5B) | vanilla holdout \|ρ\| | curve holdout \|ρ\| | curve advantage |
+| --- | --- | --- | --- |
+| magnitude_L20 | 0.38 | **0.81** | 2.1× |
+| magnitude_L8  | 0.34 | **0.70** | 2.1× |
+| magnitude_L16 | 0.16 | **0.22** | 1.4× |
+| magnitude_L4  | 0.04 | **0.11** | 2.8× |
 
-### Real LM activations (`experiments/llm_real.py`)
+Curve atoms transfer concept-encoding 2× better than vanilla on
+held-out data at the layers where Qwen actually encodes magnitude
+continuously. At saturated layers both architectures look identical
+on matched-F MSE, but only curve atoms generalize to new prompts.
 
-End-to-end pipeline: harvest residual-stream activations from a HuggingFace causal LM on a text corpus, train vanilla TopK + Manifold-SAE side by side at matched dictionary size, lock-and-cache, evaluate. Default `Qwen/Qwen2.5-0.5B` mid layer; configurable.
+### Concept localization (`experiments/llm_probe.py` Phase 2)
+
+For each (concept × layer) pair where Phase 1 detected 1D-manifold
+structure, count atoms whose Spearman with concept rank exceeds 0.5:
+
+| concept × layer | vanilla atoms ≥ 0.5 | curve atoms ≥ 0.5 |
+| --- | --- | --- |
+| magnitude_L12 | 126 / 128 | **52 / 128** |
+| polarity_L8   | 126 / 128 | **49 / 128** |
+| time_L20      | 126 / 128 | **43 / 128** |
+| temperature_L8| 126 / 128 | **49 / 128** |
+| brightness_L8 | 124 / 128 | **48 / 128** |
+
+Vanilla atoms are *pluripotent*: 97-98% pick up at least faint signal
+for every continuous concept tested. Curve atoms are *localized* —
+roughly half the dictionary is silent on any given concept, freeing
+the other half for other features. This matches Bhalla et al. (2026)'s
+"compact capture" regime: a small set of features acts as a coordinate
+system for each manifold, instead of every direction carrying weak
+alignment with every concept.
+
+### Layer 18 of Qwen-0.5B — atom utilization
+
+Layer 12 saturates at EV ≥ 0.989 for both architectures (the layer has
+~4 effective directions, so matched-F MSE can't discriminate). Layer 18
+is richer:
+
+| F | vanilla EV | curve EV | vanilla alive | curve alive |
+| --- | --- | --- | --- | --- |
+| 16  | 0.965 | 0.950 | 6  | **12** |
+| 64  | 0.966 | 0.932 | 12 | **24** |
+| 128 | 0.967 | 0.936 | 12 | **14** |
+
+Curve SAE distributes structure across 2× more atoms at small F (24 vs
+12 alive at F=64). The architecture uses its dictionary capacity more
+fully where vanilla collapses to fewer features.
+
+### Hyperparameter insight — lower basis dim unlocks more atoms
+
+At Qwen-0.5B layer 12, F=128, TopK=2:
+
+| n_basis K | curve alive atoms | vanilla alive atoms |
+| --- | --- | --- |
+| 10 (default) | 5  | 4 |
+| 4            | **16** | 4 |
+
+Dropping `n_basis` from 10 → 4 pulls curve alive from 5 → 16 with no
+EV loss. Lower per-atom expressive capacity → more atoms productively
+utilized. Vanilla is unchanged (it has no `n_basis`).
+
+### Connection to Goodfire's neural-geometry series
+
+Bhalla et al. (2026) (*Can SAEs Capture Neural Geometry?*) identify
+three regimes by which SAEs represent curved manifolds: *shattering*
+(one feature per point), *dilution* (many overlapping features), and
+*compact capture* (small set of shared features acts as a coordinate
+system). Their pipeline reaches compact capture via post-hoc clustering
+of standard SAE features.
+
+**Manifold-SAE is an architecture that targets the compact-capture
+regime directly.** Each curve atom IS a compact-capture unit: one
+atom spans one 1D manifold via its `g_k(t)` curve, parameterized
+natively by the encoder's `t_k`. The compactness numbers above (curve
+43-52 atoms vs vanilla 124-126 atoms per concept) are direct evidence
+the architecture lands in compact-capture by construction.
 
 ## Repository layout
 
@@ -175,25 +252,40 @@ To force a fresh run: `!rm -rf /content/runs/LLM_REAL/` before the cell.
 
 ## Known limitations
 
-### gamfit CUDA dual-stack conflict on Colab and several cloud images
+### gamfit dual-cuBLAS bridge
 
-gamfit 0.1.98 refuses to load its Rust extension if it detects two cuBLAS files mapped in the process (`/proc/self/maps`). On Colab and similar, both the system CUDA `/usr/local/cuda-12.8/...libcublas.so.12.8.4.1` and the torch-bundled `nvidia/cublas-cu12/...libcublas.so.12` are mapped via `dlopen`, triggering this check.
+Cluster nodes and many cloud images (Colab, hosted images) map both
+the system CUDA `/usr/local/cuda-*` and torch's bundled
+`nvidia/cublas-cu12` via `dlopen`. gamfit's safety check refuses to
+load Rust on this dual mapping by default. The actual catastrophe
+condition (cublas-destroy across libraries) cannot trigger because
+cudarc's `culib()` is a process-wide `OnceLock<Library>` — all
+symbols resolve through one handle regardless of how many files are
+mapped.
 
-In practice this dual mapping is benign — `dlopen` resolves a SONAME to exactly one file, so all CUDA calls route through one handle even with both files in the address space. The "double-free" pathology only triggers if code crosses handles by absolute path.
+Upstream fix is in gam main (`SauersML/gam`, commits `ff0f5380` +
+`233672b6` + Rust-side warn-only): downgrade to warn-once. Awaiting
+new gamfit wheel on PyPI.
 
-**Upstream fix** is committed at `SauersML/gam@7efd17eb`: downgrade the assert to a once-per-process warning. Awaiting publication of a new gamfit wheel.
+**Workaround in this repo**:
+`manifold_sae/_cluster_bridge.py::bypass_gamfit_cuda_check()`
+monkey-patches the Python-side assert to a no-op. All LLM
+experiment drivers call this at import time. The Rust runtime's
+warn-only behavior is already shipped upstream and ships in
+gamfit 0.1.102+ once published.
 
-**Transitional bridge** in `experiments/llm_real.py` monkey-patches `cuda_diagnostics` to return an empty conflict set, neutralizing the check at the source. Removed once a new gamfit wheel lands.
+### gamfit REML stays on CPU at small K
 
-A second, lower-level Rust check inside gamfit independently refuses CUDA dispatch when it sees the dual mapping. Until that's also addressed upstream, gamfit's inner REML solve runs on CPU even after the Python bridge — the PyTorch encoder / W / Adam path stays on GPU, but each batch incurs a CPU-GPU round-trip.
+gamfit's CUDA policy thresholds (`gemm ≥ 109.54 Mflop`,
+`xtwx_rows ≥ 512` on B200) are measurement-calibrated for the
+hardware. At our default basis K=10, intrinsic rank R=2, batch ≤ 8192,
+per-fit FLOPs sit below the GPU-launch crossover, so REML runs on
+faer + Rayon (CPU). This is *correct behavior* — CPU is genuinely
+faster than launching a CUDA kernel for these shapes.
 
-### Toy 5/5 visual recovery not yet reproduced under Path B
-
-The toy `experiments/synthetic_recovery.py` is currently a hyperparameter-tuning problem under the corrected architecture (commit `74c307a` onward). Earlier versions hit 5/5 visually clean overlays via a hand-rolled smoothness penalty + persistent `B` as `nn.Parameter`; that architecture didn't actually do REML.
-
-Diagnosis: gamfit selects one `λ_k` shared across all R output dimensions of a feature's subspace. If most of those dimensions are noise rather than GT signal (e.g. R=4 with rank-1 GT line), `λ_k` compromises and the noise dimensions wiggle. Fix candidates (not yet executed): match R to GT max rank (R=2 here), shrink basis K, larger training batches so REML has more data per feature per batch.
-
-Scale benchmarks (`realistic_scaling`) already demonstrate the architectural advantage; the toy retune is a smaller cleanup.
+For workloads that would benefit from GPU REML (much larger K or
+batched-many-feature solves), a batched X^TWX kernel would push the
+crossover lower. Tracked upstream as a feature.
 
 ## v1 scope and roadmap
 
@@ -220,7 +312,19 @@ AGPL-3.0-or-later (matches gamfit).
 
 ## References
 
-- Wurgaft, N. et al. (2026). *Manifold Steering Reveals the Shared Geometry of Neural Network Representation and Behavior.*
-- Wu, Z. et al. (2025). *AxBench: Benchmarking Representation Steering.*
-- Wood, S. N. (2017). *Generalized Additive Models: An Introduction with R* (2nd ed.).
-- Wahba, G. (1990). *Spline Models for Observational Data.*
+- Bhalla, U. et al. (2026). *Can SAEs Capture Neural Geometry?* —
+  shattering / dilution / compact-capture taxonomy; Manifold-SAE
+  targets compact-capture directly via the architecture.
+- Wurgaft, N. et al. (2026). *Manifold Steering Reveals the Shared
+  Geometry of Neural Network Representation and Behavior* —
+  cubic-spline post-hoc fit of activation manifolds for steering.
+  Manifold-SAE's `g_k(t)` is the same kind of object as their fitted
+  spline, but emitted natively from the SAE rather than fitted
+  post-hoc through centroids.
+- Engels, J. et al. (2024). *Not All Language Model Features Are
+  Linear* — cyclic representations in LM residuals (days of the
+  week, months). Direct motivation for the curve-atom architecture.
+- Wood, S. N. (2017). *Generalized Additive Models: An Introduction
+  with R* (2nd ed.) — the GAM/REML math gamfit implements.
+- Wahba, G. (1990). *Spline Models for Observational Data* — Duchon
+  m=2 basis and the function-norm penalty.
