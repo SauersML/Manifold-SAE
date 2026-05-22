@@ -35,11 +35,19 @@ Qwen2.5-0.5B residuals at layer 12, wikitext-2 train, 80K tokens.
 | F | TopK | vanilla EV | curve EV | locked EV | vanilla alive | curve alive |
 | --- | --- | --- | --- | --- | --- | --- |
 | 16 | 2 | 0.988 | 0.989 | 0.989 | 3 | 4 |
-| 32 | 2 | 0.988 | 0.989 | 0.988 | 3 | 9 |
+| 32 | 2 | 0.989 | 0.989 | 0.988 | 4 | 6 |
 | 64 | 2 | 0.989 | 0.988 | 0.988 | 4 | 8 |
-| 128 | 2 | 0.988 | 0.989 | 0.989 | 4 | 4 |
-| 256 | 2 | 0.989 | 0.989 | 0.989 | _pending_ | _pending_ |
-| 512 | 4 | _running_ | _running_ | _running_ | _running_ | _running_ |
+| 128 | 2 | 0.989 | 0.989 | 0.989 | 4 | 5 |
+| 256 | 2 | 0.989 | 0.989 | 0.988 | 4 | 9 |
+| 512 | 4 | 0.990 | 0.988 | 0.987 | 14 | 13 |
+
+**Final sweep summary** (run `fd4b5d7aba68` complete): all EV values are
+between 0.987 and 0.990 across both architectures — saturated regime
+confirmed end-to-end. Curve SAE keeps more atoms alive than vanilla at
+small F (4 alive vs 3 at F=16; 9 vs 4 at F=256), suggesting it can
+spread the same explained variance across more atoms. At F=512 (which
+bumped TopK from 2 to 4), both architectures suddenly find ~13 alive
+atoms — the TopK was the binding constraint, not the dictionary size.
 
 **Both architectures saturate at >98% EV across all F.** This layer of
 this model has roughly 4 dominant directions; both architectures find
