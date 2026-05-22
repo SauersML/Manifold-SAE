@@ -210,9 +210,7 @@ experiments/                  Runnable experiment drivers (Config dataclass at t
   llm_real.py                 LM activations + head-to-head + lock-and-cache
   llm_like_stress_test.py     Mixed point + curve atoms stress test
   llm_curve_sae.py            Standalone curve SAE on captured LM activations
-  llm_activations.py          Older activation-pipeline scaffold
   baselines_linear_sae.py     Bare-bones TopK SAE for sanity-check baselines
-  steering_eval.py            Skeleton for steering-along-curve evaluation
 
 tests/                        pytest suite — gradcheck, smoke, synthetic recovery
 

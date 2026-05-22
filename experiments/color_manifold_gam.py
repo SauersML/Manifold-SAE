@@ -154,6 +154,16 @@ class Config:
     init_log_lambda: float = 0.0
     output_dir: str = os.environ.get("MANIFOLD_SAE_OUTPUT_DIR", "/content/runs/COLOR_MANIFOLD_GAM")
     save_residuals: bool = True
+    # When set, skip local model loading + forward pass entirely and load the
+    # (N_prompts, D) residual matrix from disk. Accepted formats:
+    #   .npy — bare array of shape (N, D)
+    #   .npz — dict with key 'X' of shape (N, D) (this is what
+    #          color_geometry.py's incremental cache writes)
+    # Used to point at /v1/encode harvests from cogito-probed (or any other
+    # external model). With this set, ``layers`` must be a single layer
+    # matching the harvest's layer; analysis runs on however many full colors
+    # the cache covers (we floor to floor(N / n_templates)).
+    harvest_from: str = os.environ.get("MSAE_HARVEST_FROM", "")
 
 
 def _find_blocks(model) -> nn.ModuleList:
@@ -201,81 +211,44 @@ def lattice_centers(per_side: int) -> np.ndarray:
     return np.stack([R.flatten(), G.flatten(), B.flatten()], axis=1)  # (K, 3)
 
 
-def _duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
-    """Polyharmonic m=2 kernels per dim. Used for the DESIGN matrix only;
-    the corresponding PSD function-norm penalty comes from gamfit's
-    `_thin_plate_penalty` (the raw kernel Gram is indefinite for d=2
-    and d=4 because `r²·log r` and `log r` are negative at small r).
-
-      d=2: phi(r) = r^2 log r
-      d=3: phi(r) = r
-      d=4: phi(r) = log r
-    Limits at r=0 are 0.
-    """
-    if d == 2:
-        out = np.zeros_like(r)
-        mask = r > 1e-12
-        out[mask] = r[mask] ** 2 * np.log(r[mask])
-        return out
-    if d == 3:
-        return r
-    if d == 4:
-        out = np.zeros_like(r)
-        mask = r > 1e-12
-        out[mask] = np.log(r[mask])
-        return out
-    raise ValueError(f"_duchon_kernel: d must be in {{2,3,4}}; got {d}")
+# gamfit ≥ 0.1.109 exposes the multi-d Duchon basis + matched function-norm
+# penalty for all d we need. No hand-rolled kernel; see duchon_basis_radial.
 
 
 def duchon_basis_radial(X: np.ndarray, centers: np.ndarray,
                           periodic: bool = False) -> tuple[np.ndarray, np.ndarray]:
-    """Radial Duchon m=2 design + matched function-norm penalty.
+    """Multi-d Duchon design + matched function-norm penalty.
 
-    d=1 path: fully delegated to gamfit (basis + matched penalty).
-    Supports `periodic=True` via gamfit's periodic Duchon.
+    All paths delegate to gamfit. gamfit requires `2(p+s) > d` for the
+    Duchon spline to be well-defined, which means m=2 only handles
+    d ∈ {1, 2, 3}. For higher d we just bump m until gamfit accepts the
+    dimensionality (higher m = smoother kernel; same Sobolev-space
+    polyharmonic-spline theory under the hood).
 
-    d ≥ 2 path: gamfit's Rust binding accepts only 1D centers for
-    `duchon_function_norm_penalty` (the multi-D penalty isn't yet
-    exposed in any public version). We build the classical RBF
-    construction: design = [kernel | null space], penalty = kernel
-    Gram on centers. For radial basis functions this Gram IS the
-    function-norm penalty (Wahba/Wood polyharmonic spline result).
-    `periodic=True` is not supported for d ≥ 2 — the Rust periodic
-    Duchon path is d=1 only.
-
-    Returns (Phi, P). Downstream consumers see them as a matched pair.
+    Returns (Phi, P) — a matched pair in the same coefficient space.
     """
     import gamfit
-    N, d = X.shape
-
-    if d == 1:
-        per_axis = (bool(periodic),)
-        # gamfit.duchon_basis: (N, d) input, returns (N, K_basis) with the
-        # kernel block + null-space columns combined per its internal
-        # parameterization.
-        X2 = X.reshape(-1, 1)
-        c2 = centers.reshape(-1, 1)
-        Phi = np.asarray(gamfit.duchon_basis(X2, c2, m=2, periodic_per_axis=per_axis))
-        P = np.asarray(gamfit.duchon_function_norm_penalty(c2, m=2, periodic_per_axis=per_axis))
-        return Phi, P
-
-    if periodic:
-        raise ValueError("periodic Duchon currently only supported for d=1 (Rust limit)")
-
-    from gamfit._api import _thin_plate_penalty
-    K = centers.shape[0]
-    r_nk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
-    Phi_kernel = _duchon_kernel(r_nk, d)
-    null = np.concatenate([np.ones((N, 1)), X], axis=1)                    # (N, d+1)
-    Phi = np.concatenate([Phi_kernel, null], axis=1)
-    # PSD function-norm penalty from gamfit (the proper m=2 thin-plate
-    # bending-energy matrix). The raw kernel Gram is indefinite for d=2
-    # and d=4 so we cannot use it as a REML penalty directly.
-    Pkk = np.asarray(_thin_plate_penalty(centers, m=2, length_scale=1.0))
-    Pkk = 0.5 * (Pkk + Pkk.T)
-    P = np.zeros((K + d + 1, K + d + 1))
-    P[:K, :K] = Pkk
-    return Phi, P
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+    if centers.ndim == 1:
+        centers = centers.reshape(-1, 1)
+    d = X.shape[1]
+    per_axis = (bool(periodic),) * d
+    last_err: Exception | None = None
+    for m in range(2, 12):
+        try:
+            Phi = np.asarray(gamfit.duchon_basis(
+                X, centers, m=m, periodic_per_axis=per_axis,
+            ))
+            P = np.asarray(gamfit.duchon_function_norm_penalty(
+                centers, m=m, periodic_per_axis=per_axis,
+            ))
+            return Phi, P
+        except Exception as exc:
+            last_err = exc
+            continue
+    raise RuntimeError(f"duchon_basis_radial: no m in [2, 12] accepted by gamfit "
+                       f"for d={d}, periodic={periodic}: {last_err}")
 
 
 def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple[np.ndarray, np.ndarray]:
@@ -446,10 +419,10 @@ def fit_unsupervised_manifold(Z: np.ndarray, d: int, cfg: Config,
         # training rows.  Floor for U_4d is 3 → 81 centers (which still
         # needs ≥ 86 training rows after the nullspace; for smaller folds
         # the caller's CV-loop will catch it and skip).
-        defaults = {1: 16, 2: 8, 3: 5, 4: 3}
+        defaults = {1: 16, 2: 8, 3: 5, 4: 3, 5: 3, 6: 2, 8: 2}
         centers_per_axis = defaults[d]
     if grid_per_axis is None:
-        grid_per_axis = {1: 200, 2: 40, 3: 20, 4: 9}[d]      # ~6.5k grid pts in 4D
+        grid_per_axis = {1: 200, 2: 40, 3: 20, 4: 9, 5: 5, 6: 4, 8: 3}[d]
 
     centers = lattice_centers_nd(centers_per_axis, d, 0.0, 1.0)
     T = init_T.copy() if init_T is not None else _initialize_T_from_pca(Z, d)
@@ -514,17 +487,127 @@ SPECS = {
     # SUPERVISED: GT axes drive the parameterization
     "L_lin_rgb": ("ridge_rgb",),
     "L_lin_hsv": ("ridge_hsv",),
+    "L_lin_lab": ("ridge_lab",),                       # CIE-Lab, perceptually uniform
+    "L_lin_luminance": ("ridge_luminance",),           # single-axis brightness only
+    "L_poly_rgb": ("poly_rgb",),                       # degree-2 RGB polynomial (linear+cross)
+    "L_poly_hsv": ("poly_hsv",),                       # degree-2 HSV-periodic polynomial
     "L_add_rgb": ("additive_rgb",),
     "L_add_hsv": ("additive_hsv",),
     "L_joint_rgb": ("smooth_rgb",),
     "L_joint_hsv": ("smooth_hsv",),
+    "L_joint_lab": ("smooth_lab",),                    # 3D Duchon in CIE-Lab
     "L_joint_rgb_with_hue": ("smooth_rgb_plus_hue",),
+    "L_tensor_bspline_rgb": ("tensor_bspline_rgb",),   # tensor-product B-spline in RGB
+    # CYCLIC B-spline (non-Duchon periodic) and multi-smooth combinations
+    "L_cyclic_hue":                ("cyclic_hue",),               # 1D cyclic B-spline on hue
+    "L_cyclic_hue_plus_lin_v":     ("cyclic_hue_plus_lin_v",),    # + linear value
+    "L_cyclic_hue_plus_bspline_v": ("cyclic_hue_plus_bspline_v",),# + 1D B-spline value
+    "L_cyclic_hue_plus_bspline_s_v": ("cyclic_hue_plus_bspline_s_v",), # + B-spline s + B-spline v
+    "L_cyclic_hue_plus_lin_rgb":   ("cyclic_hue_plus_lin_rgb",),  # + linear RGB
+    "L_cyclic_hue_plus_joint_rgb": ("cyclic_hue_plus_joint_rgb",),# + 3D Duchon RGB
+    # MANIFOLD smooths — different topology assumptions
+    "M_cyl_hue_val":     ("manifold_cyl_hue_val",),       # S¹ × ℝ — hue periodic, value linear
+    "M_torus_hue_sat":   ("manifold_torus_hue_sat",),     # S¹ × S¹ — both periodic (silly but tests it)
+    "M_torus_hue_val":   ("manifold_torus_hue_val",),     # S¹ × S¹ — periodic value as a sanity check
+    "M_sphere_hueval":   ("manifold_sphere_hueval",),     # S² — Runge color sphere (lat=value, lon=hue)
+    "M_sphere_plus_chroma": ("manifold_sphere_plus_chroma",),  # S² + 1D chroma — multi-smooth
+    "M_hsv_cone":        ("manifold_hsv_cone",),          # cone embed (sv·cos h, sv·sin h, v)
+    # NONPARAMETRIC baselines (no smooth prior)
+    "N_knn_rgb_k10":   ("knn_rgb_10",),                # k=10 nearest in RGB-Euclidean
+    "N_knn_hsv_k10":   ("knn_hsv_10",),                # k=10 nearest in HSV-periodic-Euclidean
+    "N_knn_lab_k10":   ("knn_lab_10",),                # k=10 nearest in Lab-Euclidean
     # UNSUPERVISED: latent parameterization, discovered by alternation
     "U_1d": ("unsup_1d",),
     "U_2d": ("unsup_2d",),
     "U_3d": ("unsup_3d",),
     "U_4d": ("unsup_4d",),
+    "U_5d": ("unsup_5d",),
+    "U_6d": ("unsup_6d",),
+    "U_8d": ("unsup_8d",),
 }
+
+
+# =============================================================================
+# Color space conversions and feature constructors used by new specs
+# =============================================================================
+
+def rgb_to_lab(rgb01: np.ndarray) -> np.ndarray:
+    """sRGB ∈ [0,1] → CIE-Lab, D65. Standard formula (no clipping)."""
+    def linearize(c):
+        return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    M = np.array([
+        [0.4124564, 0.3575761, 0.1804375],
+        [0.2126729, 0.7151522, 0.0721750],
+        [0.0193339, 0.1191920, 0.9503041],
+    ])
+    rgb_lin = linearize(rgb01)
+    xyz = rgb_lin @ M.T
+    # D65 white reference
+    xyz_n = xyz / np.array([0.95047, 1.0, 1.08883])
+    delta = 6.0 / 29.0
+    def f(t):
+        return np.where(t > delta ** 3, t ** (1.0 / 3.0), t / (3 * delta ** 2) + 4.0 / 29.0)
+    fxyz = f(xyz_n)
+    L = 116.0 * fxyz[:, 1] - 16.0
+    a = 500.0 * (fxyz[:, 0] - fxyz[:, 1])
+    b = 200.0 * (fxyz[:, 1] - fxyz[:, 2])
+    return np.stack([L, a, b], axis=1)
+
+
+def _poly_features_degree2(X: np.ndarray) -> np.ndarray:
+    """Build [1, x_i, x_i x_j] degree-2 features. X is (N, d) → (N, 1 + d + d(d+1)/2)."""
+    N, d = X.shape
+    cols = [np.ones((N, 1)), X]
+    for i in range(d):
+        for j in range(i, d):
+            cols.append((X[:, i] * X[:, j])[:, None])
+    return np.concatenate(cols, axis=1)
+
+
+def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3
+                               ) -> tuple[np.ndarray, np.ndarray]:
+    """Cyclic (periodic) 1D B-spline. Inputs in [0, 1]; the basis wraps so
+    the fit doesn't have a seam at 0/1.
+
+    Penalty: cyclic second-difference operator on coefficients. This is the
+    standard matched penalty for a periodic B-spline (Eilers-Marx / mgcv
+    bs="cc" style). gamfit's smoothness_penalty currently returns the
+    non-periodic matrix sized to the open-knot basis count, which doesn't
+    match the wrapped-basis column count — so we build the cyclic penalty
+    manually here.
+    """
+    import gamfit.torch as gt
+    from gamfit.torch._basis import _resolve_knots_tensor
+    t_t = torch.from_numpy(np.ascontiguousarray(t, dtype=np.float64))
+    knots_t = _resolve_knots_tensor(t_t, n_basis, degree=degree)
+    with torch.no_grad():
+        B_t = gt.bspline_basis(t_t, knots_t, degree=degree, periodic=True)
+    B = B_t.detach().cpu().numpy()
+    k = B.shape[1]
+    # Cyclic 2nd-difference operator D (k × k): row i = e_i − 2 e_{i+1} + e_{i+2}, mod k
+    D = np.zeros((k, k))
+    for i in range(k):
+        D[i, i] = 1.0
+        D[i, (i + 1) % k] = -2.0
+        D[i, (i + 2) % k] = 1.0
+    P = D.T @ D
+    return B, P
+
+
+def _knn_predict(train_X: np.ndarray, train_Z: np.ndarray, test_X: np.ndarray,
+                   k: int) -> tuple[np.ndarray, np.ndarray]:
+    """k-NN regression in the feature space `train_X`. Returns
+    (train_pred, test_pred) where train_pred is leave-one-out for fairness."""
+    def knn_pred(query, ref_X, ref_Z, exclude_self: bool):
+        sq = np.sum((query[:, None, :] - ref_X[None, :, :]) ** 2, axis=2)
+        if exclude_self:
+            np.fill_diagonal(sq, np.inf)
+        idx = np.argpartition(sq, k, axis=1)[:, :k]
+        return np.array([ref_Z[idx[i]].mean(axis=0) for i in range(query.shape[0])])
+    return (
+        knn_pred(train_X, train_X, train_Z, exclude_self=True),
+        knn_pred(test_X, train_X, train_Z, exclude_self=False),
+    )
 
 
 # =============================================================================
@@ -562,11 +645,164 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
     centers_rgb = lattice_centers(cfg.lattice_per_side)
     centers_hsv = None  # built ad hoc below
 
+    # Inputs: train_X_rgb has shape (N, 3) in [0,1]; train_X_hsv has 4 cols
+    # (cos 2πh, sin 2πh, sat, val). Lab features built on demand.
+    train_X_lab = rgb_to_lab(train_X_rgb)
+    test_X_lab = rgb_to_lab(test_X_rgb)
+
     if spec_name == "L_lin_rgb":
         Phi_tr = np.concatenate([train_X_rgb, np.ones((train_X_rgb.shape[0], 1))], axis=1)
         Phi_te = np.concatenate([test_X_rgb, np.ones((test_X_rgb.shape[0], 1))], axis=1)
         W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
         return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_lin_lab":
+        # CIE-Lab is perceptually-uniform: equal Euclidean distance ≈ equal
+        # perceived color difference. If cogito encodes colors perceptually
+        # (rather than chromatically), this should beat RGB linear.
+        Phi_tr = np.concatenate([train_X_lab, np.ones((train_X_lab.shape[0], 1))], axis=1)
+        Phi_te = np.concatenate([test_X_lab, np.ones((test_X_lab.shape[0], 1))], axis=1)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_lin_luminance":
+        # Single-axis baseline: just the perceptual brightness.
+        # If THIS gives ~the same R² as anything else, color information
+        # at this layer is essentially 1D (= just lightness).
+        lum_tr = (0.299 * train_X_rgb[:, 0] + 0.587 * train_X_rgb[:, 1] +
+                  0.114 * train_X_rgb[:, 2])[:, None]
+        lum_te = (0.299 * test_X_rgb[:, 0] + 0.587 * test_X_rgb[:, 1] +
+                  0.114 * test_X_rgb[:, 2])[:, None]
+        Phi_tr = np.concatenate([lum_tr, np.ones((lum_tr.shape[0], 1))], axis=1)
+        Phi_te = np.concatenate([lum_te, np.ones((lum_te.shape[0], 1))], axis=1)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly_rgb":
+        # Degree-2 polynomial in RGB — bridges linear and nonlinear.
+        # Tests whether the gap between linear-RGB and joint-Duchon-RGB
+        # comes from cross-axis interactions (captured here) or from
+        # higher-order smoothness (only captured by Duchon).
+        Phi_tr = _poly_features_degree2(train_X_rgb)
+        Phi_te = _poly_features_degree2(test_X_rgb)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly_hsv":
+        Phi_tr = _poly_features_degree2(train_X_hsv)
+        Phi_te = _poly_features_degree2(test_X_hsv)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_joint_lab":
+        # 3D Duchon in CIE-Lab space — perceptual-cube analogue of joint_rgb.
+        # Centers placed on the convex-hull-shifted unit cube of the data.
+        lab_min = train_X_lab.min(0); lab_max = train_X_lab.max(0)
+        lab_ranges = lab_max - lab_min + 1e-9
+        per_side = cfg.lattice_per_side
+        ax = [np.linspace(lab_min[d], lab_max[d], per_side) for d in range(3)]
+        L_g, A_g, B_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), A_g.flatten(), B_g.flatten()], axis=1)
+        Phi_tr, P = duchon_basis_radial(train_X_lab, centers)
+        Phi_te, _ = duchon_basis_radial(test_X_lab, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "L_tensor_bspline_rgb":
+        # Tensor-product B-spline: independent 1D B-spline basis per axis,
+        # Kronecker'd together. Tests "axes encoded independently with
+        # nonlinear shape" — a strong contender against the radial joint.
+        # We use 10 basis fns per axis → 1000 product features, then ridge.
+        def tprod_features(X, n_per_axis: int = 8):
+            cols = []
+            for ax in range(3):
+                Bk, _ = bspline_1d_basis(X[:, ax], n_basis=n_per_axis)
+                cols.append(Bk)
+            # Tensor product across the 3 marginals
+            out = cols[0][:, :, None, None] * cols[1][:, None, :, None] * cols[2][:, None, None, :]
+            return out.reshape(X.shape[0], -1)
+        Phi_tr = tprod_features(train_X_rgb)
+        Phi_te = tprod_features(test_X_rgb)
+        W = ridge_fit(Phi_tr, train_Z, alpha=10.0)        # mildly regularize
+        return Phi_tr @ W, Phi_te @ W
+
+    # =====================================================================
+    # CYCLIC B-spline (non-Duchon periodic) + multi-smooth combinations
+    # =====================================================================
+    train_hue = _hue_from_X_hsv(train_X_hsv) if False else None     # avoid double-defining
+
+    # We need hue in [0, 1] for cyclic. Reconstruct from X_hsv's (cos, sin).
+    h_tr = (np.arctan2(train_X_hsv[:, 1], train_X_hsv[:, 0]) / (2 * np.pi)) % 1.0
+    h_te = (np.arctan2(test_X_hsv[:, 1], test_X_hsv[:, 0]) / (2 * np.pi)) % 1.0
+
+    if spec_name == "L_cyclic_hue":
+        Phi_tr, P = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "L_cyclic_hue_plus_lin_v":
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        # Linear value is just (v, 1) — give it a tiny ridge penalty.
+        v_tr = train_X_hsv[:, 3:4]; v_te = test_X_hsv[:, 3:4]
+        Phi_v_tr = np.concatenate([v_tr, np.ones_like(v_tr)], axis=1)
+        Phi_v_te = np.concatenate([v_te, np.ones_like(v_te)], axis=1)
+        P_v = 1e-3 * np.eye(2)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_v_tr], [P_h, P_v], train_Z, [Phi_h_te, Phi_v_te],
+        )
+
+    if spec_name == "L_cyclic_hue_plus_bspline_v":
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        Phi_v_tr, P_v = bspline_1d_basis(train_X_hsv[:, 3], n_basis=10)
+        Phi_v_te, _ = bspline_1d_basis(test_X_hsv[:, 3], n_basis=10)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_v_tr], [P_h, P_v], train_Z, [Phi_h_te, Phi_v_te],
+        )
+
+    if spec_name == "L_cyclic_hue_plus_bspline_s_v":
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        Phi_s_tr, P_s = bspline_1d_basis(train_X_hsv[:, 2], n_basis=10)
+        Phi_s_te, _ = bspline_1d_basis(test_X_hsv[:, 2], n_basis=10)
+        Phi_v_tr, P_v = bspline_1d_basis(train_X_hsv[:, 3], n_basis=10)
+        Phi_v_te, _ = bspline_1d_basis(test_X_hsv[:, 3], n_basis=10)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_s_tr, Phi_v_tr], [P_h, P_s, P_v], train_Z,
+            [Phi_h_te, Phi_s_te, Phi_v_te],
+        )
+
+    if spec_name == "L_cyclic_hue_plus_lin_rgb":
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        Phi_rgb_tr = np.concatenate([train_X_rgb, np.ones((train_X_rgb.shape[0], 1))], axis=1)
+        Phi_rgb_te = np.concatenate([test_X_rgb, np.ones((test_X_rgb.shape[0], 1))], axis=1)
+        P_rgb = 1e-3 * np.eye(4)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_rgb_tr], [P_h, P_rgb], train_Z,
+            [Phi_h_te, Phi_rgb_te],
+        )
+
+    if spec_name == "L_cyclic_hue_plus_joint_rgb":
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(h_tr, n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(h_te, n_basis=12)
+        Phi_rgb_tr, P_rgb = duchon_basis_radial(train_X_rgb, centers_rgb)
+        Phi_rgb_te, _ = duchon_basis_radial(test_X_rgb, centers_rgb)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_rgb_tr], [P_h, P_rgb], train_Z,
+            [Phi_h_te, Phi_rgb_te],
+        )
+
+    if spec_name == "N_knn_rgb_k10":
+        return _knn_predict(train_X_rgb, train_Z, test_X_rgb, k=10)
+
+    if spec_name == "N_knn_hsv_k10":
+        return _knn_predict(train_X_hsv, train_Z, test_X_hsv, k=10)
+
+    if spec_name == "N_knn_lab_k10":
+        return _knn_predict(train_X_lab, train_Z, test_X_lab, k=10)
 
     if spec_name == "L_lin_hsv":
         Phi_tr = np.concatenate([train_X_hsv, np.ones((train_X_hsv.shape[0], 1))], axis=1)
@@ -643,7 +879,161 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
             [Phi_rgb_te, Phi_hue_te],
         )
 
-    if spec_name in ("U_1d", "U_2d", "U_3d", "U_4d"):
+    # =====================================================================
+    # MANIFOLD smooths — these use the public gamfit Duchon (with proper
+    # periodic_per_axis support) and gamfit.sphere_basis, NOT the local
+    # `duchon_basis_radial` helper (which is non-periodic for d ≥ 2).
+    # =====================================================================
+
+    # Periodic manifolds via EUCLIDEAN EMBEDDING: each topological manifold
+    # is embedded into ℝᵏ as a constrained submanifold; a regular Euclidean
+    # Duchon over the embedding IS a smooth function on the manifold.
+    #
+    #   cylinder S¹×ℝ → ℝ³  :  (cos 2πh, sin 2πh, v)
+    #   torus S¹×S¹  → ℝ⁴  :  (cos 2πh, sin 2πh, cos 2πq, sin 2πq)
+    #   sphere S²    → ℝ³  :  (sin lat cos lon, sin lat sin lon, cos lat)
+    #
+    # Centers are placed ON the manifold (then live in the embedding too),
+    # so the kernel only "sees" distances along the manifold's intrinsic
+    # geometry to a good approximation.
+
+    def _hue_from_X_hsv(X_hsv4: np.ndarray) -> np.ndarray:
+        return (np.arctan2(X_hsv4[:, 1], X_hsv4[:, 0]) / (2 * np.pi)) % 1.0
+
+    # NOTE: gamfit 0.1.109 exposes mixed-periodicity Duchon but the periodic
+    # path is locked at p=1, s=0 — so 2(p+s)=2 fails the d≥2 constraint
+    # 2(p+s) > d. We fall back to the cos/sin-embedded Euclidean Duchon
+    # for cylinder/torus until gamfit's periodic path supports higher m.
+
+    if spec_name == "M_cyl_hue_val":
+        h_tr = _hue_from_X_hsv(train_X_hsv); v_tr = train_X_hsv[:, 3]
+        h_te = _hue_from_X_hsv(test_X_hsv);  v_te = test_X_hsv[:, 3]
+        emb_tr = np.stack([np.cos(2*np.pi*h_tr), np.sin(2*np.pi*h_tr), v_tr], axis=1)
+        emb_te = np.stack([np.cos(2*np.pi*h_te), np.sin(2*np.pi*h_te), v_te], axis=1)
+        hs = np.linspace(0, 1, 8, endpoint=False); vs = np.linspace(0, 1, 4)
+        centers = np.array([
+            [np.cos(2*np.pi*h), np.sin(2*np.pi*h), v] for h in hs for v in vs
+        ])
+        Phi_tr, P = duchon_basis_radial(emb_tr, centers)
+        Phi_te, _ = duchon_basis_radial(emb_te, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    def _periodic_2d_centers(n_a: int = 12, n_b: int = 6):
+        a = np.linspace(0, 1, n_a, endpoint=False)
+        b = np.linspace(0, 1, n_b, endpoint=False)
+        return np.array([[ai, bi] for ai in a for bi in b])
+
+    def _torus_embed(h, q):
+        return np.stack([np.cos(2*np.pi*h), np.sin(2*np.pi*h),
+                          np.cos(2*np.pi*q), np.sin(2*np.pi*q)], axis=1)
+
+    def _torus_centers(n_h: int = 8, n_q: int = 4, jitter: float = 0.03, seed: int = 42):
+        rng = np.random.default_rng(seed)
+        c = []
+        for h in np.linspace(0, 1, n_h, endpoint=False):
+            for q in np.linspace(0, 1, n_q, endpoint=False):
+                c.append([np.cos(2*np.pi*h), np.sin(2*np.pi*h),
+                          np.cos(2*np.pi*q), np.sin(2*np.pi*q)])
+        return np.array(c) + jitter * rng.standard_normal((n_h * n_q, 4))
+
+    if spec_name == "M_torus_hue_sat":
+        emb_tr = _torus_embed(_hue_from_X_hsv(train_X_hsv), train_X_hsv[:, 2])
+        emb_te = _torus_embed(_hue_from_X_hsv(test_X_hsv), test_X_hsv[:, 2])
+        centers = _torus_centers()
+        Phi_tr, P = duchon_basis_radial(emb_tr, centers)
+        Phi_te, _ = duchon_basis_radial(emb_te, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "M_torus_hue_val":
+        emb_tr = _torus_embed(_hue_from_X_hsv(train_X_hsv), train_X_hsv[:, 3])
+        emb_te = _torus_embed(_hue_from_X_hsv(test_X_hsv), test_X_hsv[:, 3])
+        centers = _torus_centers()
+        Phi_tr, P = duchon_basis_radial(emb_tr, centers)
+        Phi_te, _ = duchon_basis_radial(emb_te, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    def _to_sphere_latlon(X_hsv4):
+        """Runge sphere: latitude=value (deg, in [-90, 90]), longitude=hue
+        (deg, in [0, 360]). Returns shape (N, 2) in DEGREES, as
+        gamfit.sphere_basis expects when radians=False."""
+        hue = _hue_from_X_hsv(X_hsv4)
+        v = X_hsv4[:, 3]
+        lat = 90.0 * (2.0 * v - 1.0)
+        lon = 360.0 * hue
+        return np.stack([lat, lon], axis=1)
+
+    if spec_name == "M_sphere_hueval":
+        # Proper Sobolev S² smooth via gamfit's top-level sphere_basis API
+        # (exposed in 0.1.109+). Lon = hue, lat = value.
+        import gamfit
+        sp_tr = _to_sphere_latlon(train_X_hsv)
+        sp_te = _to_sphere_latlon(test_X_hsv)
+        Phi_tr_t, P_t = gamfit.sphere_basis(
+            sp_tr, n_centers=48, penalty_order=2, kernel="sobolev", radians=False,
+        )
+        Phi_te_t, _ = gamfit.sphere_basis(
+            sp_te, n_centers=48, penalty_order=2, kernel="sobolev", radians=False,
+        )
+        Phi_tr = np.asarray(Phi_tr_t)
+        Phi_te = np.asarray(Phi_te_t)
+        P = np.asarray(P_t)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "M_sphere_plus_chroma":
+        # S² Sobolev sphere + 1D B-spline on chroma (= sat · val)
+        import gamfit
+        sp_tr = _to_sphere_latlon(train_X_hsv)
+        sp_te = _to_sphere_latlon(test_X_hsv)
+        Phi_sp_tr_t, P_sp_t = gamfit.sphere_basis(
+            sp_tr, n_centers=48, penalty_order=2, kernel="sobolev", radians=False,
+        )
+        Phi_sp_te_t, _ = gamfit.sphere_basis(
+            sp_te, n_centers=48, penalty_order=2, kernel="sobolev", radians=False,
+        )
+        train_chroma = train_X_hsv[:, 2] * train_X_hsv[:, 3]
+        test_chroma = test_X_hsv[:, 2] * test_X_hsv[:, 3]
+        Phi_ch_tr, P_ch = bspline_1d_basis(train_chroma, n_basis=10)
+        Phi_ch_te, _ = bspline_1d_basis(test_chroma, n_basis=10)
+        return _additive_fit_predict(
+            [np.asarray(Phi_sp_tr_t), Phi_ch_tr],
+            [np.asarray(P_sp_t), P_ch], train_Z,
+            [np.asarray(Phi_sp_te_t), Phi_ch_te],
+        )
+
+    if spec_name == "M_hsv_cone":
+        # HSV-cone embedding: pure black/white collapse to the axis; sat
+        # gives radius. Coordinates: (s·v·cos h, s·v·sin h, v). 3D Euclidean
+        # Duchon — natural for the HSV color cone.
+        def to_cone(X_hsv4):
+            hue = (np.arctan2(X_hsv4[:, 1], X_hsv4[:, 0]) / (2 * np.pi))   # [-π, π]
+            s, v = X_hsv4[:, 2], X_hsv4[:, 3]
+            r = s * v
+            return np.stack([r * np.cos(2 * np.pi * hue),
+                             r * np.sin(2 * np.pi * hue), v], axis=1)
+        train_co = to_cone(train_X_hsv)
+        test_co = to_cone(test_X_hsv)
+        # Place centers on a small cone-aligned set: 4 hue angles × 3 radii × 3 values
+        ang = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        rad = np.linspace(0.1, 1.0, 3)
+        val = np.linspace(0.1, 1.0, 3)
+        centers = []
+        for v in val:
+            for r in rad:
+                for a in ang:
+                    centers.append([r * np.cos(a), r * np.sin(a), v])
+        # plus a few centers on the axis (the achromatic line)
+        for v in val: centers.append([0.0, 0.0, v])
+        centers = np.array(centers)
+        Phi_tr, P = duchon_basis_radial(train_co, centers)
+        Phi_te, _ = duchon_basis_radial(test_co, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name in ("U_1d", "U_2d", "U_3d", "U_4d", "U_5d", "U_6d", "U_8d"):
         d = int(spec_name[2])
         # No GT axes used. Fit joint (T_train, B) by alternation on train Z.
         fit = fit_unsupervised_manifold(train_Z, d, cfg, n_iters=12, verbose=False)
@@ -684,11 +1074,15 @@ def cv_fit_one_spec(spec_name: str, X_rgb, X_hsv, Z, cfg: Config) -> dict:
 # =============================================================================
 def main() -> int:
     cfg = Config()
-    require_cuda_if_env()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    use_external_harvest = bool(cfg.harvest_from)
+    if not use_external_harvest:
+        require_cuda_if_env()
+    device = torch.device("cuda" if torch.cuda.is_available() and not use_external_harvest else "cpu")
     out_dir = Path(cfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[setup] {cfg.model_name}  layers={cfg.layers}  device={device}", flush=True)
+    print(f"[setup] {cfg.model_name}  layers={cfg.layers}  device={device}"
+          + (f"  harvest_from={cfg.harvest_from}" if use_external_harvest else ""),
+          flush=True)
 
     colors = load_xkcd_colors()
     n_c, n_t = len(colors), len(TEMPLATES)
@@ -717,24 +1111,81 @@ def main() -> int:
             c_idx.append(ci)
     c_idx = np.array(c_idx)
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    tok = AutoTokenizer.from_pretrained(cfg.model_name)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    dtype = torch.bfloat16 if cfg.use_bf16 else torch.float32
-    print(f"[load] {cfg.model_name} dtype={dtype}", flush=True)
-    model = AutoModelForCausalLM.from_pretrained(cfg.model_name, torch_dtype=dtype).to(device).eval()
-    blocks = _find_blocks(model.model if hasattr(model, "model") else model.transformer)
-    n_layers = len(blocks)
-    print(f"[load] hidden_layers={n_layers}", flush=True)
-    bad = [L for L in cfg.layers if L < 0 or L >= n_layers]
-    if bad:
-        raise ValueError(f"layer indices {bad} out of range for model with {n_layers} layers")
+    if use_external_harvest:
+        # Skip model loading entirely; load the (N, D) residual matrix that
+        # color_geometry.py (or another harvester) already produced. We
+        # require ``cfg.layers`` to be a single layer matching the harvest.
+        if len(cfg.layers) != 1:
+            raise ValueError(
+                f"MSAE_HARVEST_FROM mode requires exactly one entry in "
+                f"MSAE_LAYERS (the layer the harvest was produced for); "
+                f"got layers={cfg.layers}"
+            )
+        L_target = cfg.layers[0]
+        cache_path = Path(cfg.harvest_from)
+        if cache_path.suffix == ".npz":
+            ck = np.load(cache_path, allow_pickle=False)
+            X_full_np = ck["X"]
+            if "layer" in ck.files:
+                cached_layer = int(ck["layer"])
+                if cached_layer != L_target:
+                    raise ValueError(
+                        f"harvest cache layer {cached_layer} != MSAE_LAYERS={L_target}"
+                    )
+            n_cached_prompts = X_full_np.shape[0]
+        elif cache_path.suffix == ".npy":
+            X_full_np = np.load(cache_path)
+            n_cached_prompts = X_full_np.shape[0]
+        else:
+            raise ValueError(
+                f"MSAE_HARVEST_FROM must be .npy or .npz, got {cache_path.suffix}"
+            )
 
-    layer_resids = harvest(cfg, model, tok, blocks, prompts, device)
-    del model; torch.cuda.empty_cache()
+        # Truncate to whole colors only.
+        n_full_colors = n_cached_prompts // n_t
+        if n_full_colors < cfg.n_folds + 1:
+            raise ValueError(
+                f"harvest only covers {n_full_colors} complete colors; "
+                f"need at least n_folds+1={cfg.n_folds + 1} for color-grouped CV"
+            )
+        n_complete_rows = n_full_colors * n_t
+        X_full_t = torch.from_numpy(X_full_np[:n_complete_rows]).float()
+        print(f"[harvest_from] loaded {cache_path.name}: "
+              f"{n_cached_prompts} rows -> using {n_full_colors} complete "
+              f"colors × {n_t} templates = {n_complete_rows} rows  "
+              f"D={X_full_t.shape[1]}", flush=True)
 
-    if cfg.save_residuals:
+        # Truncate downstream arrays so they match the rows we kept.
+        rgb_per_color = rgb_per_color[:n_full_colors]
+        hsv_per_color = hsv_per_color[:n_full_colors]
+        X_hsv = X_hsv[:n_full_colors]
+        X_rgb = X_rgb[:n_full_colors]
+        for k in list(color_axes.keys()):
+            color_axes[k] = color_axes[k][:n_full_colors]
+        colors = colors[:n_full_colors]
+        c_idx = c_idx[:n_complete_rows]
+        prompts = prompts[:n_complete_rows]
+        n_c = n_full_colors
+        layer_resids = {L_target: X_full_t}
+    else:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        tok = AutoTokenizer.from_pretrained(cfg.model_name)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        dtype = torch.bfloat16 if cfg.use_bf16 else torch.float32
+        print(f"[load] {cfg.model_name} dtype={dtype}", flush=True)
+        model = AutoModelForCausalLM.from_pretrained(cfg.model_name, torch_dtype=dtype).to(device).eval()
+        blocks = _find_blocks(model.model if hasattr(model, "model") else model.transformer)
+        n_layers = len(blocks)
+        print(f"[load] hidden_layers={n_layers}", flush=True)
+        bad = [L for L in cfg.layers if L < 0 or L >= n_layers]
+        if bad:
+            raise ValueError(f"layer indices {bad} out of range for model with {n_layers} layers")
+
+        layer_resids = harvest(cfg, model, tok, blocks, prompts, device)
+        del model; torch.cuda.empty_cache()
+
+    if cfg.save_residuals and not use_external_harvest:
         torch.save({
             "layer_resids": layer_resids,
             "colors": colors, "c_idx": c_idx,
