@@ -100,6 +100,20 @@ SCENARIOS = [
         n_steps=8000, batch_size=512, lr=1e-3,
         n_basis=12, intrinsic_rank=4,
     ),
+    # xlarge_v2: tweaked hyperparams aimed at the xlarge convergence failure
+    # observed at commit cfbaafc — curve SAE stuck at MSE ~0.85 while vanilla
+    # converged to 0.64. Hypothesis: with 128 features each of intrinsic_rank=4,
+    # the decoder has 128*896*4 = 460K params/feature, may need a bigger basis
+    # to express the curves and a lower-rank gauge to avoid the spline-wiggle
+    # failure mode. lr lowered for stability.
+    Scenario(
+        name="xlarge_v2",
+        d_ambient=896, n_curve_features=128, n_curve_anchors=64,
+        sparsity_per_token=12, n_samples=120_000,
+        sae_features=128, top_k=16,
+        n_steps=12000, batch_size=512, lr=5e-4,
+        n_basis=24, intrinsic_rank=2,
+    ),
 ]
 
 
