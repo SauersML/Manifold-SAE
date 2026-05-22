@@ -202,8 +202,10 @@ def lattice_centers(per_side: int) -> np.ndarray:
 
 
 def _duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
-    """Polyharmonic m=2 kernels per dim. Used only for d ≥ 2 where gamfit
-    doesn't expose the multi-D Duchon penalty in the torch surface.
+    """Polyharmonic m=2 kernels per dim. Used for the DESIGN matrix only;
+    the corresponding PSD function-norm penalty comes from gamfit's
+    `_thin_plate_penalty` (the raw kernel Gram is indefinite for d=2
+    and d=4 because `r²·log r` and `log r` are negative at small r).
 
       d=2: phi(r) = r^2 log r
       d=3: phi(r) = r
@@ -229,48 +231,48 @@ def duchon_basis_radial(X: np.ndarray, centers: np.ndarray,
                           periodic: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """Radial Duchon m=2 design + matched function-norm penalty.
 
-    d=1 path: delegates entirely to gamfit. Basis = `gt.duchon_basis_1d`
-    (returns kernel block constrained orthogonal to the null space PLUS
-    the null space columns); penalty = `_duchon_function_norm_penalty`.
-    Supports `periodic=True` (gamfit's periodic Duchon — fixed in
-    0.1.99+; pinned at 0.1.98 here so periodic crashes until lockfile
-    is bumped).
+    d=1 path: fully delegated to gamfit (basis + matched penalty).
+    Supports `periodic=True` via gamfit's periodic Duchon.
 
-    d ≥ 2 path: gamfit's torch surface doesn't expose a multi-D Duchon
-    penalty, so we build the classical RBF construction: design =
-    [kernel | null space], penalty = kernel Gram on centers. For radial
-    basis functions this Gram IS the function-norm penalty (standard
-    Wahba/Wood thin-plate-spline result).
+    d ≥ 2 path: gamfit's Rust binding accepts only 1D centers for
+    `duchon_function_norm_penalty` (the multi-D penalty isn't yet
+    exposed in any public version). We build the classical RBF
+    construction: design = [kernel | null space], penalty = kernel
+    Gram on centers. For radial basis functions this Gram IS the
+    function-norm penalty (Wahba/Wood polyharmonic spline result).
+    `periodic=True` is not supported for d ≥ 2 — the Rust periodic
+    Duchon path is d=1 only.
 
-    Returns (Phi, P). Shape varies by path; downstream consumers see them
-    as a matched pair.
+    Returns (Phi, P). Downstream consumers see them as a matched pair.
     """
+    import gamfit
     N, d = X.shape
 
     if d == 1:
-        import gamfit.torch as gt
-        from gamfit._api import _duchon_function_norm_penalty
-        # Centers 1D (gamfit wants shape (K,))
-        c_t = torch.from_numpy(np.ascontiguousarray(centers.ravel(), dtype=np.float64))
-        t_t = torch.from_numpy(np.ascontiguousarray(X.ravel(), dtype=np.float64))
-        with torch.no_grad():
-            Phi_t = gt.duchon_basis_1d(t_t, c_t, m=2, periodic=periodic)
-        Phi = Phi_t.detach().cpu().numpy()
-        P = np.asarray(_duchon_function_norm_penalty(
-            centers.ravel().astype(np.float64), m=2, periodic=periodic
-        ))
+        per_axis = (bool(periodic),)
+        # gamfit.duchon_basis: (N, d) input, returns (N, K_basis) with the
+        # kernel block + null-space columns combined per its internal
+        # parameterization.
+        X2 = X.reshape(-1, 1)
+        c2 = centers.reshape(-1, 1)
+        Phi = np.asarray(gamfit.duchon_basis(X2, c2, m=2, periodic_per_axis=per_axis))
+        P = np.asarray(gamfit.duchon_function_norm_penalty(c2, m=2, periodic_per_axis=per_axis))
         return Phi, P
 
     if periodic:
-        raise ValueError("periodic Duchon currently only supported for d=1")
+        raise ValueError("periodic Duchon currently only supported for d=1 (Rust limit)")
 
+    from gamfit._api import _thin_plate_penalty
     K = centers.shape[0]
     r_nk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
     Phi_kernel = _duchon_kernel(r_nk, d)
     null = np.concatenate([np.ones((N, 1)), X], axis=1)                    # (N, d+1)
     Phi = np.concatenate([Phi_kernel, null], axis=1)
-    r_cc = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=2)
-    Pkk = _duchon_kernel(r_cc, d)
+    # PSD function-norm penalty from gamfit (the proper m=2 thin-plate
+    # bending-energy matrix). The raw kernel Gram is indefinite for d=2
+    # and d=4 so we cannot use it as a REML penalty directly.
+    Pkk = np.asarray(_thin_plate_penalty(centers, m=2, length_scale=1.0))
+    Pkk = 0.5 * (Pkk + Pkk.T)
     P = np.zeros((K + d + 1, K + d + 1))
     P[:K, :K] = Pkk
     return Phi, P
@@ -303,22 +305,58 @@ def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple
 # =============================================================================
 # Smoothing-parameter selection via gamfit's REML primitive
 # =============================================================================
+_PSD_JITTER_REL = 1e-8
+
+
+def _psd_clean(P: np.ndarray) -> np.ndarray:
+    """Symmetrize + add relative-jitter ridge so gamfit's strict PSD check
+    accepts the penalty even when float-precision noise leaves the matrix
+    slightly indefinite."""
+    P = 0.5 * (P + P.T)
+    diag_max = float(np.max(np.abs(np.diag(P)))) if P.shape[0] > 0 else 1.0
+    return P + _PSD_JITTER_REL * max(diag_max, 1.0) * np.eye(P.shape[0])
+
+
+def _additive_fit_predict(designs_tr: list, penalties: list, train_Z: np.ndarray,
+                            designs_te: list) -> tuple[np.ndarray, np.ndarray]:
+    """Multi-smooth single-GAM fit via `gt.gaussian_reml_fit_additive`.
+    Returns (train_pred, test_pred) for joint multi-output Z.
+
+    gamfit picks one shared λ across the smooths; per-smooth coefficients
+    come back as a list of blocks, which we use with the per-smooth test
+    designs to assemble a prediction.
+    """
+    import gamfit.torch as gt
+    designs_tr_t = [torch.from_numpy(np.ascontiguousarray(d, dtype=np.float64))
+                     for d in designs_tr]
+    pen_t = [torch.from_numpy(np.ascontiguousarray(_psd_clean(P), dtype=np.float64))
+              for P in penalties]
+    y_t = torch.from_numpy(np.ascontiguousarray(train_Z, dtype=np.float64))
+    with torch.no_grad():
+        out = gt.gaussian_reml_fit_additive(designs_tr_t, y_t, pen_t)
+    train_pred = out.fitted.detach().cpu().numpy()
+    coef_blocks = [c.detach().cpu().numpy() for c in out.coefficients]
+    test_pred = sum(d @ c for d, c in zip(designs_te, coef_blocks))
+    return train_pred, test_pred
+
+
 def reml_fit(Phi: np.ndarray, Z: np.ndarray, P: np.ndarray,
               init_log_lambda: float = 0.0) -> tuple[np.ndarray, float]:
     """Fit coefficients B (K, R) for the multi-output smooth Z = Phi · B + ε
     with penalty λ · β' P β. The smoothing parameter λ is chosen by
-    **gamfit's closed-form REML** (Rust core) — the principled criterion
-    for Gaussian smooths, strictly better than the GCV/Newton hand-rolls.
+    **gamfit's closed-form REML** (Rust core).
 
     Inputs are numpy; conversion to torch + back is local. The penalty is
-    symmetrized for safety (gamfit's REML solver requires symmetry).
+    symmetrized + ridge-jittered to survive gamfit's strict PSD check
+    when the structural penalty has float-precision indefiniteness on the
+    null-space block.
     """
     import gamfit.torch as gt
-    P_sym = 0.5 * (P + P.T)
+    P_clean = _psd_clean(P)
     init_lam = float(math.exp(init_log_lambda)) if init_log_lambda is not None else None
     x_t = torch.from_numpy(np.ascontiguousarray(Phi, dtype=np.float64))
     y_t = torch.from_numpy(np.ascontiguousarray(Z, dtype=np.float64))
-    p_t = torch.from_numpy(np.ascontiguousarray(P_sym, dtype=np.float64))
+    p_t = torch.from_numpy(np.ascontiguousarray(P_clean, dtype=np.float64))
     with torch.no_grad():
         out = gt.gaussian_reml_fit(x_t, y_t, p_t, init_lambda=init_lam)
     B = out.coefficients.detach().cpu().numpy()
@@ -404,7 +442,12 @@ def fit_unsupervised_manifold(Z: np.ndarray, d: int, cfg: Config,
       history  list of {iter, dT, train_mse, log_lambda}
     """
     if centers_per_axis is None:
-        centers_per_axis = {1: 16, 2: 8, 3: 5, 4: 4}[d]      # 16 / 64 / 125 / 256 centers
+        # Auto-shrink center count so the basis isn't overcomplete vs the
+        # training rows.  Floor for U_4d is 3 → 81 centers (which still
+        # needs ≥ 86 training rows after the nullspace; for smaller folds
+        # the caller's CV-loop will catch it and skip).
+        defaults = {1: 16, 2: 8, 3: 5, 4: 3}
+        centers_per_axis = defaults[d]
     if grid_per_axis is None:
         grid_per_axis = {1: 200, 2: 40, 3: 20, 4: 9}[d]      # ~6.5k grid pts in 4D
 
@@ -532,51 +575,30 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         return Phi_tr @ W, Phi_te @ W
 
     if spec_name == "L_add_rgb":
-        # f_R(R) + f_G(G) + f_B(B) — 1D B-spline per axis, separate REML λ each
-        # Build a block-diagonal Phi with one block per axis, single shared mean.
-        n_basis = 10
-        blocks_tr, blocks_te, blocks_P = [], [], []
+        # f_R(R) + f_G(G) + f_B(B) via gamfit's purpose-built additive REML.
+        designs_tr, designs_te, penalties = [], [], []
         for ax in range(3):
-            B_tr, P_ax = bspline_1d_basis(train_X_rgb[:, ax], n_basis=n_basis)
-            B_te, _ = bspline_1d_basis(test_X_rgb[:, ax], n_basis=n_basis)
-            blocks_tr.append(B_tr); blocks_te.append(B_te); blocks_P.append(P_ax)
-        Phi_tr = np.concatenate(blocks_tr + [np.ones((train_X_rgb.shape[0], 1))], axis=1)
-        Phi_te = np.concatenate(blocks_te + [np.ones((test_X_rgb.shape[0], 1))], axis=1)
-        K_total = Phi_tr.shape[1]
-        P = np.zeros((K_total, K_total))
-        for i in range(3):
-            P[i*n_basis:(i+1)*n_basis, i*n_basis:(i+1)*n_basis] = blocks_P[i]
-        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
-        return Phi_tr @ B, Phi_te @ B
+            B_tr, P_ax = bspline_1d_basis(train_X_rgb[:, ax], n_basis=10)
+            B_te, _ = bspline_1d_basis(test_X_rgb[:, ax], n_basis=10)
+            designs_tr.append(B_tr); designs_te.append(B_te); penalties.append(P_ax)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
 
     if spec_name == "L_add_hsv":
-        # Proper additive multi-smooth: g_hue(cos h, sin h)  +  g_s(s)  +  g_v(v)
-        # The hue term is a 2D radial Duchon over the (cos h, sin h) plane
-        # with centers placed on the unit circle (cleaner than a uniform
-        # square lattice — captures the natural support of hue).
-        n_basis = 10
-        # Centers on the unit circle for the hue smooth
+        # g_hue(cos h, sin h) + g_s(s) + g_v(v) via gamfit additive REML.
+        # 2D radial Duchon over the (cos h, sin h) plane with 12 centers ON
+        # the unit circle (the natural support).
         angles = np.linspace(0.0, 2 * np.pi, 12, endpoint=False)
         centers_hue = np.stack([np.cos(angles), np.sin(angles)], axis=1)
-        Bh_tr, Ph = duchon_basis_radial(train_X_hsv[:, :2], centers_hue)   # (N, 12+3)
+        Bh_tr, Ph = duchon_basis_radial(train_X_hsv[:, :2], centers_hue)
         Bh_te, _ = duchon_basis_radial(test_X_hsv[:, :2], centers_hue)
-        Bs_tr, Ps = bspline_1d_basis(train_X_hsv[:, 2], n_basis=n_basis)
-        Bs_te, _ = bspline_1d_basis(test_X_hsv[:, 2], n_basis=n_basis)
-        Bv_tr, Pv = bspline_1d_basis(train_X_hsv[:, 3], n_basis=n_basis)
-        Bv_te, _ = bspline_1d_basis(test_X_hsv[:, 3], n_basis=n_basis)
-        # Strip the redundant intercepts from each block; keep one global
-        Bh_tr = Bh_tr[:, :-3]; Bh_te = Bh_te[:, :-3]            # drop {1, cos, sin} null space
-        Ph = Ph[:-3, :-3]
-        Kh, Ks, Kv = Bh_tr.shape[1], Bs_tr.shape[1], Bv_tr.shape[1]
-        Phi_tr = np.concatenate([Bh_tr, Bs_tr, Bv_tr, np.ones((Bh_tr.shape[0], 1))], axis=1)
-        Phi_te = np.concatenate([Bh_te, Bs_te, Bv_te, np.ones((Bh_te.shape[0], 1))], axis=1)
-        K_total = Phi_tr.shape[1]
-        P = np.zeros((K_total, K_total))
-        P[:Kh, :Kh] = Ph
-        P[Kh:Kh+Ks, Kh:Kh+Ks] = Ps
-        P[Kh+Ks:Kh+Ks+Kv, Kh+Ks:Kh+Ks+Kv] = Pv
-        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
-        return Phi_tr @ B, Phi_te @ B
+        Bs_tr, Ps = bspline_1d_basis(train_X_hsv[:, 2], n_basis=10)
+        Bs_te, _ = bspline_1d_basis(test_X_hsv[:, 2], n_basis=10)
+        Bv_tr, Pv = bspline_1d_basis(train_X_hsv[:, 3], n_basis=10)
+        Bv_te, _ = bspline_1d_basis(test_X_hsv[:, 3], n_basis=10)
+        return _additive_fit_predict(
+            [Bh_tr, Bs_tr, Bv_tr], [Ph, Ps, Pv], train_Z,
+            [Bh_te, Bs_te, Bv_te],
+        )
 
     if spec_name == "L_joint_rgb":
         Phi_tr, P = duchon_basis_radial(train_X_rgb, centers_rgb)
@@ -585,49 +607,41 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         return Phi_tr @ B, Phi_te @ B
 
     if spec_name == "L_joint_hsv":
-        # 4D coords (cos hue, sin hue, sat, val). Centers ON the natural
-        # support: (cos 2πθ_i, sin 2πθ_i, s_j, v_k) for a grid of angles +
-        # sat + val. No more arbitrary "near-unit-circle" mask.
-        n_hue, n_sv = 8, 3                                    # 8 × 3 × 3 = 72 centers
+        # 4D coords (cos h, sin h, sat, val). Centers placed near the natural
+        # support: (cos 2πθ_i, sin 2πθ_i, s_j, v_k) for a grid of angles
+        # crossed with sat + val. We add small per-center jitter so the
+        # cos²+sin²=1 manifold constraint doesn't make the polynomial null
+        # space rank-deficient — gamfit's `_thin_plate_penalty` requires
+        # centers to span the polynomial block (rank d+1 = 5 in 4D).
+        n_hue, n_sv = 8, 4                                    # 8 × 4 × 4 = 128 centers
         thetas = np.linspace(0.0, 2 * np.pi, n_hue, endpoint=False)
         sats = np.linspace(0.0, 1.0, n_sv)
         vals = np.linspace(0.0, 1.0, n_sv)
+        rng_c = np.random.default_rng(42)
         centers_hsv = []
         for th in thetas:
             for s in sats:
                 for v in vals:
                     centers_hsv.append([np.cos(th), np.sin(th), s, v])
-        centers_hsv = np.array(centers_hsv)                   # (72, 4)
+        centers_hsv = np.array(centers_hsv) + 0.02 * rng_c.standard_normal((len(thetas) * n_sv * n_sv, 4))
         Phi_tr, P = duchon_basis_radial(train_X_hsv, centers_hsv)
         Phi_te, _ = duchon_basis_radial(test_X_hsv, centers_hsv)
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
 
     if spec_name == "L_joint_rgb_with_hue":
-        # Multi-smooth single GAM: f(R,G,B) + g(cos2πh, sin2πh)
+        # Multi-smooth single GAM: f(R,G,B) + g(cos h, sin h)
+        # Routed through gamfit's additive REML (single shared λ across smooths).
         Phi_rgb_tr, P_rgb = duchon_basis_radial(train_X_rgb, centers_rgb)
         Phi_rgb_te, _ = duchon_basis_radial(test_X_rgb, centers_rgb)
-        # 2D radial Duchon on (cos h, sin h)
-        centers_hue = lattice_centers(4)[:, :2]            # reuse 2D 4x4 slice
+        angles = np.linspace(0.0, 2 * np.pi, 12, endpoint=False)
+        centers_hue = np.stack([np.cos(angles), np.sin(angles)], axis=1)
         Phi_hue_tr, P_hue = duchon_basis_radial(train_X_hsv[:, :2], centers_hue)
         Phi_hue_te, _ = duchon_basis_radial(test_X_hsv[:, :2], centers_hue)
-        # Strip the intercept column of the second smooth (only one needed)
-        Phi_hue_tr = Phi_hue_tr[:, :-1]
-        Phi_hue_te = Phi_hue_te[:, :-1]
-        P_hue = P_hue[:-1, :-1]
-        K1, K2 = Phi_rgb_tr.shape[1], Phi_hue_tr.shape[1]
-        Phi_tr = np.concatenate([Phi_rgb_tr, Phi_hue_tr], axis=1)
-        Phi_te = np.concatenate([Phi_rgb_te, Phi_hue_te], axis=1)
-        P = np.zeros((K1 + K2, K1 + K2))
-        # Single shared λ for now — the "multi-λ per smooth term" path needs
-        # gaussian_reml_fit_additive's true multi-smooth solver; this is a
-        # placeholder that REML can still close-form on (one λ scales both
-        # penalty blocks together). v2 swaps to per-smooth λ via gamfit's
-        # additive API once the harvest is checked in.
-        P[:K1, :K1] = P_rgb
-        P[K1:, K1:] = P_hue
-        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
-        return Phi_tr @ B, Phi_te @ B
+        return _additive_fit_predict(
+            [Phi_rgb_tr, Phi_hue_tr], [P_rgb, P_hue], train_Z,
+            [Phi_rgb_te, Phi_hue_te],
+        )
 
     if spec_name in ("U_1d", "U_2d", "U_3d", "U_4d"):
         d = int(spec_name[2])

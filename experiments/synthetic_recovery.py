@@ -215,7 +215,7 @@ def _plot_curves(
     # This is the "natural" view of each feature: its planted ambient subspace.
     # When the SAE recovers the right subspace, learned and GT curves end up
     # in the same plane here and the visual is faithful.
-    from manifold_sae.data_synthetic import SyntheticDataset  # noqa: F401
+    from manifold_sae.data_synthetic import SyntheticDataset  
     for i in range(F):
         ax = axes[i // cols, i % cols]
         m = int(matches[i])

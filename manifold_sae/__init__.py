@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name):  # noqa: D401 — PEP 562 lazy attr access
+def __getattr__(name):
     if name == "ManifoldEncoder":
         from .encoder import ManifoldEncoder
         return ManifoldEncoder
