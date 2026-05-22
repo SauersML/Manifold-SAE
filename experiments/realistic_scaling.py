@@ -114,6 +114,32 @@ SCENARIOS = [
         n_steps=12000, batch_size=512, lr=5e-4,
         n_basis=24, intrinsic_rank=2,
     ),
+    # === STEELMAN FOR VANILLA ===
+    # GT features are POINT directions (no curve structure: n_curve_anchors=1).
+    # Vanilla SAE matches the data-generating process exactly; curve SAE has
+    # to learn flat (constant) atoms. If curve SAE matches vanilla here,
+    # the architecture is robust to non-curve data. If curve SAE
+    # underperforms, that's an honest limitation worth documenting.
+    Scenario(
+        name="points_only",
+        d_ambient=256, n_curve_features=32, n_curve_anchors=1,
+        sparsity_per_token=5, n_samples=50_000,
+        sae_features=32, top_k=8,
+        n_steps=6000, batch_size=256, lr=1e-3,
+        n_basis=10, intrinsic_rank=2,
+    ),
+    # === STEELMAN AT LM SCALE ===
+    # Same point-only setup but at D=896. The convergence problem at xlarge
+    # might be specific to the curve-richness; at point GT, the curve SAE
+    # should reduce to ~vanilla performance.
+    Scenario(
+        name="points_only_xlarge",
+        d_ambient=896, n_curve_features=128, n_curve_anchors=1,
+        sparsity_per_token=12, n_samples=80_000,
+        sae_features=128, top_k=16,
+        n_steps=8000, batch_size=512, lr=5e-4,
+        n_basis=12, intrinsic_rank=2,
+    ),
 ]
 
 
