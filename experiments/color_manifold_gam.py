@@ -262,20 +262,23 @@ def duchon_basis_general(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray
 
 
 def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple[np.ndarray, np.ndarray]:
-    """1D penalized B-spline basis + 2nd-order difference penalty, both
-    from gamfit's primitives (clamped knot vector on [0, 1], gamfit-built
-    basis + gamfit's `smoothness_penalty` for the P-spline penalty matrix).
+    """1D penalized B-spline basis + 2nd-order difference penalty —
+    every choice delegated to gamfit:
+
+      * knot vector: built by gamfit's `_resolve_knots_tensor` (clamped
+        with quantile-spaced interior knots derived from t)
+      * basis: `gt.bspline_basis`
+      * penalty: `gt.smoothness_penalty`
+
+    `n_basis` only controls the interior-knot count (gamfit clamps the
+    boundaries). No hand-rolled knots, no hand-rolled penalty.
     """
     import gamfit.torch as gt
-    # Clamped knot vector: degree+1 zeros + interior + degree+1 ones.
-    knots_np = np.concatenate([
-        np.repeat(0.0, degree),
-        np.linspace(0.0, 1.0, n_basis - degree + 1),
-        np.repeat(1.0, degree),
-    ])
-    t_clipped = np.clip(t, 0.0, 1.0)
-    t_t = torch.from_numpy(np.ascontiguousarray(t_clipped, dtype=np.float64))
-    knots_t = torch.from_numpy(np.ascontiguousarray(knots_np, dtype=np.float64))
+    from gamfit.torch._basis import _resolve_knots_tensor
+    t_t = torch.from_numpy(np.ascontiguousarray(t, dtype=np.float64))
+    # Pass `n_basis` (an int) -> gamfit picks quantile-spaced interior knots
+    # of that count and clamps the ends; same knots feed basis + penalty.
+    knots_t = _resolve_knots_tensor(t_t, n_basis, degree=degree)
     with torch.no_grad():
         B_t = gt.bspline_basis(t_t, knots_t, degree=degree, periodic=False)
         P_t, _null = gt.smoothness_penalty(knots_t, degree=degree, order=2)
