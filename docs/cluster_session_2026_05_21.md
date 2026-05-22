@@ -197,3 +197,32 @@ Lock-and-cache shows a noticeable EV drop at L18 (0.932 training →
 `update_snapshot` would have caught a math regression; this drop is
 likely encoder/per-batch-rescale dependence at this layer that the
 frozen rescale doesn't fully capture. Worth investigating.
+
+### Holdout-test generalization (post-train/test-split fix)
+
+After adding train/test split to llm_probe (commit `06e312e`), the real
+architectural-discrimination metric is finally clean. Pick the best
+atom on 80% of prompts; report that same atom's signed Spearman on
+the held-out 20%. A truly concept-encoding atom keeps |ρ| high.
+
+L18 sweep (Qwen-0.5B, F=128, job `8f0b82d5bcbb` probe):
+
+| concept × layer  | vanilla test_ρ | Manifold-SAE test_ρ |
+| --- | --- | --- |
+| magnitude_L20    | +0.379         | **+0.812**           |
+| magnitude_L16    | −0.164         | **+0.216**           |
+| magnitude_L12    | −0.381         | **−0.150**           |
+| magnitude_L8     | −0.344         | **−0.703**           |
+| magnitude_L4     | −0.042         |  +0.106              |
+
+Manifold-SAE atoms transfer concept-encoding better than vanilla atoms
+on held-out data. The non-trivial saturation-free metric makes this
+visible.
+
+### Steering test (job `53a97a4605e5`) FAILED
+
+KL=0.0 between baseline and patched output across the t-sweep — the
+patched forward hook did not actually change the LM's logits. Bug in
+`experiments/steering_causality.py`. Likely: the residual modification
+didn't propagate to the model's continuation, or the picked atom
+(2) had near-zero amplitude for these prompts. Worth a follow-up.
