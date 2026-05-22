@@ -46,7 +46,7 @@ class SweepConfig:
     # Layer to harvest from. Set via env so a single cluster submission
     # can run sweeps at multiple layers as separate jobs.
     layer: int = int(os.environ.get("MSAE_LAYER", "12"))
-    n_tokens: int = 80_000
+    n_tokens: int = int(os.environ.get("MSAE_N_TOKENS", "80000"))
     seq_len: int = 256
     text_dataset: str = "wikitext"
     text_subset: str = "wikitext-2-raw-v1"
@@ -76,7 +76,7 @@ class SweepConfig:
     sae_ortho_weight: float = 1e-3
 
     # Training (curve is CPU-bound — keep small)
-    n_steps_vanilla: int = 1500
+    n_steps_vanilla: int = int(os.environ.get("MSAE_N_STEPS_VAN", "1500"))
     # Bumped 800 → 2000 after the amp²·curve fix. Existing curve checkpoints
     # were trained to 800 under the buggy forward; under the corrected
     # forward the encoder's saturated amp values produce useless recon and
@@ -84,7 +84,7 @@ class SweepConfig:
     # additional steps under the corrected forward. Pure re-training from
     # scratch (delete /content/runs/LLM_SWEEP/curve_F*.pt) is also fine —
     # the encoder learns proper amp values from clean init in 1500-2000 steps.
-    n_steps_curve: int = 2000
+    n_steps_curve: int = int(os.environ.get("MSAE_N_STEPS_CRV", "2000"))
     batch_size_vanilla: int = 1024
     snapshot_density_mib: int = 150          # densified-design ceiling for gamfit
     lr: float = 1e-3
