@@ -172,3 +172,28 @@ the architecture × layer × model design space.
   representation = clearer architectural discrimination.
 * `tools/feature_dashboard.py` against any of these checkpoints —
   qualitative interpretability test (top-firing tokens sorted by `t_k`).
+
+### Layer 18 breaks saturation (commit fa678d4 sweep, job `0ddfbf3ca302`)
+
+Same Qwen2.5-0.5B, but layer 18 instead of 12. Layer 12 was structurally
+saturated — both architectures explained ~0.989 of variance regardless
+of F or architecture. Layer 18's first results show a much richer
+regime:
+
+| F | vanilla EV | curve EV | locked EV | vanilla alive | curve alive |
+| --- | --- | --- | --- | --- | --- |
+| 64 | 0.966 | 0.932 | 0.904 | 12 | **24** |
+
+Two observations:
+
+1. EV is well below 1.0 (0.93–0.97), so the architecture comparison
+   IS discriminative at this layer.
+2. Vanilla has 12 alive atoms; curve has 24 (2× more) — at the same F.
+   This matches the compactness finding: curve atoms can express more
+   distinct sub-concepts.
+
+Lock-and-cache shows a noticeable EV drop at L18 (0.932 training →
+0.904 locked) that wasn't present at L12. The self-test inside
+`update_snapshot` would have caught a math regression; this drop is
+likely encoder/per-batch-rescale dependence at this layer that the
+frozen rescale doesn't fully capture. Worth investigating.
