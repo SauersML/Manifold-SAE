@@ -318,12 +318,46 @@ def _summarize_per_atom(
     rho_strong: float,
     rho_moderate: float,
 ) -> dict:
+    """Per-atom Spearman summary stats.
+
+    `best` (max |ρ|) saturates trivially with small label-count concepts
+    and large F — included for backward compatibility but not the
+    discriminating metric. Use:
+      * `n_atoms_above_moderate` — count of atoms with |ρ| > 0.5
+      * `median_abs` and `p90_abs` — distribution shape
+      * `top_10_mean_abs` — mean of top-10 atom |ρ| (more robust than max)
+      * `concept_concentration` — Gini-like coefficient: how unequally
+        the concept-attribution is spread across atoms. A localized
+        representation has high concentration (few atoms dominate);
+        a smeared one has low concentration.
+    """
     rhos_abs = np.abs(np.array(rhos))
+    n = len(rhos_abs)
+    if n == 0:
+        return {"best": 0.0, "best_atom_idx": -1,
+                "n_atoms_above_strong": 0, "n_atoms_above_moderate": 0,
+                "median_abs": 0.0, "p90_abs": 0.0, "top_10_mean_abs": 0.0,
+                "concept_concentration": 0.0}
+    sorted_abs = np.sort(rhos_abs)[::-1]
+    top_10 = sorted_abs[:min(10, n)].mean()
+    # Concept-concentration: 1 − (area under sorted-|ρ| CDF) / (area under uniform).
+    # If one atom has |ρ|=1 and rest have 0, concentration = 1.
+    # If all atoms tied, concentration = 0.
+    csum = np.cumsum(sorted_abs)
+    if csum[-1] > 0:
+        normalized = csum / csum[-1]
+        concentration = 1.0 - 2.0 * (normalized.mean() - 0.5)
+    else:
+        concentration = 0.0
     return {
-        "best": float(rhos_abs.max()) if len(rhos) else 0.0,
-        "best_atom_idx": int(np.argmax(rhos_abs)) if len(rhos) else -1,
+        "best": float(rhos_abs.max()),
+        "best_atom_idx": int(np.argmax(rhos_abs)),
         "n_atoms_above_strong": int((rhos_abs > rho_strong).sum()),
         "n_atoms_above_moderate": int((rhos_abs > rho_moderate).sum()),
+        "median_abs": float(np.median(rhos_abs)),
+        "p90_abs": float(np.percentile(rhos_abs, 90)),
+        "top_10_mean_abs": float(top_10),
+        "concept_concentration": float(concentration),
     }
 
 
