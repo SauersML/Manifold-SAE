@@ -79,21 +79,62 @@ def _duchon_penalty_1d(centers: torch.Tensor, m: int = 2) -> torch.Tensor:
     return torch.from_numpy(np.asarray(P, dtype=np.float64))
 
 
-def _tensor_product_penalty(P_1d: torch.Tensor) -> torch.Tensor:
-    """Kronecker-summed penalty for the tensor-product basis.
+def _duchon_operator_triplet(centers: torch.Tensor, m: int = 2):
+    """Return (mass M, tension T, stiffness S) 1D operator penalty matrices
+    for the Duchon-m basis at `centers`.
 
-    For a separable basis φ_2d(t, s) = φ_1d(t) ⊗ φ_1d(s), the standard
-    smoothness penalty `∫∫ (∂²f/∂t²)² + (∂²f/∂s²)² dt ds` reduces (under
-    suitable normalization of φ_1d) to
-
-        P_2d = P_1d ⊗ I + I ⊗ P_1d
-
-    where I is K×K identity. This is a single-λ approximation; per-axis
-    smoothing would carry two penalty pieces with two λ's.
+        M[i,j] = ⟨φ_i, φ_j⟩            (mass)
+        T[i,j] = ⟨φ_i', φ_j'⟩          (tension — first-derivative inner product)
+        S[i,j] = ⟨φ_i'', φ_j''⟩        (stiffness — second-derivative inner product)
     """
-    K = P_1d.shape[0]
-    I = torch.eye(K, dtype=P_1d.dtype, device=P_1d.device)
-    return torch.kron(P_1d, I) + torch.kron(I, P_1d)
+    from gamfit._api import _duchon_operator_penalties
+
+    centers_np = centers.detach().cpu().numpy().astype(np.float64)
+    mass, tension, stiffness = _duchon_operator_penalties(centers_np, m=m)
+    M = torch.from_numpy(np.asarray(mass,      dtype=np.float64))
+    T = torch.from_numpy(np.asarray(tension,   dtype=np.float64))
+    S = torch.from_numpy(np.asarray(stiffness, dtype=np.float64))
+    return M, T, S
+
+
+def _proper_2d_duchon_penalty(centers: torch.Tensor, m: int = 2) -> torch.Tensor:
+    """Mathematically-correct 2D Duchon m=2 thin-plate penalty for the
+    tensor-product basis  φ_2d(t,s) = φ_1d(t) ⊗ φ_1d(s).
+
+    The function-norm penalty
+        J(f) = ∫∫ (∂²f/∂t²)² + 2(∂²f/∂t∂s)² + (∂²f/∂s²)² dt ds
+    decomposes for the separable basis (Wood 2017 §5.6) into:
+        J(B) = vec(B)ᵀ [ S⊗M  +  2·(T⊗T)  +  M⊗S ] vec(B)
+    where M=mass, T=tension, S=stiffness 1D operator penalties.
+
+    The earlier `P_1d ⊗ I + I ⊗ P_1d` form was missing both the mass-matrix
+    weighting and the cross-derivative `T⊗T` term — the resulting penalty
+    was off-axis by an inconsistent factor and didn't penalize ∂²f/∂t∂s
+    twist at all.
+
+    Returns the full (K², K²) Kronecker tensor. Single-λ assumed; for
+    per-axis smoothing (λ_t, λ_ts, λ_s) requires gamfit's multi-smoothing
+    REML which is not yet exposed in the batched path.
+    """
+    M, T, S = _duchon_operator_triplet(centers, m=m)
+    P_2d = torch.kron(S, M) + 2.0 * torch.kron(T, T) + torch.kron(M, S)
+    # Symmetrize for numerical safety (gamfit's REML solve assumes
+    # symmetric penalty; f32 noise from the three kron sums can leave
+    # microscopic asymmetry).
+    P_2d = 0.5 * (P_2d + P_2d.t())
+    return P_2d
+
+
+def _tensor_product_penalty(P_1d: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
+    """DEPRECATED. The old `P_1d ⊗ I + I ⊗ P_1d` was the wrong penalty for a
+    2D thin-plate spline — missing the mass weighting and the
+    cross-derivative term. Use `_proper_2d_duchon_penalty(centers)` directly.
+    """
+    raise NotImplementedError(
+        "The Kronecker-sum penalty was mathematically incorrect; "
+        "use _proper_2d_duchon_penalty(centers) which builds "
+        "S⊗M + 2·T⊗T + M⊗S from the operator triplet."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +267,9 @@ class ManifoldSAE2D(nn.Module):
         self.register_buffer("has_snapshot", torch.tensor(False))
 
         # Penalty matrix is constant per config — build once, cache as buffer.
-        P_1d = _duchon_penalty_1d(centers, m=2)
-        P_2d = _tensor_product_penalty(P_1d)
+        # Mathematically correct 2D thin-plate penalty
+        # P_2d = S⊗M + 2·T⊗T + M⊗S (mass, tension, stiffness 1D triplet).
+        P_2d = _proper_2d_duchon_penalty(centers, m=2)
         self.register_buffer("P_2d", P_2d)              # (K², K²)
 
         self.inference_mode = False
