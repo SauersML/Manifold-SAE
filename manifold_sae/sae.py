@@ -71,6 +71,14 @@ class ManifoldSAEConfig:
     init_lambda: float | None = None   # init for gamfit's REML λ-optimization;
                                        # higher = biased toward smoother fits.
                                        # None lets gamfit pick (default ~1e-4).
+    # gamfit basis kind. Default "duchon" = Duchon m=2 thin-plate with the
+    # function-norm penalty (single λ per feature). "duchon_multipenalty"
+    # (alias "duchon_triple_operator") splits the penalty into three operator
+    # pieces — mass, tension, stiffness — and lets REML select three λ's per
+    # feature. More expressive at the cost of slower λ-search. Not
+    # compatible with `periodic=True`. See gamfit/torch/_reml.py for the
+    # triple-operator constructor.
+    basis_kind: str = "duchon"
 
 
 @dataclass
@@ -238,11 +246,19 @@ class ManifoldSAE(nn.Module):
         by_packed = mask_binary.t().contiguous().view(-1).to(torch.float64)
         offsets = (torch.arange(F + 1, device=positions.device) * B).to(torch.uint64)
 
+        # `basis_kind` defaults to "duchon" (function-norm penalty, one λ).
+        # Setting `basis_kind="duchon_multipenalty"` switches to the
+        # triple-operator (mass + tension + stiffness) decomposition,
+        # with REML selecting three λ's per feature — more flexible at
+        # the cost of slower λ-search. Not compatible with periodic.
+        _kind = getattr(self.config, "basis_kind", "duchon")
+        if self.config.periodic and _kind != "duchon":
+            _kind = "duchon"  # multipenalty not defined for periodic
         fit = gt.gaussian_reml_fit_positions_batched(
             t_packed, y_packed, offsets,
-            "duchon",
+            _kind,
             self.centers,        # explicit centers (shared across features)
-            None,                # penalty: gamfit auto-derives the Duchon m=2 penalty matrix
+            None,                # penalty: gamfit auto-derives the appropriate penalty
             basis_order=2,
             periodic=self.config.periodic,
             period=1.0 if self.config.periodic else None,

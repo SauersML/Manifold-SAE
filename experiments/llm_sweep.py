@@ -604,6 +604,7 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         ortho_weight=cfg.sae_ortho_weight,
         encoder_type="linear",
         continuous_amp=os.environ.get("MSAE_CONTINUOUS_AMP", "1") == "1",
+        basis_kind=os.environ.get("MSAE_BASIS_KIND", "duchon"),
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())
