@@ -55,13 +55,14 @@ Per-F outputs: `eval_F{F}.json` (cached result), checkpoints
 plus `pareto.png`, `alive.png`, `curves.png`, `positions.png`,
 `intrinsic_dim.png`, `per_pc.png`.
 
-### `experiments/cyclic_concepts.py` — direct replication of Engels weekdays
+### `experiments/cyclic_probe.py` — Engels-style weekday probe on a pre-trained SAE
 
-Train Manifold-SAE on residuals from weekday and month addition
-prompts ("What day is k days after Monday?"). Tests whether a single
-curve atom's `g_k(t)` recovers the cyclic 1D manifold that
-[Engels et al. 2024] and [Wurgaft et al. 2026] recover post-hoc
-via cubic-spline fit through centroids.
+Replaces the earlier `cyclic_concepts.py` (which tried to train an SAE
+from scratch on 49 weekday prompts — far too little data). Loads a
+pre-trained SAE (one trained on wikitext at the target layer) and
+probes whether any of its atoms encode the cyclic weekday/month
+structure that Engels et al. 2024 and Wurgaft et al. 2026 recover
+post-hoc via cubic-spline fit through centroids.
 
 Reports Mardia circular Spearman correlation between atom positions
 and the cyclic GT result-class index. Plot: per-class centroids in

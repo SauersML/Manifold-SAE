@@ -68,17 +68,6 @@ def _soft_rescale_1d(z: torch.Tensor, weights: torch.Tensor | None,
     return t.clamp(eps, 1.0 - eps), soft_min, soft_max
 
 
-def _duchon_penalty_1d(centers: torch.Tensor, m: int = 2) -> torch.Tensor:
-    """Build the 1D Duchon m=2 function-norm penalty matrix `(K, K)`.
-    Wraps gamfit's `_duchon_function_norm_penalty`.
-    """
-    from gamfit._api import _duchon_function_norm_penalty
-
-    centers_np = centers.detach().cpu().numpy().astype(np.float64)
-    P = _duchon_function_norm_penalty(centers_np, m=m, periodic=False)
-    return torch.from_numpy(np.asarray(P, dtype=np.float64))
-
-
 def _duchon_operator_triplet(centers: torch.Tensor, m: int = 2):
     """Return (mass M, tension T, stiffness S) 1D operator penalty matrices
     for the Duchon-m basis at `centers`.
@@ -125,16 +114,6 @@ def _proper_2d_duchon_penalty(centers: torch.Tensor, m: int = 2) -> torch.Tensor
     return P_2d
 
 
-def _tensor_product_penalty(P_1d: torch.Tensor) -> torch.Tensor:  # noqa: ARG001
-    """DEPRECATED. The old `P_1d ⊗ I + I ⊗ P_1d` was the wrong penalty for a
-    2D thin-plate spline — missing the mass weighting and the
-    cross-derivative term. Use `_proper_2d_duchon_penalty(centers)` directly.
-    """
-    raise NotImplementedError(
-        "The Kronecker-sum penalty was mathematically incorrect; "
-        "use _proper_2d_duchon_penalty(centers) which builds "
-        "S⊗M + 2·T⊗T + M⊗S from the operator triplet."
-    )
 
 
 # ---------------------------------------------------------------------------

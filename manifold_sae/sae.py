@@ -71,14 +71,14 @@ class ManifoldSAEConfig:
     init_lambda: float | None = None   # init for gamfit's REML λ-optimization;
                                        # higher = biased toward smoother fits.
                                        # None lets gamfit pick (default ~1e-4).
-    # gamfit basis kind. Default "duchon" = Duchon m=2 thin-plate with the
-    # function-norm penalty (single λ per feature). "duchon_multipenalty"
-    # (alias "duchon_triple_operator") splits the penalty into three operator
-    # pieces — mass, tension, stiffness — and lets REML select three λ's per
-    # feature. More expressive at the cost of slower λ-search. Not
-    # compatible with `periodic=True`. See gamfit/torch/_reml.py for the
-    # triple-operator constructor.
-    basis_kind: str = "duchon"
+    # gamfit basis kind. Default "duchon_multipenalty" (triple-operator) lets
+    # REML select three smoothing λ's per feature — one each for the mass,
+    # tension, and stiffness operators. Empirically gives 3-4× more alive
+    # atoms at the same F + matched or higher EV vs the single-λ "duchon"
+    # (validated at Qwen-0.5B L18 F=128: 49 alive vs 14, EV 0.967 vs 0.936).
+    # Override with "duchon" for plain single-λ function-norm. Not
+    # compatible with `periodic=True` — falls back to "duchon" silently.
+    basis_kind: str = "duchon_multipenalty"
 
 
 @dataclass
