@@ -262,29 +262,24 @@ def duchon_basis_general(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray
 
 
 def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple[np.ndarray, np.ndarray]:
-    """1D penalized B-spline basis + 2nd-derivative penalty matrix.
-
-    Equally spaced knots over [0, 1]. Returns (B (N, n_basis), P (n_basis, n_basis)).
-    The 2nd-derivative penalty is the matrix D2^T D2 where D2 is the 2nd-difference
-    operator on coefficients — standard P-spline construction.
+    """1D penalized B-spline basis + 2nd-order difference penalty, both
+    from gamfit's primitives (clamped knot vector on [0, 1], gamfit-built
+    basis + gamfit's `smoothness_penalty` for the P-spline penalty matrix).
     """
-    from scipy.interpolate import BSpline
-    knots = np.concatenate([
+    import gamfit.torch as gt
+    # Clamped knot vector: degree+1 zeros + interior + degree+1 ones.
+    knots_np = np.concatenate([
         np.repeat(0.0, degree),
         np.linspace(0.0, 1.0, n_basis - degree + 1),
         np.repeat(1.0, degree),
     ])
-    B = np.zeros((len(t), n_basis))
-    for k in range(n_basis):
-        coef = np.zeros(n_basis); coef[k] = 1.0
-        spl = BSpline(knots, coef, degree)
-        B[:, k] = spl(np.clip(t, 0.0, 1.0))
-    # 2nd-difference penalty on coefficients
-    D2 = np.zeros((n_basis - 2, n_basis))
-    for i in range(n_basis - 2):
-        D2[i, i] = 1.0; D2[i, i + 1] = -2.0; D2[i, i + 2] = 1.0
-    P = D2.T @ D2
-    return B, P
+    t_clipped = np.clip(t, 0.0, 1.0)
+    t_t = torch.from_numpy(np.ascontiguousarray(t_clipped, dtype=np.float64))
+    knots_t = torch.from_numpy(np.ascontiguousarray(knots_np, dtype=np.float64))
+    with torch.no_grad():
+        B_t = gt.bspline_basis(t_t, knots_t, degree=degree, periodic=False)
+        P_t, _null = gt.smoothness_penalty(knots_t, degree=degree, order=2)
+    return B_t.detach().cpu().numpy(), P_t.detach().cpu().numpy()
 
 
 # =============================================================================
@@ -315,10 +310,18 @@ def reml_fit(Phi: np.ndarray, Z: np.ndarray, P: np.ndarray,
 
 
 def ridge_fit(Phi: np.ndarray, Z: np.ndarray, alpha: float = 1e-3) -> np.ndarray:
-    """Plain ridge (used when there's no penalty matrix — linear baselines)."""
-    PhitPhi = Phi.T @ Phi
-    A = PhitPhi + alpha * np.eye(Phi.shape[1])
-    return np.linalg.solve(A, Phi.T @ Z)
+    """Plain ridge via gamfit's `gaussian_weighted_ridge` (closed-form,
+    Rust core). The "penalty" here is identity-on-coefficients to give
+    standard ridge (X'X + αI)⁻¹X'Y, with unit row weights."""
+    import gamfit.torch as gt
+    N, M = Phi.shape
+    X_t = torch.from_numpy(np.ascontiguousarray(Phi, dtype=np.float64))
+    Y_t = torch.from_numpy(np.ascontiguousarray(Z, dtype=np.float64))
+    P_t = torch.eye(M, dtype=torch.float64)
+    w_t = torch.ones(N, dtype=torch.float64)
+    with torch.no_grad():
+        coef_t, _ = gt.gaussian_weighted_ridge(X_t, Y_t, P_t, w_t, ridge_lambda=float(alpha))
+    return coef_t.detach().cpu().numpy()
 
 
 # =============================================================================
