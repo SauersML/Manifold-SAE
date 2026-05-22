@@ -312,14 +312,23 @@ class ManifoldSAE(nn.Module):
         ]
         points = [pos64[:, k:k+1] for k in range(F)]
 
+        # Production path: per-atom independent REML — scales linearly in F.
+        # The joint additive path is O((F·M_k)³), infeasible past F ≳ 1000.
+        # Under TopK gating most atoms are zero per row, so per-atom λ
+        # independence is the right algorithm. ``mode="auto"`` would also
+        # pick ``independent`` for F > 64 OR D > 1, but we set it explicitly
+        # because the SAE production regime is always at F ≫ 64.
         result = gam_fit(
             points=points,
             response=x_centered_f64,
             smooths=smooths,
             init_lambdas=(
-                torch.tensor([float(self.config.init_lambda)], dtype=torch.float64)
+                torch.tensor(
+                    [float(self.config.init_lambda)] * F, dtype=torch.float64,
+                )
                 if self.config.init_lambda is not None else None
             ),
+            mode="independent",
         )
 
         # Stack per-atom coefficient blocks into (F, K, D). Each list entry
