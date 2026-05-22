@@ -301,8 +301,8 @@ def main(cfg: Config | None = None) -> int:
         X = harvest_activations(cfg, device)
         torch.save({"X": X, "sig": {**act_struct, "n_tokens": int(X.shape[0])}}, act_path)
     mu = X.mean(0, keepdim=True)
-    sigma = float(X.std().item())
-    X_n = ((X - mu) / max(sigma, 1e-6)).to(device)
+    sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = ((X - mu) / sigma).to(device)
     var = float(X_n.var().item())
     D = X_n.shape[1]
 

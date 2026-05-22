@@ -214,8 +214,8 @@ def main() -> int:
                 if len(Xs) >= args.n_corpus_tokens: break
     h_hook.remove()
     X = torch.stack(Xs[: args.n_corpus_tokens], dim=0)
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
     fire_counts = per_atom_alive_count(sae, X_n, device)
     alive = [k for k in range(F) if fire_counts[k] >= 20]
     if len(alive) > args.max_atoms:

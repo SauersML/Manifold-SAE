@@ -198,8 +198,8 @@ def run_task(task: str, cycle_len: int, prompts, idx, sae_c, sae_v, device, cfg:
     X = harvest(cfg.model_name, cfg.layer, prompts, device)
     print(f"  X={X.shape}", flush=True)
 
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
     angles = (np.array(idx, dtype=np.float64) / cycle_len) * 2.0 * np.pi
 
     # Curve: |ρ_circ| between t_k (mapped to 2π·t_k) and angle

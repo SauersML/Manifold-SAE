@@ -431,8 +431,8 @@ def probe_classification(sae, model_name: str, layer: int, cfg: Config, device) 
     y = np.array(labels)
 
     # Normalize same way SAE training did.
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
 
     # Get SAE features.
     with torch.no_grad():

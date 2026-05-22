@@ -210,8 +210,8 @@ def main() -> int:
     print(f"[dash] harvested {X.shape}", flush=True)
     # Normalize the same way llm_sweep does (unit variance, zero mean).
     mu = X.mean(0, keepdim=True)
-    sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
 
     sae = load_curve_sae(Path(args.checkpoint), D=X.shape[1], device=device)
     print(f"[dash] loaded SAE: F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)

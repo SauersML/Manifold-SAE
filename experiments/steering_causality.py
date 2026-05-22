@@ -187,25 +187,51 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
     sae, _ = load_curve_sae(Path(cfg.sae_checkpoint), D, device)
     print(f"[steer] loaded SAE F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
 
-    # Pick atom BY ACTIVITY on the test prompts (more robust than the old
-    # path of loading from a stale probe file). The atom we want to steer
-    # is the one with highest mean amplitude across all `cfg.prompts`.
+    # Pick atom by VARIANCE OF t_k across prompts, restricted to atoms
+    # whose amp is moderate (firing but not clipped at the encoder ceiling).
+    # The previous "argmax(mean amp)" picked the saturated background
+    # atom (always 10.0), which is correlative noise, not a magnitude-
+    # encoding atom. The signal we want is an atom whose POSITION varies
+    # with the input — that's the steering knob.
     if cfg.target_atom < 0:
-        amp_sums = torch.zeros(sae.config.n_features, device=device)
+        F = sae.config.n_features
+        n_prompts = len(cfg.prompts)
+        t_mat = torch.zeros(n_prompts, F, device=device)
+        amp_mat = torch.zeros(n_prompts, F, device=device)
         cap = {}
         hh = blocks[cfg.layer].register_forward_hook(
             lambda m, i, o: cap.__setitem__("h", (o[0] if isinstance(o, tuple) else o).detach())
         )
         with torch.no_grad():
-            for prompt in cfg.prompts:
+            for i, prompt in enumerate(cfg.prompts):
                 inputs = tok(prompt, return_tensors="pt").to(device)
                 model(**inputs)
                 r = cap["h"][0, -1, :]
                 out = sae(r.unsqueeze(0))
-                amp_sums += out.amplitudes[0]
+                t_mat[i] = out.positions[0]
+                amp_mat[i] = out.amplitudes[0]
         hh.remove()
-        atom = int(amp_sums.argmax().item())
-        print(f"[steer] picked atom={atom} by activity (mean amp on prompts: {amp_sums[atom].item()/len(cfg.prompts):.3f})", flush=True)
+        # Score = std(t) across prompts, but only for atoms that fire
+        # on >= half the prompts AND aren't clipped at the amp ceiling.
+        amp_ceil = 10.0  # encoder clamp
+        fired = (amp_mat > 1e-6).float().mean(dim=0)         # (F,)
+        not_clipped = (amp_mat.max(dim=0).values < amp_ceil * 0.99).float()
+        t_std = t_mat.std(dim=0)                              # (F,)
+        score = t_std * (fired >= 0.5).float() * not_clipped
+        if float(score.max()) <= 0:
+            # Fallback: relax constraints
+            score = t_std * (fired > 0).float()
+        atom = int(score.argmax().item())
+        print(f"[steer] picked atom={atom} by t-variance "
+              f"(std(t)={t_std[atom].item():.3f}, mean_amp={amp_mat[:,atom].mean().item():.3f}, "
+              f"fired_frac={fired[atom].item():.2f})", flush=True)
+        # Also log top-5 by score for diagnostics
+        top5 = torch.topk(score, k=min(5, F)).indices.tolist()
+        for k in top5:
+            print(f"    candidate atom={k} std(t)={t_std[k].item():.3f} "
+                  f"mean_amp={amp_mat[:,k].mean().item():.3f} "
+                  f"max_amp={amp_mat[:,k].max().item():.3f} "
+                  f"fired_frac={fired[k].item():.2f}", flush=True)
     else:
         atom = cfg.target_atom
         print(f"[steer] using explicit target_atom={atom}", flush=True)

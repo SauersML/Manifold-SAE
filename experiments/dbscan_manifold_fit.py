@@ -248,8 +248,8 @@ def main() -> int:
     print(f"[setup] loaded vanilla SAE F={sae.F} top_k={sae.top_k}", flush=True)
 
     # Get firing pattern.
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
     with torch.no_grad():
         _, gate = sae(X_n.to(device))
     firing = gate.cpu().numpy()                                    # (N, F)

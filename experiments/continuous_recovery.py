@@ -298,8 +298,8 @@ def run_scenario(s: Scenario, output_dir: Path) -> dict:
 
     data = generate_data(s)
     X = data["X"]
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     print("[vanilla] training", flush=True)

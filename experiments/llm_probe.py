@@ -603,8 +603,8 @@ def main(cfg: ProbeConfig | None = None) -> int:
             activations, ranks, labels = harvested[concept]
             X = activations[L]
             mu = X.mean(0, keepdim=True)
-            sigma = float(X.std().item())
-            X_n = (X - mu) / max(sigma, 1e-6)
+            sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+            X_n = (X - mu) / sigma
             res = phase2_probe_concept(ckpt_dir, cfg.sae_F_to_probe, X_n, ranks, device, cfg)
             key = f"{concept}_L{L}"
             phase2[key] = res

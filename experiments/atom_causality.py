@@ -380,8 +380,8 @@ def main() -> int:
                 if len(Xs) >= cfg.cross_sae_n_tokens: break
     hh.remove()
     X = torch.stack(Xs[:cfg.cross_sae_n_tokens], dim=0)
-    mu = X.mean(0, keepdim=True); sigma = float(X.std().item())
-    X_n = (X - mu) / max(sigma, 1e-6)
+    mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = (X - mu) / sigma
     print(f"  harvested {X.shape}, training seed-B SAE…", flush=True)
     sae_b = train_seeded_sae(cfg, X_n, sae.config, device)
     align = cross_sae_alignment(sae, sae_b)

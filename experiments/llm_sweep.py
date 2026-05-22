@@ -758,8 +758,8 @@ def main(cfg: SweepConfig | None = None) -> int:
         print(f"[harvest] saved {act_path}", flush=True)
 
     mu = X.mean(0, keepdim=True)
-    sigma = float(X.std().item())
-    X_n = ((X - mu) / max(sigma, 1e-6)).to(device)
+    sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
+    X_n = ((X - mu) / sigma).to(device)
     var = float(X_n.var().item())
     print(f"[setup] X_n shape={tuple(X_n.shape)} var={var:.3f}", flush=True)
 
