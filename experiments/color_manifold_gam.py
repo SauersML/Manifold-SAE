@@ -201,41 +201,60 @@ def lattice_centers(per_side: int) -> np.ndarray:
     return np.stack([R.flatten(), G.flatten(), B.flatten()], axis=1)  # (K, 3)
 
 
-def duchon3d_design_and_penalty(
-    X: np.ndarray, centers: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return (Phi (N, K+4), Penalty (K+4, K+4)).
+def duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
+    """Classical thin-plate-spline kernel for radial Duchon m=2 in d dims.
 
-    Phi columns: K radial kernels phi_k(x) = ||x - c_k||  +  null-space
-    [1, R, G, B]. Penalty is the kernel Gram matrix (K x K) in the kernel
-    block, zeros on the null-space block.
+    These are the standard m=2 polyharmonic kernels:
+      d=1: phi(r) = r^3     (natural cubic-spline kernel)
+      d=2: phi(r) = r^2 log r  (true thin-plate spline)
+      d=3: phi(r) = r       (3D thin-plate)
+    Null space in every case: {1, x_1, ..., x_d}.
     """
-    N = X.shape[0]
-    K = centers.shape[0]
-    # pairwise distances
-    diff = X[:, None, :] - centers[None, :, :]        # (N, K, 3)
-    Dnk = np.linalg.norm(diff, axis=2)                # (N, K) = ||x-c_k||
-    null = np.concatenate([np.ones((N, 1)), X], axis=1)  # (N, 4): [1, R, G, B]
-    Phi = np.concatenate([Dnk, null], axis=1)         # (N, K+4)
-    # penalty: Gram of kernels on centers, then expand
-    diff_cc = centers[:, None, :] - centers[None, :, :]
-    Pkk = np.linalg.norm(diff_cc, axis=2)             # (K, K)
-    P = np.zeros((K + 4, K + 4))
-    P[:K, :K] = Pkk
-    return Phi, P
+    if d == 1:
+        return r ** 3
+    if d == 2:
+        # r^2 log r, with limit 0 at r=0
+        out = np.zeros_like(r)
+        mask = r > 1e-12
+        out[mask] = r[mask] ** 2 * np.log(r[mask])
+        return out
+    if d == 3:
+        return r
+    raise ValueError(f"radial Duchon kernel for d={d} not implemented (use 1, 2, or 3)")
 
 
-def duchon_basis_general(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Generic radial Duchon m=2 in d dims with kernel r. Null space {1, x_1, ..., x_d}."""
+def duchon_basis_radial(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Generic radial Duchon m=2 in d ∈ {1,2,3} dims with the dim-specific
+    polyharmonic kernel above. Null space {1, x_1, ..., x_d}.
+
+    Returns (Phi (N, K+d+1), Penalty (K+d+1, K+d+1)).
+    Phi columns: K radial kernels + (d+1)-dim null space.
+    Penalty is the kernel Gram on centers in the kernel block, zeros elsewhere.
+    """
     N, d = X.shape
     K = centers.shape[0]
-    Dnk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
-    null = np.concatenate([np.ones((N, 1)), X], axis=1)              # (N, d+1)
-    Phi = np.concatenate([Dnk, null], axis=1)
-    Pkk = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=2)
+    r_nk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)   # (N, K)
+    Phi_kernel = duchon_kernel(r_nk, d)
+    null = np.concatenate([np.ones((N, 1)), X], axis=1)                    # (N, d+1)
+    Phi = np.concatenate([Phi_kernel, null], axis=1)
+    r_cc = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=2)
+    Pkk = duchon_kernel(r_cc, d)
     P = np.zeros((K + d + 1, K + d + 1))
     P[:K, :K] = Pkk
     return Phi, P
+
+
+# Back-compat alias kept for the supervised RGB path which used the d=3 helper.
+def duchon3d_design_and_penalty(
+    X: np.ndarray, centers: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    return duchon_basis_radial(X, centers)
+
+
+def duchon_basis_general(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Alias for back-compat with the supervised HSV path. Forwards to
+    `duchon_basis_radial` which picks the polyharmonic kernel for X.shape[1]."""
+    return duchon_basis_radial(X, centers)
 
 
 def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple[np.ndarray, np.ndarray]:
@@ -325,6 +344,135 @@ def ridge_fit(Phi: np.ndarray, Z: np.ndarray, alpha: float = 1e-3) -> np.ndarray
 
 
 # =============================================================================
+# Unsupervised manifold fitting — principal-curve / principal-manifold of
+# the activation cloud. The intrinsic coords are LATENT, discovered by
+# alternating between smooth-fit and per-point projection. No GT axes given.
+# =============================================================================
+def lattice_centers_nd(per_side: int, d: int, lo: float = 0.0, hi: float = 1.0) -> np.ndarray:
+    """Regular `per_side^d` lattice in [lo, hi]^d."""
+    axes = [np.linspace(lo, hi, per_side) for _ in range(d)]
+    mesh = np.meshgrid(*axes, indexing="ij")
+    return np.stack([m.flatten() for m in mesh], axis=1)
+
+
+def _rescale_T_to_unit(T: np.ndarray) -> np.ndarray:
+    """Per-axis affine rescale of T so each column spans [0, 1]. Stable when
+    the column has near-zero spread (then leave at 0.5)."""
+    lo = T.min(axis=0, keepdims=True)
+    hi = T.max(axis=0, keepdims=True)
+    span = (hi - lo)
+    out = np.where(span > 1e-8, (T - lo) / np.maximum(span, 1e-8), 0.5 * np.ones_like(T))
+    return out
+
+
+def _initialize_T_from_pca(Z: np.ndarray, d: int) -> np.ndarray:
+    """Initial latent coords = top-d PCs of Z, rescaled to [0, 1]^d."""
+    Zc = Z - Z.mean(0, keepdims=True)
+    _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+    T = Zc @ Vt.T[:, :d]
+    return _rescale_T_to_unit(T)
+
+
+def _project_one_point(z: np.ndarray, B: np.ndarray, centers: np.ndarray, d: int,
+                         grid_per_axis: int) -> np.ndarray:
+    """For a single target z ∈ ℝ^K, find t ∈ [0,1]^d minimizing ‖z − Phi(t)·B‖².
+
+    Pure grid search; cheap for d ≤ 3.
+    """
+    grid = lattice_centers_nd(grid_per_axis, d, 0.0, 1.0)        # (M, d)
+    # Build Phi at every grid point in one shot
+    Phi_grid, _ = duchon_basis_radial(grid, centers)              # (M, K_basis)
+    Z_grid = Phi_grid @ B                                          # (M, K_pcs)
+    diffs = Z_grid - z[None, :]                                    # (M, K_pcs)
+    sqd = (diffs ** 2).sum(axis=1)                                 # (M,)
+    return grid[int(np.argmin(sqd))]
+
+
+def _project_points_batched(Z_target: np.ndarray, B: np.ndarray, centers: np.ndarray,
+                              d: int, grid_per_axis: int) -> np.ndarray:
+    """Vectorized projection of an (N, K_pcs) batch onto the manifold."""
+    grid = lattice_centers_nd(grid_per_axis, d, 0.0, 1.0)
+    Phi_grid, _ = duchon_basis_radial(grid, centers)
+    Z_grid = Phi_grid @ B                                          # (M, K_pcs)
+    # ‖z_n − Z_grid_m‖² = ‖z_n‖² − 2 z_n·Z_grid_m + ‖Z_grid_m‖²
+    Zn_sq = (Z_target ** 2).sum(axis=1, keepdims=True)             # (N, 1)
+    Zg_sq = (Z_grid ** 2).sum(axis=1, keepdims=True).T             # (1, M)
+    cross = Z_target @ Z_grid.T                                    # (N, M)
+    sqd = Zn_sq - 2 * cross + Zg_sq
+    best = np.argmin(sqd, axis=1)                                  # (N,)
+    return grid[best]                                              # (N, d)
+
+
+def fit_unsupervised_manifold(Z: np.ndarray, d: int, cfg: Config,
+                                n_iters: int = 12,
+                                centers_per_axis: int | None = None,
+                                grid_per_axis: int | None = None,
+                                verbose: bool = False,
+                                init_T: np.ndarray | None = None,
+                                ) -> dict:
+    """Alternating fit of a d-dim principal manifold through Z (N, K_pcs).
+
+    Returns:
+      T_final  (N, d)  — discovered latent coords in [0, 1]^d
+      B        (K_basis, K_pcs) — smooth coefficients
+      centers  (n_centers, d)
+      log_lambda — REML-selected log-λ
+      history  list of {iter, dT, train_mse, log_lambda}
+    """
+    if centers_per_axis is None:
+        centers_per_axis = {1: 16, 2: 8, 3: 5}[d]
+    if grid_per_axis is None:
+        grid_per_axis = {1: 200, 2: 40, 3: 20}[d]
+
+    centers = lattice_centers_nd(centers_per_axis, d, 0.0, 1.0)
+    T = init_T.copy() if init_T is not None else _initialize_T_from_pca(Z, d)
+    history = []
+    last_log_lambda = cfg.init_log_lambda
+
+    for it in range(n_iters):
+        Phi, P = duchon_basis_radial(T, centers)
+        B, last_log_lambda = reml_fit(Phi, Z, P, init_log_lambda=last_log_lambda)
+
+        # Projection step (re-fit T given B)
+        T_new = _project_points_batched(Z, B, centers, d, grid_per_axis)
+        # Stability: rescale to [0,1]^d so centers stay in support
+        T_new = _rescale_T_to_unit(T_new)
+        dT = float(np.linalg.norm(T_new - T) / max(1.0, np.linalg.norm(T)))
+        Z_hat = Phi @ B
+        train_mse = float(((Z - Z_hat) ** 2).mean())
+        history.append({"iter": it, "dT": dT, "train_mse": train_mse,
+                          "log_lambda": last_log_lambda})
+        if verbose:
+            print(f"      [unsup d={d} iter {it:2d}] dT={dT:.3e} "
+                  f"mse={train_mse:.3e} log_lam={last_log_lambda:+.2f}", flush=True)
+        T = T_new
+        if dT < 1e-4:
+            break
+
+    # Final smooth fit at converged T
+    Phi, P = duchon_basis_radial(T, centers)
+    B, last_log_lambda = reml_fit(Phi, Z, P, init_log_lambda=last_log_lambda)
+
+    return {"T": T, "B": B, "centers": centers, "log_lambda": last_log_lambda,
+            "history": history, "centers_per_axis": centers_per_axis,
+            "grid_per_axis": grid_per_axis}
+
+
+def predict_unsupervised(Z_target: np.ndarray, fit: dict, d: int,
+                          grid_per_axis: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Project unseen Z_target onto a fitted unsupervised manifold.
+
+    Returns (T_test (N, d), Z_pred (N, K_pcs)).
+    """
+    if grid_per_axis is None:
+        grid_per_axis = fit["grid_per_axis"]
+    T_test = _project_points_batched(Z_target, fit["B"], fit["centers"], d, grid_per_axis)
+    Phi_test, _ = duchon_basis_radial(T_test, fit["centers"])
+    Z_pred = Phi_test @ fit["B"]
+    return T_test, Z_pred
+
+
+# =============================================================================
 # Spec definitions
 # =============================================================================
 def coord_rgb(R, G, B, hsv) -> np.ndarray:
@@ -337,7 +485,7 @@ def coord_hsv_periodic(R, G, B, hsv) -> np.ndarray:
 
 
 SPECS = {
-    # name -> (coord_fn, basis_kind, basis_kwargs)
+    # SUPERVISED: GT axes drive the parameterization
     "L_lin_rgb": ("ridge_rgb",),
     "L_lin_hsv": ("ridge_hsv",),
     "L_add_rgb": ("additive_rgb",),
@@ -345,6 +493,10 @@ SPECS = {
     "L_joint_rgb": ("smooth_rgb",),
     "L_joint_hsv": ("smooth_hsv",),
     "L_joint_rgb_with_hue": ("smooth_rgb_plus_hue",),
+    # UNSUPERVISED: latent parameterization, discovered by alternation
+    "U_1d": ("unsup_1d",),
+    "U_2d": ("unsup_2d",),
+    "U_3d": ("unsup_3d",),
 }
 
 
@@ -363,6 +515,17 @@ def r2_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     ss_res = float(((y_true - y_pred) ** 2).sum())
     ss_tot = float(((y_true - y_true.mean(0, keepdims=True)) ** 2).sum())
     return 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
+
+
+def _spearman_np(x: np.ndarray, y: np.ndarray) -> float:
+    """Spearman rank correlation between 1D arrays x and y."""
+    x = np.asarray(x).ravel(); y = np.asarray(y).ravel()
+    if len(x) != len(y) or len(x) < 2: return float("nan")
+    rx = np.argsort(np.argsort(x)).astype(np.float64)
+    ry = np.argsort(np.argsort(y)).astype(np.float64)
+    rx -= rx.mean(); ry -= ry.mean()
+    denom = float(np.sqrt((rx * rx).sum() * (ry * ry).sum()))
+    return float((rx * ry).sum() / denom) if denom > 0 else float("nan")
 
 
 def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
@@ -471,6 +634,19 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         P[K1:, K1:] = P_hue
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
+
+    if spec_name in ("U_1d", "U_2d", "U_3d"):
+        d = int(spec_name[2])
+        # No GT axes used. Fit joint (T_train, B) by alternation on train Z.
+        fit = fit_unsupervised_manifold(train_Z, d, cfg, n_iters=12, verbose=False)
+        # Train-side reconstruction (from the converged T_train).
+        Phi_tr, _ = duchon_basis_radial(fit["T"], fit["centers"])
+        Z_tr_pred = Phi_tr @ fit["B"]
+        # Held-out: project each test row onto the fitted manifold.
+        _, Z_te_pred = predict_unsupervised(test_Z, fit, d)
+        # Stash the fit so the caller can recover the discovered T per CV fold.
+        fit_and_predict._last_unsup_fit = fit  # type: ignore[attr-defined]
+        return Z_tr_pred, Z_te_pred
 
     raise ValueError(f"unknown spec: {spec_name}")
 
@@ -594,9 +770,52 @@ def main() -> int:
                       flush=True)
                 spec_results[spec_name] = {"error": str(e)}
 
+        # Full-data unsupervised fits (no CV) — discover the latent t per
+        # color for each intrinsic d. We use these to answer "what known
+        # axis does the discovered manifold align with?" via Spearman.
+        unsup_full = {}
+        for d in (1, 2, 3):
+            fit = fit_unsupervised_manifold(Z, d, cfg, n_iters=15, verbose=False)
+            T = fit["T"]                                          # (954, d)
+            # Spearman of each latent axis vs each known axis
+            spearmans = {}
+            for ax_name, ax_vals in color_axes.items():
+                per_latent_rhos = [float(_spearman_np(T[:, k], ax_vals)) for k in range(d)]
+                spearmans[ax_name] = {
+                    "per_latent_rho": per_latent_rhos,
+                    "best_latent": int(np.argmax(np.abs(per_latent_rhos))),
+                    "best_abs_rho": max(abs(r) for r in per_latent_rhos),
+                }
+            # For each latent axis, also report the BEST-aligned known axis
+            best_per_latent = []
+            for k in range(d):
+                axis_rhos: dict[str, float] = {
+                    ax: float(_spearman_np(T[:, k], color_axes[ax]))
+                    for ax in color_axes
+                }
+                best_ax: str = max(axis_rhos.keys(), key=lambda a: abs(axis_rhos[a]))
+                best_per_latent.append({"latent_idx": k,
+                                          "best_axis": best_ax,
+                                          "rho": axis_rhos[best_ax],
+                                          "all_rhos": axis_rhos})
+            unsup_full[f"d={d}"] = {
+                "T": T.tolist(),
+                "log_lambda": fit["log_lambda"],
+                "n_iters": len(fit["history"]),
+                "final_train_mse": fit["history"][-1]["train_mse"],
+                "axis_to_latent_spearman": spearmans,
+                "best_axis_per_latent": best_per_latent,
+            }
+            # Print summary
+            print(f"  [unsup d={d}] log_lam={fit['log_lambda']:+.2f}  "
+                  f"iters={len(fit['history'])}  best per latent: " +
+                  ", ".join(f"{x['best_axis']}={x['rho']:+.2f}" for x in best_per_latent),
+                  flush=True)
+
         per_layer_results[f"L{L}"] = {
             "explained_variance_ratio_topK": [float(x) for x in explained_var_ratio],
             "specs": spec_results,
+            "unsupervised_full_data": unsup_full,
             "Vt_topK": Vt[:cfg.n_pcs].tolist(),     # principal directions
             "mu": mu.flatten().tolist(),
             "sigma": sigma.flatten().tolist(),
