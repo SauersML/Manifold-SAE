@@ -46,6 +46,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import gamfit
 import gamfit.torch as gt
 import numpy as np
 import torch
@@ -167,8 +168,21 @@ class ManifoldSAE(nn.Module):
 
         # Centers in [0, 1] — float64 because gamfit's REML requires it.
         # We share centers across features (standard GAM setup).
-        centers = torch.linspace(0.0, 1.0, K, dtype=torch.float64)
+        # Stored as (K, 1) — the new gamfit multi-d API takes (K, d).
+        centers = torch.linspace(0.0, 1.0, K, dtype=torch.float64).unsqueeze(1)
         self.register_buffer("centers", centers)
+
+        # Duchon function-norm penalty — fixed at init (depends only on
+        # centers + m). Same penalty reused for every per-atom REML fit.
+        # gamfit.duchon_function_norm_penalty is the numpy API; we keep a
+        # float64 torch buffer.
+        centers_np = centers.detach().cpu().numpy()
+        per_axis = (bool(config.periodic),)
+        penalty_np = gamfit.duchon_function_norm_penalty(
+            centers_np, m=2, periodic_per_axis=per_axis,
+        )
+        penalty = torch.as_tensor(np.asarray(penalty_np), dtype=torch.float64)
+        self.register_buffer("penalty", penalty)
 
         # Persistent per-feature W_k in R^(D, R). Adam-owned.
         if D >= F * R:
@@ -235,46 +249,54 @@ class ManifoldSAE(nn.Module):
         mask_soft: torch.Tensor,
         mask_binary: torch.Tensor,
     ) -> ManifoldSAEOutput:
-        """gamfit REML fit per batch; B and λ flow from gamfit, not from parameters."""
+        """Per-atom REML fit via new explicit-basis gamfit API.
+
+        For each feature k we evaluate the Duchon basis at that atom's
+        positions, gate rows by amplitude (`by`), and run a single
+        `gaussian_reml_fit` with the precomputed function-norm penalty.
+        Independent λ per atom (simpler than additive joint fit).
+        """
         B, F = positions.shape
         R = dirs.shape[-1]
+        K = self.centers.shape[0]
+        device = positions.device
 
-        # Pack for gamfit: (F*B,) positions, (F*B, R) targets, (F*B,) amplitude weights.
-        # gamfit expects float64 throughout.
-        t_packed = positions.t().contiguous().view(-1).to(torch.float64)
-        y_packed = y_proj.permute(1, 0, 2).contiguous().view(F * B, R).to(torch.float64)
-        by_packed = mask_binary.t().contiguous().view(-1).to(torch.float64)
-        offsets = (torch.arange(F + 1, device=positions.device) * B).to(torch.uint64)
+        periodic = bool(self.config.periodic)
+        per_axis = (periodic,) if periodic else None
 
-        # `basis_kind` defaults to "duchon" (function-norm penalty, one λ).
-        # Setting `basis_kind="duchon_multipenalty"` switches to the
-        # triple-operator (mass + tension + stiffness) decomposition,
-        # with REML selecting three λ's per feature — more flexible at
-        # the cost of slower λ-search. Not compatible with periodic.
-        _kind = getattr(self.config, "basis_kind", "duchon")
-        if self.config.periodic and _kind != "duchon":
-            _kind = "duchon"  # multipenalty not defined for periodic
-        fit = gt.gaussian_reml_fit_positions_batched(
-            t_packed, y_packed, offsets,
-            _kind,
-            self.centers,        # explicit centers (shared across features)
-            None,                # penalty: gamfit auto-derives the appropriate penalty
-            basis_order=2,
-            periodic=self.config.periodic,
-            period=1.0 if self.config.periodic else None,
-            by=by_packed,
-            init_lambda=self.config.init_lambda,
-        )
+        # Outputs to assemble.
+        coefs = torch.zeros(F, K, R, dtype=torch.float64, device=device)
+        fitted_all = torch.zeros(F, B, R, dtype=torch.float64, device=device)
+        lams = torch.zeros(F, dtype=torch.float64, device=device)
+        reml_scores = torch.zeros(F, dtype=torch.float64, device=device)
 
-        # gamfit.fitted = by * (phi @ B). gamfit's `fitted` is ALREADY
-        # multiplied by the `by` weighting we passed (= mask_binary). So
-        # `fitted` per feature per token equals `amp * curve(t)`, which is
-        # exactly the SAE's intended contribution. DO NOT multiply by
-        # mask_binary again — that gave `amp^2 * curve(t)` and diverged
-        # from inference-mode reconstruction (which has only one `amp`
-        # factor). Bug only visible under `continuous_amp=True` because
-        # binary mask satisfies mask^2 == mask.
-        fitted = fit.fitted.view(F, B, R).to(x_dtype)
+        pos64 = positions.to(torch.float64)
+        y64 = y_proj.to(torch.float64)
+        by64 = mask_binary.to(torch.float64)
+
+        for k in range(F):
+            t_k = pos64[:, k].unsqueeze(1)                         # (B, 1)
+            phi_k = gt.duchon_basis(
+                t_k, self.centers, m=2, periodic_per_axis=per_axis,
+            )                                                       # (B, K)
+            by_k = by64[:, k]                                       # (B,)
+            # Row-gate the design via `by` (column-wise multiply per row).
+            design_k = phi_k * by_k.unsqueeze(1)
+            y_k = y64[:, k, :]                                      # (B, R)
+            out_k = gt.gaussian_reml_fit(
+                design_k, y_k, self.penalty,
+                init_lambda=self.config.init_lambda,
+            )
+            coefs[k] = out_k.coefficients                          # (K, R)
+            # `fitted` from gamfit = design_k @ coefs = by_k * (phi_k @ B_k),
+            # i.e. already amplitude-gated — matches inference (one `amp`).
+            fitted_all[k] = out_k.fitted
+            lams[k] = out_k.lam.reshape(()) if out_k.lam.dim() > 0 else out_k.lam
+            reml_scores[k] = (
+                out_k.reml_score.reshape(()) if out_k.reml_score.dim() > 0 else out_k.reml_score
+            )
+
+        fitted = fitted_all.to(x_dtype)
         contribution = torch.einsum("fbr,fdr->bfd", fitted, dirs)
         recon = contribution.sum(dim=1) + b_dec.unsqueeze(0)
 
@@ -287,9 +309,9 @@ class ManifoldSAE(nn.Module):
             positions=positions,
             amplitudes=mask_binary,
             mask_soft=mask_soft,
-            coefficients=fit.coefficients.to(x_dtype),  # (F, K, R) — autograd-aware
-            lam=fit.lam.to(x_dtype),
-            reml_score=fit.reml_score.to(x_dtype),
+            coefficients=coefs.to(x_dtype),                        # (F, K, R) — autograd-aware
+            lam=lams.to(x_dtype),
+            reml_score=reml_scores.to(x_dtype),
             fitted=fitted,
             directions=self.directions,
             ortho_loss=ortho_loss,
@@ -311,8 +333,10 @@ class ManifoldSAE(nn.Module):
         R = dirs.shape[-1]
 
         # Evaluate the basis at this batch's positions (gamfit's basis evaluator).
-        t_flat = positions.t().contiguous().view(-1).to(torch.float64)
-        phi = gt.duchon_basis_1d(t_flat, self.centers, m=2, periodic=self.config.periodic)
+        periodic = bool(self.config.periodic)
+        per_axis = (periodic,) if periodic else None
+        t_flat = positions.t().contiguous().view(-1).unsqueeze(1).to(torch.float64)  # (F*B, 1)
+        phi = gt.duchon_basis(t_flat, self.centers, m=2, periodic_per_axis=per_axis)
         K = phi.shape[-1]
         phi = phi.view(F, B, K)
         # g_k(t_b) = φ_b @ B_locked_k.
@@ -489,7 +513,11 @@ def extract_feature_curves(
             if t_hi - t_lo < 1e-3:
                 t_lo, t_hi = 0.0, 1.0
         t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=sae.config.periodic)
+        periodic = bool(sae.config.periodic)
+        per_axis = (periodic,) if periodic else None
+        phi_k = gt.duchon_basis(
+            t_k.unsqueeze(1), sae.centers, m=2, periodic_per_axis=per_axis,
+        )
         intrinsic_curve = phi_k @ sae.B_locked[k]
         ambient_curve = intrinsic_curve @ dirs[k].T
         curves[k] = ambient_curve
