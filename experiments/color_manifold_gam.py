@@ -201,17 +201,15 @@ def lattice_centers(per_side: int) -> np.ndarray:
     return np.stack([R.flatten(), G.flatten(), B.flatten()], axis=1)  # (K, 3)
 
 
-def duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
-    """Classical thin-plate-spline (m=2) polyharmonic kernels in d dims.
+def _duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
+    """Polyharmonic m=2 kernels per dim. Used only for d ≥ 2 where gamfit
+    doesn't expose the multi-D Duchon penalty in the torch surface.
 
-      d=1: phi(r) = r^3        (natural cubic-spline kernel)
-      d=2: phi(r) = r^2 log r  (true thin-plate spline)
-      d=3: phi(r) = r          (3D thin-plate)
-      d=4: phi(r) = log r      (4D thin-plate; even-d polyharmonic)
-    Null space in every case: {1, x_1, ..., x_d}. Limits at r=0 are 0.
+      d=2: phi(r) = r^2 log r
+      d=3: phi(r) = r
+      d=4: phi(r) = log r
+    Limits at r=0 are 0.
     """
-    if d == 1:
-        return r ** 3
     if d == 2:
         out = np.zeros_like(r)
         mask = r > 1e-12
@@ -224,41 +222,58 @@ def duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
         mask = r > 1e-12
         out[mask] = np.log(r[mask])
         return out
-    raise ValueError(f"radial Duchon kernel for d={d} not implemented (use 1-4)")
+    raise ValueError(f"_duchon_kernel: d must be in {{2,3,4}}; got {d}")
 
 
-def duchon_basis_radial(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Generic radial Duchon m=2 in d ∈ {1,2,3} dims with the dim-specific
-    polyharmonic kernel above. Null space {1, x_1, ..., x_d}.
+def duchon_basis_radial(X: np.ndarray, centers: np.ndarray,
+                          periodic: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """Radial Duchon m=2 design + matched function-norm penalty.
 
-    Returns (Phi (N, K+d+1), Penalty (K+d+1, K+d+1)).
-    Phi columns: K radial kernels + (d+1)-dim null space.
-    Penalty is the kernel Gram on centers in the kernel block, zeros elsewhere.
+    d=1 path: delegates entirely to gamfit. Basis = `gt.duchon_basis_1d`
+    (returns kernel block constrained orthogonal to the null space PLUS
+    the null space columns); penalty = `_duchon_function_norm_penalty`.
+    Supports `periodic=True` (gamfit's periodic Duchon — fixed in
+    0.1.99+; pinned at 0.1.98 here so periodic crashes until lockfile
+    is bumped).
+
+    d ≥ 2 path: gamfit's torch surface doesn't expose a multi-D Duchon
+    penalty, so we build the classical RBF construction: design =
+    [kernel | null space], penalty = kernel Gram on centers. For radial
+    basis functions this Gram IS the function-norm penalty (standard
+    Wahba/Wood thin-plate-spline result).
+
+    Returns (Phi, P). Shape varies by path; downstream consumers see them
+    as a matched pair.
     """
     N, d = X.shape
+
+    if d == 1:
+        import gamfit.torch as gt
+        from gamfit._api import _duchon_function_norm_penalty
+        # Centers 1D (gamfit wants shape (K,))
+        c_t = torch.from_numpy(np.ascontiguousarray(centers.ravel(), dtype=np.float64))
+        t_t = torch.from_numpy(np.ascontiguousarray(X.ravel(), dtype=np.float64))
+        with torch.no_grad():
+            Phi_t = gt.duchon_basis_1d(t_t, c_t, m=2, periodic=periodic)
+        Phi = Phi_t.detach().cpu().numpy()
+        P = np.asarray(_duchon_function_norm_penalty(
+            centers.ravel().astype(np.float64), m=2, periodic=periodic
+        ))
+        return Phi, P
+
+    if periodic:
+        raise ValueError("periodic Duchon currently only supported for d=1")
+
     K = centers.shape[0]
-    r_nk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)   # (N, K)
-    Phi_kernel = duchon_kernel(r_nk, d)
+    r_nk = np.linalg.norm(X[:, None, :] - centers[None, :, :], axis=2)
+    Phi_kernel = _duchon_kernel(r_nk, d)
     null = np.concatenate([np.ones((N, 1)), X], axis=1)                    # (N, d+1)
     Phi = np.concatenate([Phi_kernel, null], axis=1)
     r_cc = np.linalg.norm(centers[:, None, :] - centers[None, :, :], axis=2)
-    Pkk = duchon_kernel(r_cc, d)
+    Pkk = _duchon_kernel(r_cc, d)
     P = np.zeros((K + d + 1, K + d + 1))
     P[:K, :K] = Pkk
     return Phi, P
-
-
-# Back-compat alias kept for the supervised RGB path which used the d=3 helper.
-def duchon3d_design_and_penalty(
-    X: np.ndarray, centers: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    return duchon_basis_radial(X, centers)
-
-
-def duchon_basis_general(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Alias for back-compat with the supervised HSV path. Forwards to
-    `duchon_basis_radial` which picks the polyharmonic kernel for X.shape[1]."""
-    return duchon_basis_radial(X, centers)
 
 
 def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple[np.ndarray, np.ndarray]:
@@ -564,8 +579,8 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         return Phi_tr @ B, Phi_te @ B
 
     if spec_name == "L_joint_rgb":
-        Phi_tr, P = duchon3d_design_and_penalty(train_X_rgb, centers_rgb)
-        Phi_te, _ = duchon3d_design_and_penalty(test_X_rgb, centers_rgb)
+        Phi_tr, P = duchon_basis_radial(train_X_rgb, centers_rgb)
+        Phi_te, _ = duchon_basis_radial(test_X_rgb, centers_rgb)
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
 
@@ -590,12 +605,12 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
 
     if spec_name == "L_joint_rgb_with_hue":
         # Multi-smooth single GAM: f(R,G,B) + g(cos2πh, sin2πh)
-        Phi_rgb_tr, P_rgb = duchon3d_design_and_penalty(train_X_rgb, centers_rgb)
-        Phi_rgb_te, _ = duchon3d_design_and_penalty(test_X_rgb, centers_rgb)
+        Phi_rgb_tr, P_rgb = duchon_basis_radial(train_X_rgb, centers_rgb)
+        Phi_rgb_te, _ = duchon_basis_radial(test_X_rgb, centers_rgb)
         # 2D radial Duchon on (cos h, sin h)
         centers_hue = lattice_centers(4)[:, :2]            # reuse 2D 4x4 slice
-        Phi_hue_tr, P_hue = duchon_basis_general(train_X_hsv[:, :2], centers_hue)
-        Phi_hue_te, _ = duchon_basis_general(test_X_hsv[:, :2], centers_hue)
+        Phi_hue_tr, P_hue = duchon_basis_radial(train_X_hsv[:, :2], centers_hue)
+        Phi_hue_te, _ = duchon_basis_radial(test_X_hsv[:, :2], centers_hue)
         # Strip the intercept column of the second smooth (only one needed)
         Phi_hue_tr = Phi_hue_tr[:, :-1]
         Phi_hue_te = Phi_hue_te[:, :-1]
