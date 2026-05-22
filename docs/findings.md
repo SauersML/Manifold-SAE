@@ -156,16 +156,88 @@ At D=896, F=128 with default hyperparams, curve SAE got stuck at MSE
 higher `n_basis`, and lower learning rate queued (`xlarge_v2`
 scenario); haven't seen result yet.
 
-## Queued / pending
+## Late-arriving results
+
+### Synthetic 2D recovery — 2D arch did NOT win (May 2026)
+
+`experiments/synthetic_2d_recovery.py` planted 4 independent 2D grid
+surfaces (each warped 8×8 = 64 points in ℝ²⁵⁶ via random per-grid
+curvature) and trained both Manifold-SAE 2D and 1D at matched
+parameter budget.
+
+| | EV | alive atoms | per-grid recovery (Spearman²) |
+| --- | --- | --- | --- |
+| 2D atom arch | 0.937 | 12 | 0.19, 0.21, 0.25, 0.16 |
+| 1D atom pair (2 atoms per grid) | 0.918 | 16 | 0.34, 0.49, 0.35, 0.30 |
+
+**The 1D pair beats the 2D single-atom on every grid**. The current
+2D implementation (tensor-product Duchon basis, single-λ Kronecker
+penalty) doesn't get a single 2D atom to compactly span a planted 2D
+grid better than two coordinated 1D atoms.
+
+Likely causes worth investigating:
+* Single-λ penalty over-smooths along one axis to compensate the other
+  (per-axis λ is in the design doc but not yet implemented).
+* Tensor-product Duchon basis is over-expressive (K²=64 vs K=10 for 1D
+  — too much freedom per atom).
+* Isotropy prior not implemented; nothing prevents atoms from
+  collapsing to 1D internally.
+
+Status: ARCHITECTURAL REWORK NEEDED.
+
+### Steering fix works mechanically but atom selection still wrong
+
+`experiments/steering_causality.py` post-fix (job `713d9e3ded92`)
+shows KL diverging properly when t_k is perturbed — the in-place hook
+fix works.
+
+BUT: the heuristic "pick atom with highest mean amplitude on the test
+prompts" selects atom 0, which fires at the clip ceiling (amp=10.0)
+on EVERY prompt — a dense background atom, not a magnitude-specific
+atom. Pushing its t_k from 0.34 → 0.95 produces garbage outputs
+('}%', whitespace) with KL=12.9.
+
+Status: STEERING MECHANISM CONFIRMED CORRECT, SELECTION HEURISTIC
+WRONG. Better: pick atom with highest VARIANCE across prompts (or
+highest source/target activity DIFFERENCE) instead of highest mean.
+
+### AxBench-style steering shows atom-t is a stronger knob than direction
+
+Same target_atom 0 issue — but the per-method comparison is real:
+
+| method | parameter | mean KL to baseline |
+| --- | --- | --- |
+| no-op | 0 | 0 |
+| atom-t modulation | ±0.5 | 7-10 |
+| direction-vector | ±2.0 | ~0.003 |
+
+**Atom-position modulation produces 3000× larger output shifts than
+direction-vector steering at the same atom**. Even with the wrong atom
+selected, the architectural mechanism is fundamentally more
+expressive: modulating where on the curve the atom is gives much
+more output influence than just scaling its direction.
+
+### Cyclic probe at Qwen-1.5B L18: weak
+
+curve best |ρ_circ|=0.305 on weekdays, **zero atoms above 0.7**.
+vanilla even weaker (0.062). The model has cyclic structure
+internally (per Engels et al. 2024 in Llama), but at Qwen-1.5B L18
+with F=128 the dictionary doesn't strongly allocate a weekday atom.
+May need a different layer, larger F, or a model where weekday is a
+more salient feature.
+
+Status: NEGATIVE — architecture doesn't magically find cyclic
+structure that the data doesn't strongly contain at this scale.
+
+## Still pending
 
 | Experiment | What it'd tell us |
 | --- | --- |
-| `synthetic_2d_recovery` | Does the new 2D atom architecture recover planted 2D surfaces in a single atom? |
-| `atom_causality` (counterfactual + cross-SAE) | Are atoms causally load-bearing? Are they universal across seeds? |
-| `atom_analysis` (polysemy + cross-layer + adv + probe) | Per-atom polysemy distribution + cross-layer transfer + downstream-task probe |
-| `llm_sweep_L18_F128_multipenalty` | Does three-λ-per-atom REML beat one-λ in the mixed L18 regime? |
-| Architectural variants R=1, R=4, R=8, K=24, binary_amp | Optimal hyperparams |
-| `realistic_scaling_v2` (with points_only steelman) | Where vanilla wins (no curve structure) |
+| `atom_causality` (counterfactual + cross-SAE) | Are atoms causally load-bearing? Universal across seeds? |
+| `atom_analysis_v2` (polysemy + cross-layer + probe) | Per-atom diagnostics |
+| `dbscan_q15b_L18_v2` | Vanilla SAE post-hoc clustering baseline |
+| `llm_sweep_L18_F128_multipenalty` | Does three-λ-per-atom REML help? |
+| `llm_sweep_L12_F128_K24` | Higher n_basis effect on alive atoms |
 
 ## Verdict
 
