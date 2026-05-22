@@ -226,3 +226,44 @@ patched forward hook did not actually change the LM's logits. Bug in
 `experiments/steering_causality.py`. Likely: the residual modification
 didn't propagate to the model's continuation, or the picked atom
 (2) had near-zero amplitude for these prompts. Worth a follow-up.
+
+### Falsification result — matched-decoder-params benchmark (`continuous_recovery`)
+
+Source: `experiments/continuous_recovery.py`, completed job
+`5e15fa0bd99b`. Matched-decoder-parameter count: vanilla SAE gets
+F_vanilla = R × F_curve atoms so both have the same total decoder
+budget. Tests how well each architecture's best atom for each planted
+GT curve correlates with the planted scalar latent z ∈ [0, 1].
+
+| scenario     | vanilla mean \|ρ\| | curve mean \|ρ\| | Δ |
+| --- | --- | --- | --- |
+| monotone     | **0.949**   | 0.696   | **−0.254** |
+| non_monotone | 0.527       | 0.554   | +0.027 (tied) |
+| mixed        | **0.698**   | 0.480   | **−0.218** |
+
+**Interpretation**: at matched decoder parameters, vanilla SAE wins on
+monotone and mixed-curve data. The curve SAE only wins (marginally)
+where the GT is purely non-monotone — exactly the regime the
+architecture was designed for.
+
+This is honest negative evidence at matched-params on synthetic data.
+Two possible interpretations:
+
+1. *The architecture is genuinely worse at matched-params.* The added
+   parametric complexity of `g_k(t)` doesn't pay off unless the data
+   is specifically non-monotone. Vanilla's fragmentation across more
+   atoms is more flexible for general data.
+
+2. *The matched-params test is unfair to a different axis.* Curve SAE
+   wins on real LM activations (probe holdout-test, weeks above), so
+   on data where the underlying structure IS curved, the architecture
+   has a real advantage. The synthetic non_monotone test should have
+   shown that more strongly, but didn't — possibly because R=2 isn't
+   enough to capture the full cos/sin curve cleanly, or the encoder
+   doesn't find clean single-atom representations under the
+   training objective.
+
+Both are valid concerns. The MATCHED-DECODER-PARAMS result tempers the
+strong "curve SAE always wins" claim. The architecture is most clearly
+useful in real LM activations where the underlying features have
+manifold structure, not in arbitrary matched-budget comparisons.
