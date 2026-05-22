@@ -206,13 +206,14 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
         h = out[0] if isinstance(out, tuple) else out
         if patch_value["r_new"] is not None:
             r_new = patch_value["r_new"]
-            h = h.clone()
-            # patch last token only
-            h[0, -1, :] = r_new.to(h.dtype)
+            # In-place modification of the original tensor — return-value
+            # replacement isn't reliable when this block was wrapped by an
+            # outer container that captured `out` before our patched
+            # forward returned. In-place edit guarantees downstream layers
+            # see the patched residual.
+            h.data[0, -1, :] = r_new.to(h.dtype).data
         captured["h"] = h.detach()
-        if isinstance(out, tuple):
-            return (h,) + out[1:]
-        return h
+        return out  # let downstream see the (now-mutated) original tensor
 
     saved_block.forward = patched_forward
 
@@ -228,6 +229,16 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
             logits_base = out_base.logits[0, -1, :]
             probs_base = torch.softmax(logits_base, dim=-1)
 
+            # Diagnostic: amplitude of selected atom on this prompt. If 0,
+            # the patch is a no-op and KL will be 0.
+            sae_in = r_L_base.unsqueeze(0).to(device)
+            x_centered = sae_in - sae.b_dec
+            y_proj = torch.einsum("bd,fdr->bfr", x_centered, sae.directions)
+            _z_raw, _ms, mb = sae.encoder(x_centered, y_proj)
+            atom_amp = float(mb[0, atom].abs().item())
+            print(f"  [diag] prompt='{prompt[:25]}...' atom={atom} amp={atom_amp:.4f}",
+                  flush=True)
+
             for t_new in cfg.t_sweep:
                 # Compute the modified reconstruction
                 _, recon_mod, t_orig = encode_then_decode_modified(sae, r_L_base, atom, t_new, device)
@@ -238,6 +249,7 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
                 # SAE-explained part. But that's destructive. Better: patch by SHIFT.
                 _, recon_orig, _ = encode_then_decode_modified(sae, r_L_base, atom, t_orig, device)
                 shift = recon_mod - recon_orig
+                shift_norm = float(shift.norm().item())
                 r_L_patched = r_L_base + shift
 
                 # Re-run forward with patch
@@ -252,8 +264,11 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
                 top_tokens = [(tok.decode(idx), float(p)) for idx, p in zip(top.indices, top.values)]
                 results.append({
                     "prompt": prompt,
+                    "atom": atom,
+                    "atom_amp_on_prompt": atom_amp,
                     "t_original": t_orig,
                     "t_new": t_new,
+                    "patch_shift_norm": shift_norm,
                     "kl_divergence": kl,
                     "top_tokens": top_tokens,
                 })
