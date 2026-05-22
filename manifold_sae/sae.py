@@ -1,54 +1,55 @@
 """Manifold-SAE: SAE with curve-valued atoms, REML training, lock-and-cache deploy.
 
-Architecture (Path B with lock-and-cache):
+Architecture (Path B with lock-and-cache, joint additive REML):
 
   Training forward:
     encoder(x)                       → (positions, amplitudes)        [Adam-owned weights]
-    y_proj = x @ W                   → (B, F, R)                      [Adam-owned W per feature]
-    fit = gamfit.gaussian_reml_fit_positions_batched(
-            positions, y_proj, ..., by=amplitudes)
-                                     → (B, λ, fitted, reml_score)     [REML each batch, autograd]
-    recon = Σ_k amp_k · fit.fitted_k @ W_k^T
+    result = gamfit.torch.fit(
+        points=[positions[:, k:k+1] for k in range(F)],
+        response=x_centered,                                          # (B, D)
+        smooths=[Duchon(centers, m=2, by=amplitudes[:, k]) for k],
+    )                                                                 # joint additive REML
+    coefficients_k : (K, D)  for each atom k
+    recon = result.fitted + b_dec
 
   Loss:
-    MSE(recon, x)                    — data fit through encoder + W
-    − reml_score.sum()              — REML log-likelihood (smoothness selected by gamfit)
+    MSE(recon, x)                    — data fit through encoder + joint additive fit
+    − reml_score                     — joint REML log-likelihood
     + sparsity, identification priors
 
   Adam optimizes:
-    encoder weights, W, b_dec
+    encoder weights, W (used for y_proj in identification priors), b_dec
 
   gamfit owns each batch:
-    coefficients B_k, smoothing λ_k
+    per-atom curve coefficients B_k ∈ R^(K, D), joint smoothing λ
 
   Lock-and-cache at end of training:
-    one big REML fit on a held-out reference batch → frozen B, λ, basis_state
-    as nn.Module buffers (not parameters).
+    one big additive REML fit on a held-out reference batch → frozen B (per-atom
+    K × D blocks), λ, rescale stats as nn.Module buffers (not parameters).
 
   Inference forward:
     encoder(x)                       → (positions, amplitudes)
-    φ = duchon_basis_1d(positions)   → (B, F, K)
-    g = φ @ B_locked                 → (B, F, R)
-    recon = Σ_k amp_k · g_k @ W_k^T
+    φ_k = duchon_basis(positions[:, k:k+1], centers)                  → (B, K)
+    g_k = amp_k · (φ_k @ B_locked[k])                                 → (B, D)
+    recon = Σ_k g_k + b_dec
 
     Single-token feedforward. No gamfit call at inference.
 
 Methodological claim
 --------------------
-Each feature is a smooth 1D curve in residual stream parameterized as the
+Each feature is a smooth curve in residual stream parameterized as the
 penalized maximum-likelihood estimate of a Gaussian GAM given the encoder's
-positions. Smoothness λ_k is selected automatically by REML (gamfit owns
-the math). At inference the curve coefficients are cached, giving a
-feedforward decoder identical in shape to a standard SAE.
+positions. Smoothness λ is selected automatically by REML (gamfit owns the
+math). At inference the curve coefficients are cached, giving a feedforward
+decoder identical in shape to a standard SAE.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-import gamfit
 import gamfit.torch as gt
-import numpy as np
+from gamfit.torch import Duchon, fit as gam_fit
 import torch
 from torch import nn
 
@@ -171,18 +172,9 @@ class ManifoldSAE(nn.Module):
         # Stored as (K, 1) — the new gamfit multi-d API takes (K, d).
         centers = torch.linspace(0.0, 1.0, K, dtype=torch.float64).unsqueeze(1)
         self.register_buffer("centers", centers)
-
-        # Duchon function-norm penalty — fixed at init (depends only on
-        # centers + m). Same penalty reused for every per-atom REML fit.
-        # gamfit.duchon_function_norm_penalty is the numpy API; we keep a
-        # float64 torch buffer.
-        centers_np = centers.detach().cpu().numpy()
-        per_axis = (bool(config.periodic),)
-        penalty_np = gamfit.duchon_function_norm_penalty(
-            centers_np, m=2, periodic_per_axis=per_axis,
-        )
-        penalty = torch.as_tensor(np.asarray(penalty_np), dtype=torch.float64)
-        self.register_buffer("penalty", penalty)
+        # NOTE: the Duchon function-norm penalty is no longer kept as a
+        # module buffer — the new gamfit.torch.fit() API builds it from each
+        # Smooth's centers internally per call.
 
         # Persistent per-feature W_k in R^(D, R). Adam-owned.
         if D >= F * R:
@@ -204,7 +196,14 @@ class ManifoldSAE(nn.Module):
         # rescale, the same input token would get different positions in
         # different batches (the soft min/max is per-batch), and the locked B
         # would consult the wrong place on its curve.
-        self.register_buffer("B_locked", torch.zeros(F, K, R, dtype=torch.float64))
+        # B_locked: per-atom curve coefficients in AMBIENT space, shape
+        # (F, K, D). Each slice B_locked[k] of shape (K, D) is the (K, D)
+        # block returned by the joint additive fit for atom k — it has
+        # absorbed the previous W_k embedding into the coefficient space.
+        self.register_buffer("B_locked", torch.zeros(F, K, D, dtype=torch.float64))
+        # The joint additive fit shares a scalar λ across atoms; stored as
+        # length-F for backward compat with downstream code that indexes per
+        # feature.
         self.register_buffer("lam_locked", torch.ones(F, dtype=torch.float64))
         self.register_buffer("soft_min_locked", torch.zeros(F, dtype=torch.float32))
         self.register_buffer("soft_max_locked", torch.ones(F, dtype=torch.float32))
@@ -237,7 +236,14 @@ class ManifoldSAE(nn.Module):
         positions, soft_min, soft_max = _soft_rescale_positions(z_raw, weights=mask_binary.detach())
         self._last_soft_min = soft_min.detach()
         self._last_soft_max = soft_max.detach()
-        return self._forward_training(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
+        # Stash x_centered for _forward_training (the joint additive fit
+        # needs the full ambient residual, not just the per-atom W_k
+        # projections). Cleared after use to avoid stale refs.
+        self._x_centered_for_training = x_centered
+        try:
+            return self._forward_training(x_dtype, dirs, b_dec, y_proj, positions, mask_soft, mask_binary)
+        finally:
+            self._x_centered_for_training = None
 
     def _forward_training(
         self,
@@ -249,56 +255,101 @@ class ManifoldSAE(nn.Module):
         mask_soft: torch.Tensor,
         mask_binary: torch.Tensor,
     ) -> ManifoldSAEOutput:
-        """Per-atom REML fit via new explicit-basis gamfit API.
+        """Joint additive REML fit via gamfit's Smooth + fit() API.
 
-        For each feature k we evaluate the Duchon basis at that atom's
-        positions, gate rows by amplitude (`by`), and run a single
-        `gaussian_reml_fit` with the precomputed function-norm penalty.
-        Independent λ per atom (simpler than additive joint fit).
+        SEMANTIC CHANGE (vs. previous per-atom path)
+        --------------------------------------------
+        Previously each atom k was fit *independently*: design = duchon basis
+        at positions[:, k], gated by amp_k; target = y_proj[:, k, :] (the
+        x_centered projected onto that atom's R-dim W_k subspace); coefs
+        ∈ R^(K, R). The reconstruction was then assembled as
+        Σ_k amp_k · (φ_k @ B_k) @ W_k^T.
+
+        That formulation is only mathematically equivalent to the joint
+        additive fit when the W_k subspaces are mutually orthogonal — i.e. it
+        treated atoms as if they couldn't see each other's contributions to
+        the shared residual.
+
+        The new path uses ONE call to ``gamfit.torch.fit`` with F Duchon
+        smooths against the (B, D)-shaped ambient residual ``x_centered``.
+        Each smooth contributes a (B, K) design block, row-gated by its
+        amplitude (``by=mask_binary[:, k]``). gamfit's additive REML jointly
+        solves all atoms together, returning per-atom coefficients of shape
+        (K, D) — the previous explicit W_k embedding is now absorbed into the
+        coefficient space directly. This is the mathematically correct joint
+        fit; W_k survives only as an identification prior driver (y_proj is
+        still used for the monotonicity loss).
         """
         B, F = positions.shape
-        R = dirs.shape[-1]
+        D = b_dec.shape[0]
         K = self.centers.shape[0]
         device = positions.device
 
         periodic = bool(self.config.periodic)
         per_axis = (periodic,) if periodic else None
 
-        # Outputs to assemble.
-        coefs = torch.zeros(F, K, R, dtype=torch.float64, device=device)
-        fitted_all = torch.zeros(F, B, R, dtype=torch.float64, device=device)
-        lams = torch.zeros(F, dtype=torch.float64, device=device)
-        reml_scores = torch.zeros(F, dtype=torch.float64, device=device)
-
         pos64 = positions.to(torch.float64)
-        y64 = y_proj.to(torch.float64)
         by64 = mask_binary.to(torch.float64)
+        x_centered_f64 = (
+            # Recover x_centered from y_proj is wrong; pass the actual
+            # ambient residual. The caller doesn't hand it to us, but
+            # x = (y_proj decoder) is not in scope — instead, recompute:
+            # x_centered = x - b_dec is what we want, but x isn't on hand
+            # here. The caller (``forward``) has it; we receive y_proj only.
+            # The cleanest fix: receive x_centered through the call. See
+            # forward() which now passes it.
+            self._x_centered_for_training
+        ).to(torch.float64)
 
+        smooths = [
+            Duchon(
+                centers=self.centers,
+                m=2,
+                by=by64[:, k],
+                periodic_per_axis=per_axis,
+            )
+            for k in range(F)
+        ]
+        points = [pos64[:, k:k+1] for k in range(F)]
+
+        result = gam_fit(
+            points=points,
+            response=x_centered_f64,
+            smooths=smooths,
+            init_lambdas=(
+                torch.tensor([float(self.config.init_lambda)], dtype=torch.float64)
+                if self.config.init_lambda is not None else None
+            ),
+        )
+
+        # Stack per-atom coefficient blocks into (F, K, D). Each list entry
+        # is a (K, D) tensor with autograd flowing through the joint fit.
+        coefs_list = result.coefficients  # list[(K, D)]
+        coefs = torch.stack(coefs_list, dim=0)  # (F, K, D)
+
+        # Per-atom ambient-space contributions (autograd-aware). We rebuild
+        # them from the basis at the atom's positions × the atom's (K, D)
+        # block (no extra REML call). Used both for downstream reporting and
+        # for the locked-mode self-test in update_snapshot.
+        fitted_all = torch.zeros(F, B, D, dtype=torch.float64, device=device)
         for k in range(F):
-            t_k = pos64[:, k].unsqueeze(1)                         # (B, 1)
             phi_k = gt.duchon_basis(
-                t_k, self.centers, m=2, periodic_per_axis=per_axis,
-            )                                                       # (B, K)
-            by_k = by64[:, k]                                       # (B,)
-            # Row-gate the design via `by` (column-wise multiply per row).
-            design_k = phi_k * by_k.unsqueeze(1)
-            y_k = y64[:, k, :]                                      # (B, R)
-            out_k = gt.gaussian_reml_fit(
-                design_k, y_k, self.penalty,
-                init_lambda=self.config.init_lambda,
-            )
-            coefs[k] = out_k.coefficients                          # (K, R)
-            # `fitted` from gamfit = design_k @ coefs = by_k * (phi_k @ B_k),
-            # i.e. already amplitude-gated — matches inference (one `amp`).
-            fitted_all[k] = out_k.fitted
-            lams[k] = out_k.lam.reshape(()) if out_k.lam.dim() > 0 else out_k.lam
-            reml_scores[k] = (
-                out_k.reml_score.reshape(()) if out_k.reml_score.dim() > 0 else out_k.reml_score
-            )
+                pos64[:, k:k+1], self.centers, m=2, periodic_per_axis=per_axis,
+            )                                                      # (B, K)
+            fitted_all[k] = (phi_k @ coefs_list[k]) * by64[:, k:k+1]
+
+        # Joint reconstruction: gamfit's ``result.fitted`` already sums the
+        # per-atom (by-gated) contributions over k. Add the decoder bias.
+        recon = result.fitted.to(x_dtype) + b_dec.unsqueeze(0)
+
+        # The joint additive fit shares a scalar λ and a scalar REML score.
+        # Broadcast to per-feature shape (F,) for backward compat with
+        # downstream loggers that index per atom.
+        lam_scalar = result.lambdas.reshape(())
+        lams = lam_scalar.expand(F).contiguous().to(x_dtype)
+        reml_scores = result.reml_score.reshape(()).expand(F).contiguous().to(x_dtype)
 
         fitted = fitted_all.to(x_dtype)
-        contribution = torch.einsum("fbr,fdr->bfd", fitted, dirs)
-        recon = contribution.sum(dim=1) + b_dec.unsqueeze(0)
 
         # Identification: per-feature column ortho + cross-feature off-block ortho.
         ortho_loss = self._ortho_loss(dirs)
@@ -309,9 +360,9 @@ class ManifoldSAE(nn.Module):
             positions=positions,
             amplitudes=mask_binary,
             mask_soft=mask_soft,
-            coefficients=coefs.to(x_dtype),                        # (F, K, R) — autograd-aware
-            lam=lams.to(x_dtype),
-            reml_score=reml_scores.to(x_dtype),
+            coefficients=coefs.to(x_dtype),                        # (F, K, D) — autograd-aware
+            lam=lams,
+            reml_score=reml_scores,
             fitted=fitted,
             directions=self.directions,
             ortho_loss=ortho_loss,
@@ -328,21 +379,32 @@ class ManifoldSAE(nn.Module):
         mask_soft: torch.Tensor,
         mask_binary: torch.Tensor,
     ) -> ManifoldSAEOutput:
-        """Use locked snapshot — no gamfit call. Single-token-evaluable."""
-        B, F = positions.shape
-        R = dirs.shape[-1]
+        """Use locked snapshot — no gamfit call. Single-token-evaluable.
 
-        # Evaluate the basis at this batch's positions (gamfit's basis evaluator).
+        Locked path uses the joint additive fit's per-atom (K, D) coefficient
+        blocks ``B_locked[k]`` directly: contribution_k = amp_k · (φ_k @
+        B_locked[k]), summed across atoms with the decoder bias added back.
+        """
+        B, F = positions.shape
+        D = b_dec.shape[0]
+
+        # Evaluate the basis at this batch's positions, atom by atom. The
+        # (F*B, 1) batched basis call is also valid and shaves a Python
+        # loop, but B_locked is now per-atom so we go atom-wise for clarity.
         periodic = bool(self.config.periodic)
         per_axis = (periodic,) if periodic else None
-        t_flat = positions.t().contiguous().view(-1).unsqueeze(1).to(torch.float64)  # (F*B, 1)
-        phi = gt.duchon_basis(t_flat, self.centers, m=2, periodic_per_axis=per_axis)
-        K = phi.shape[-1]
-        phi = phi.view(F, B, K)
-        # g_k(t_b) = φ_b @ B_locked_k.
-        g = torch.einsum("fbk,fkr->fbr", phi, self.B_locked).to(x_dtype)
-        contribution = torch.einsum("fbr,fdr->bfd", g * mask_binary.t().unsqueeze(-1), dirs)
-        recon = contribution.sum(dim=1) + b_dec.unsqueeze(0)
+        pos64 = positions.to(torch.float64)
+        amp64 = mask_binary.to(torch.float64)
+
+        g_all = torch.zeros(F, B, D, dtype=torch.float64, device=positions.device)
+        for k in range(F):
+            phi_k = gt.duchon_basis(
+                pos64[:, k:k+1], self.centers, m=2, periodic_per_axis=per_axis,
+            )                                                      # (B, K)
+            g_all[k] = (phi_k @ self.B_locked[k]) * amp64[:, k:k+1]
+
+        recon = g_all.sum(dim=0).to(x_dtype) + b_dec.unsqueeze(0)
+        g = g_all.to(x_dtype)
 
         ortho_loss = self._ortho_loss(dirs)
         monotonicity_loss = self._monotonicity_loss(positions, y_proj, mask_binary)
@@ -500,7 +562,6 @@ def extract_feature_curves(
     F = sae.B_locked.shape[0]
     T = t_grid_f64.shape[0]
     D = sae.directions.shape[1]
-    dirs = sae.directions.to(torch.float64)
     curves = torch.zeros(F, T, D, dtype=torch.float64, device=device)
     for k in range(F):
         m = firing[:, k]
@@ -518,7 +579,8 @@ def extract_feature_curves(
         phi_k = gt.duchon_basis(
             t_k.unsqueeze(1), sae.centers, m=2, periodic_per_axis=per_axis,
         )
-        intrinsic_curve = phi_k @ sae.B_locked[k]
-        ambient_curve = intrinsic_curve @ dirs[k].T
-        curves[k] = ambient_curve
+        # B_locked[k] is now (K, D) — already in ambient space (the joint
+        # additive fit absorbed the previous per-atom W_k embedding into
+        # the coefficient block). No further W_k matmul needed.
+        curves[k] = phi_k @ sae.B_locked[k]
     return curves.to(activations.dtype)

@@ -9,13 +9,11 @@ from __future__ import annotations
 
 __version__ = "0.0.1"
 
-from .encoder import ManifoldEncoder
-from .sae import (
-    ManifoldSAE,
-    ManifoldSAEConfig,
-    ManifoldSAEOutput,
-    extract_feature_curves,
-)
+# Lazy submodule imports — sae.py requires the new gamfit (≥0.1.99) Duchon
+# class, which is not present in the cluster's currently-pinned gamfit
+# 0.1.98. We don't want a `_cluster_bridge` import (used by every LLM
+# experiment driver) to fail because of an unrelated module's broken
+# dependency. Resolve sae/encoder lazily on first attribute access.
 
 __all__ = [
     "ManifoldEncoder",
@@ -24,3 +22,14 @@ __all__ = [
     "ManifoldSAEOutput",
     "extract_feature_curves",
 ]
+
+
+def __getattr__(name):  # noqa: D401 — PEP 562 lazy attr access
+    if name == "ManifoldEncoder":
+        from .encoder import ManifoldEncoder
+        return ManifoldEncoder
+    if name in {"ManifoldSAE", "ManifoldSAEConfig", "ManifoldSAEOutput",
+                "extract_feature_curves"}:
+        from . import sae as _sae
+        return getattr(_sae, name)
+    raise AttributeError(f"module 'manifold_sae' has no attribute {name!r}")
