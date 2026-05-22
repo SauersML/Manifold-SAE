@@ -1,6 +1,16 @@
 # Manifold-SAE
 
-Sparse autoencoders whose features are **smooth 1D curves** in residual stream, not single directions. Research code; expect rough edges.
+Sparse autoencoders whose features are **smooth 1D curves** in
+residual stream — and, optionally, **smooth 2D surfaces**
+(`manifold_sae/sae_2d.py`). Research code; expect rough edges.
+
+> "Native manifold discovery, not post-hoc clustering." Where
+> Bhalla et al. (2026) recover curved-manifold structure by
+> clustering features of a vanilla SAE, Manifold-SAE atoms IS
+> the manifold by construction — one atom = one 1D curve (or 2D
+> surface), parameterized by a coordinate `t_k` (or `(t_k, s_k)`)
+> emitted directly by the encoder. See `docs/architecture_2d.md`
+> for the 2D extension.
 
 ## What this tries to fix
 
