@@ -202,25 +202,29 @@ def lattice_centers(per_side: int) -> np.ndarray:
 
 
 def duchon_kernel(r: np.ndarray, d: int) -> np.ndarray:
-    """Classical thin-plate-spline kernel for radial Duchon m=2 in d dims.
+    """Classical thin-plate-spline (m=2) polyharmonic kernels in d dims.
 
-    These are the standard m=2 polyharmonic kernels:
-      d=1: phi(r) = r^3     (natural cubic-spline kernel)
+      d=1: phi(r) = r^3        (natural cubic-spline kernel)
       d=2: phi(r) = r^2 log r  (true thin-plate spline)
-      d=3: phi(r) = r       (3D thin-plate)
-    Null space in every case: {1, x_1, ..., x_d}.
+      d=3: phi(r) = r          (3D thin-plate)
+      d=4: phi(r) = log r      (4D thin-plate; even-d polyharmonic)
+    Null space in every case: {1, x_1, ..., x_d}. Limits at r=0 are 0.
     """
     if d == 1:
         return r ** 3
     if d == 2:
-        # r^2 log r, with limit 0 at r=0
         out = np.zeros_like(r)
         mask = r > 1e-12
         out[mask] = r[mask] ** 2 * np.log(r[mask])
         return out
     if d == 3:
         return r
-    raise ValueError(f"radial Duchon kernel for d={d} not implemented (use 1, 2, or 3)")
+    if d == 4:
+        out = np.zeros_like(r)
+        mask = r > 1e-12
+        out[mask] = np.log(r[mask])
+        return out
+    raise ValueError(f"radial Duchon kernel for d={d} not implemented (use 1-4)")
 
 
 def duchon_basis_radial(X: np.ndarray, centers: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -284,56 +288,68 @@ def bspline_1d_basis(t: np.ndarray, n_basis: int = 10, degree: int = 3) -> tuple
 
 
 # =============================================================================
-# REML fit
+# Smoothing-parameter selection via GCV + golden-section search
 # =============================================================================
-def reml_fit(Phi: np.ndarray, Z: np.ndarray, P: np.ndarray, init_log_lambda: float = 0.0,
-              max_iter: int = 30, tol: float = 1e-6) -> tuple[np.ndarray, float]:
-    """Closed-form Gaussian REML for a single design Phi (N, K) and multi-output
-    target Z (N, R). Selects a single log-lambda by Newton iteration on the
-    REML score. Returns (B (K, R), log_lambda).
+def reml_fit(Phi: np.ndarray, Z: np.ndarray, P: np.ndarray,
+              init_log_lambda: float = 0.0,
+              lo: float = -12.0, hi: float = 12.0,
+              n_steps: int = 35) -> tuple[np.ndarray, float]:
+    """Fit coefficients B (K, R) for the multi-output smooth Z = Phi · B + ε
+    with penalty λ · β' P β. The smoothing parameter log λ ∈ [lo, hi] is
+    selected by GCV — closely related to REML for Gaussian fits, with a
+    cleaner monotone-bracket-friendly objective:
 
-    Robust to mild near-singularity via a tiny ridge on the kernel block.
+        GCV(λ) = N · ‖Z − Z_hat‖² / (N − tr H(λ))²
+        tr H  = K − λ · tr(A⁻¹ P),    A = Phi'Phi + λP
+
+    Minimization by golden-section search over log λ. Robust: monotone
+    bracket avoids the saddle/oscillation issues a Newton step on the
+    REML score has near collinear bases.
+
+    `init_log_lambda` is retained for API back-compat — golden-section
+    doesn't use it, but downstream call sites pass it.
     """
+    _ = init_log_lambda
     N, K = Phi.shape
     PhitPhi = Phi.T @ Phi
-    PhitZ = Phi.T @ Z                               # (K, R)
-    ZtZ = (Z * Z).sum(axis=0)                       # (R,)
-
-    log_lambda = float(init_log_lambda)
+    PhitZ = Phi.T @ Z
     eye_jitter = 1e-10 * np.eye(K)
-    for it in range(max_iter):
+
+    def gcv(log_lambda: float) -> float:
         lam = math.exp(log_lambda)
         A = PhitPhi + lam * P + eye_jitter
         try:
-            L = np.linalg.cholesky(A)
+            B = np.linalg.solve(A, PhitZ)
+            tr_AinvP = float(np.trace(np.linalg.solve(A, P)))
         except np.linalg.LinAlgError:
-            eye_jitter *= 10
-            continue
-        # B = A^{-1} Phi'Z
-        B = np.linalg.solve(A, PhitZ)
-        # REML score gradient w.r.t. log_lambda
-        # d(logdet A)/d log_lambda = lam * tr(A^{-1} P)
-        # d(B'PhitPhi B - 2 B'PhitZ + ZtZ + lam B'P B)/d log_lambda ≈ lam B'P B
-        # Use second-derivative diagonal approximation; small problem.
-        Ainv_P = np.linalg.solve(A, P)
-        tr_AinvP = float(np.trace(Ainv_P))
-        # Effective degrees-of-freedom-ish gradient:
-        # ∂/∂log_lambda [ logdet(A) + (1/sig^2)(... ) ] but we don't track sig^2 separately.
-        # Pragmatic: Newton on
-        #   g(log_lambda) = lam * sum_r (B[:,r]'P B[:,r])/ZtZ[r] - tr_AinvP
-        bPb_per_r = ((B.T @ P) * B.T).sum(axis=1)
-        # weighted avg by Z scale
-        wts = 1.0 / np.clip(ZtZ, 1e-12, None)
-        score = float(lam * (bPb_per_r * wts).sum() - tr_AinvP * len(ZtZ))
-        # Crude line update: half-step proportional to score
-        step = -0.5 * np.tanh(score / max(1.0, abs(score)))
-        log_lambda += float(step)
-        if abs(step) < tol:
+            return float("inf")
+        tr_H = K - lam * tr_AinvP                                # effective dof
+        denom = max(N - tr_H, 1e-6) ** 2
+        Z_hat = Phi @ B
+        ss_res = float(((Z - Z_hat) ** 2).sum())
+        return N * ss_res / denom
+
+    # Golden-section search over [lo, hi]
+    GOLDEN = (math.sqrt(5.0) - 1.0) / 2.0                         # 1/φ ≈ 0.618
+    a, b = lo, hi
+    c = b - GOLDEN * (b - a)
+    dpt = a + GOLDEN * (b - a)
+    fc, fd = gcv(c), gcv(dpt)
+    for _ in range(n_steps):
+        if fc < fd:
+            b = dpt; dpt = c; fd = fc
+            c = b - GOLDEN * (b - a); fc = gcv(c)
+        else:
+            a = c; c = dpt; fc = fd
+            dpt = a + GOLDEN * (b - a); fd = gcv(dpt)
+        if abs(b - a) < 1e-3:
             break
-    lam = math.exp(log_lambda)
+    log_lambda_opt = 0.5 * (a + b)
+
+    lam = math.exp(log_lambda_opt)
     A = PhitPhi + lam * P + eye_jitter
     B = np.linalg.solve(A, PhitZ)
-    return B, log_lambda
+    return B, log_lambda_opt
 
 
 def ridge_fit(Phi: np.ndarray, Z: np.ndarray, alpha: float = 1e-3) -> np.ndarray:
@@ -373,21 +389,6 @@ def _initialize_T_from_pca(Z: np.ndarray, d: int) -> np.ndarray:
     return _rescale_T_to_unit(T)
 
 
-def _project_one_point(z: np.ndarray, B: np.ndarray, centers: np.ndarray, d: int,
-                         grid_per_axis: int) -> np.ndarray:
-    """For a single target z ∈ ℝ^K, find t ∈ [0,1]^d minimizing ‖z − Phi(t)·B‖².
-
-    Pure grid search; cheap for d ≤ 3.
-    """
-    grid = lattice_centers_nd(grid_per_axis, d, 0.0, 1.0)        # (M, d)
-    # Build Phi at every grid point in one shot
-    Phi_grid, _ = duchon_basis_radial(grid, centers)              # (M, K_basis)
-    Z_grid = Phi_grid @ B                                          # (M, K_pcs)
-    diffs = Z_grid - z[None, :]                                    # (M, K_pcs)
-    sqd = (diffs ** 2).sum(axis=1)                                 # (M,)
-    return grid[int(np.argmin(sqd))]
-
-
 def _project_points_batched(Z_target: np.ndarray, B: np.ndarray, centers: np.ndarray,
                               d: int, grid_per_axis: int) -> np.ndarray:
     """Vectorized projection of an (N, K_pcs) batch onto the manifold."""
@@ -420,9 +421,9 @@ def fit_unsupervised_manifold(Z: np.ndarray, d: int, cfg: Config,
       history  list of {iter, dT, train_mse, log_lambda}
     """
     if centers_per_axis is None:
-        centers_per_axis = {1: 16, 2: 8, 3: 5}[d]
+        centers_per_axis = {1: 16, 2: 8, 3: 5, 4: 4}[d]      # 16 / 64 / 125 / 256 centers
     if grid_per_axis is None:
-        grid_per_axis = {1: 200, 2: 40, 3: 20}[d]
+        grid_per_axis = {1: 200, 2: 40, 3: 20, 4: 9}[d]      # ~6.5k grid pts in 4D
 
     centers = lattice_centers_nd(centers_per_axis, d, 0.0, 1.0)
     T = init_T.copy() if init_T is not None else _initialize_T_from_pca(Z, d)
@@ -464,9 +465,8 @@ def predict_unsupervised(Z_target: np.ndarray, fit: dict, d: int,
 
     Returns (T_test (N, d), Z_pred (N, K_pcs)).
     """
-    if grid_per_axis is None:
-        grid_per_axis = fit["grid_per_axis"]
-    T_test = _project_points_batched(Z_target, fit["B"], fit["centers"], d, grid_per_axis)
+    g: int = int(grid_per_axis if grid_per_axis is not None else fit["grid_per_axis"])
+    T_test = _project_points_batched(Z_target, fit["B"], fit["centers"], d, g)
     Phi_test, _ = duchon_basis_radial(T_test, fit["centers"])
     Z_pred = Phi_test @ fit["B"]
     return T_test, Z_pred
@@ -497,6 +497,7 @@ SPECS = {
     "U_1d": ("unsup_1d",),
     "U_2d": ("unsup_2d",),
     "U_3d": ("unsup_3d",),
+    "U_4d": ("unsup_4d",),
 }
 
 
@@ -566,22 +567,31 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         return Phi_tr @ B, Phi_te @ B
 
     if spec_name == "L_add_hsv":
+        # Proper additive multi-smooth: g_hue(cos h, sin h)  +  g_s(s)  +  g_v(v)
+        # The hue term is a 2D radial Duchon over the (cos h, sin h) plane
+        # with centers placed on the unit circle (cleaner than a uniform
+        # square lattice — captures the natural support of hue).
         n_basis = 10
-        # hue handled as cos/sin pair (2 columns, treated as one block with shared λ)
-        Bh_tr = train_X_hsv[:, :2]
-        Bh_te = test_X_hsv[:, :2]
+        # Centers on the unit circle for the hue smooth
+        angles = np.linspace(0.0, 2 * np.pi, 12, endpoint=False)
+        centers_hue = np.stack([np.cos(angles), np.sin(angles)], axis=1)
+        Bh_tr, Ph = duchon_basis_radial(train_X_hsv[:, :2], centers_hue)   # (N, 12+3)
+        Bh_te, _ = duchon_basis_radial(test_X_hsv[:, :2], centers_hue)
         Bs_tr, Ps = bspline_1d_basis(train_X_hsv[:, 2], n_basis=n_basis)
         Bs_te, _ = bspline_1d_basis(test_X_hsv[:, 2], n_basis=n_basis)
         Bv_tr, Pv = bspline_1d_basis(train_X_hsv[:, 3], n_basis=n_basis)
         Bv_te, _ = bspline_1d_basis(test_X_hsv[:, 3], n_basis=n_basis)
+        # Strip the redundant intercepts from each block; keep one global
+        Bh_tr = Bh_tr[:, :-3]; Bh_te = Bh_te[:, :-3]            # drop {1, cos, sin} null space
+        Ph = Ph[:-3, :-3]
+        Kh, Ks, Kv = Bh_tr.shape[1], Bs_tr.shape[1], Bv_tr.shape[1]
         Phi_tr = np.concatenate([Bh_tr, Bs_tr, Bv_tr, np.ones((Bh_tr.shape[0], 1))], axis=1)
         Phi_te = np.concatenate([Bh_te, Bs_te, Bv_te, np.ones((Bh_te.shape[0], 1))], axis=1)
         K_total = Phi_tr.shape[1]
         P = np.zeros((K_total, K_total))
-        # hue cos/sin: small L2 penalty
-        P[0, 0] = P[1, 1] = 1.0
-        P[2:2+n_basis, 2:2+n_basis] = Ps
-        P[2+n_basis:2+2*n_basis, 2+n_basis:2+2*n_basis] = Pv
+        P[:Kh, :Kh] = Ph
+        P[Kh:Kh+Ks, Kh:Kh+Ks] = Ps
+        P[Kh+Ks:Kh+Ks+Kv, Kh+Ks:Kh+Ks+Kv] = Pv
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
 
@@ -592,20 +602,21 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         return Phi_tr @ B, Phi_te @ B
 
     if spec_name == "L_joint_hsv":
-        # 4D coords: (cos hue, sin hue, sat, val). Lattice in [-1,1]^2 x [0,1]^2.
-        # Use the same lattice density, just in 4D.
-        per_side = max(3, cfg.lattice_per_side - 1)        # keep K small in 4D
-        ax_hc = np.linspace(-1.0, 1.0, per_side)
-        ax_hs = np.linspace(-1.0, 1.0, per_side)
-        ax_s = np.linspace(0.0, 1.0, per_side)
-        ax_v = np.linspace(0.0, 1.0, per_side)
-        Hc, Hs, S, V = np.meshgrid(ax_hc, ax_hs, ax_s, ax_v, indexing="ij")
-        centers_hsv = np.stack([Hc.flatten(), Hs.flatten(), S.flatten(), V.flatten()], axis=1)
-        # subsample: keep only centers with cos^2 + sin^2 ≈ 1 (on the hue circle slice)
-        mask = (np.abs(centers_hsv[:, 0] ** 2 + centers_hsv[:, 1] ** 2 - 1.0) < 0.3)
-        centers_hsv = centers_hsv[mask]
-        Phi_tr, P = duchon_basis_general(train_X_hsv, centers_hsv)
-        Phi_te, _ = duchon_basis_general(test_X_hsv, centers_hsv)
+        # 4D coords (cos hue, sin hue, sat, val). Centers ON the natural
+        # support: (cos 2πθ_i, sin 2πθ_i, s_j, v_k) for a grid of angles +
+        # sat + val. No more arbitrary "near-unit-circle" mask.
+        n_hue, n_sv = 8, 3                                    # 8 × 3 × 3 = 72 centers
+        thetas = np.linspace(0.0, 2 * np.pi, n_hue, endpoint=False)
+        sats = np.linspace(0.0, 1.0, n_sv)
+        vals = np.linspace(0.0, 1.0, n_sv)
+        centers_hsv = []
+        for th in thetas:
+            for s in sats:
+                for v in vals:
+                    centers_hsv.append([np.cos(th), np.sin(th), s, v])
+        centers_hsv = np.array(centers_hsv)                   # (72, 4)
+        Phi_tr, P = duchon_basis_radial(train_X_hsv, centers_hsv)
+        Phi_te, _ = duchon_basis_radial(test_X_hsv, centers_hsv)
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
 
@@ -635,17 +646,13 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
         return Phi_tr @ B, Phi_te @ B
 
-    if spec_name in ("U_1d", "U_2d", "U_3d"):
+    if spec_name in ("U_1d", "U_2d", "U_3d", "U_4d"):
         d = int(spec_name[2])
         # No GT axes used. Fit joint (T_train, B) by alternation on train Z.
         fit = fit_unsupervised_manifold(train_Z, d, cfg, n_iters=12, verbose=False)
-        # Train-side reconstruction (from the converged T_train).
         Phi_tr, _ = duchon_basis_radial(fit["T"], fit["centers"])
         Z_tr_pred = Phi_tr @ fit["B"]
-        # Held-out: project each test row onto the fitted manifold.
         _, Z_te_pred = predict_unsupervised(test_Z, fit, d)
-        # Stash the fit so the caller can recover the discovered T per CV fold.
-        fit_and_predict._last_unsup_fit = fit  # type: ignore[attr-defined]
         return Z_tr_pred, Z_te_pred
 
     raise ValueError(f"unknown spec: {spec_name}")
@@ -774,7 +781,7 @@ def main() -> int:
         # color for each intrinsic d. We use these to answer "what known
         # axis does the discovered manifold align with?" via Spearman.
         unsup_full = {}
-        for d in (1, 2, 3):
+        for d in (1, 2, 3, 4):
             fit = fit_unsupervised_manifold(Z, d, cfg, n_iters=15, verbose=False)
             T = fit["T"]                                          # (954, d)
             # Spearman of each latent axis vs each known axis
