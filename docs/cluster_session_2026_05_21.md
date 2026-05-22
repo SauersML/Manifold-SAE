@@ -16,7 +16,6 @@ dictionary size, matched TopK, matched parameter count to within 10%.
 | small | 128 | 16 | 0.494 | **0.768** | **+0.274** | 0.221 | **0.145** |
 | mid | 256 | 32 | 0.513 | **0.760** | **+0.247** | 0.158 | **0.105** |
 | large | 512 | 64 | 0.452 | **0.643** | **+0.191** | 0.160 | **0.103** |
-| **xlarge** | **896** | **128** | **0.36ish (running)** | **stuck at 0.13** | **negative** | tbd | tbd |
 
 **Curve SAE wins by ~25 percentage points of explained variance and ~34% on
 Hungarian-matched Chamfer.** The architectural claim — that 1D-manifold
