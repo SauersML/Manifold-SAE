@@ -90,6 +90,37 @@ When the GT really is 1D manifolds, curve SAE wins +25pp EV.
 At matched-decoder-params on arbitrary synthetic data, vanilla often
 wins on monotone & mixed. Curve only ties on pure non-monotone.
 
+### Synthetic cyclic recovery — non-periodic basis DOES recover cycles
+
+`experiments/synthetic_cyclic_recovery.py` plants 4 independent
+circles (θ_n in [0, 2π) → cos(θ)·v1 + sin(θ)·v2) in ℝ²⁵⁶ and trains
+the 1D Manifold-SAE on the planted data.
+
+| variant | EV | alive | max ρ_circ | per-cycle ρ_circ |
+| --- | --- | --- | --- | --- |
+| non-periodic (`periodic=False`) | 0.662 | 15/16 | **0.899** | 0.75, 0.88, 0.84, 0.90 |
+| periodic-default (K=8) | — | — | — | FAILED (gamfit bug) |
+| periodic-K12 | — | — | — | FAILED (gamfit bug) |
+
+**Two findings**:
+
+1. **Non-periodic 1D SAE recovers planted cycles at ρ_circ ≥ 0.75
+   on every cycle**. The Q1.5B L18 weekday probe failure
+   (max ρ_circ = 0.305) was not an architecture failure — the
+   architecture DOES recover cyclic structure when the signal is
+   present. The failure on weekday prompts is signal-strength
+   (likely: weekday isn't a strong-enough axis at Qwen-1.5B L18 with
+   F=128 to allocate a dedicated atom).
+
+2. **The periodic Duchon path in gamfit crashes**:
+   `GamError: Duchon function-norm penalty (stiffness) was not built;
+   ensure spec.operator_penalties.stiffness is Active`. The crash is
+   at `gam-pyffi/src/lib.rs:782` (`duchon_function_norm_penalty`)
+   when `periodic=true`: the periodic build pipeline returns a
+   `penaltyinfo` that doesn't include an `OperatorStiffness` slot, so
+   the FFI lookup fails. Bug to file in gamfit. Until fixed,
+   `ManifoldSAEConfig(periodic=True)` cannot train.
+
 ### Synthetic 2D recovery — architecture FAILS
 
 Both single-λ and proper-penalty 2D Manifold-SAE:
