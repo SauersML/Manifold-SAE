@@ -59,6 +59,34 @@ carries more information than a vanilla atom can).
 The interpretive test for this layer is the qualitative one in
 `tools/feature_dashboard.py`, not MSE.
 
+### Compactness of concept representation (`llm_probe` phase 2)
+
+Source: `experiments/llm_probe.py` run against the L12 sweep checkpoints
+at F=128 (job `baca6be80b66`). For each (concept, layer) pair that
+passed Phase 1's manifold-existence test, we count atoms whose
+correlation with the concept rank is above |ρ| > 0.5.
+
+| concept × layer    | vanilla atoms above 0.5 | curve atoms above 0.5 | Δ |
+| --- | --- | --- | --- |
+| magnitude_L12      | 126 / 128               | 52 / 128              | −74 |
+| magnitude_L4       | 124 / 128               | 47 / 128              | −77 |
+| polarity_L8        | 126 / 128               | 49 / 128              | −77 |
+| polarity_L12       | 124 / 128               | 46 / 128              | −78 |
+| time_L20           | 126 / 128               | 43 / 128              | −83 |
+
+Vanilla SAE: 97–98% of atoms are at least moderately correlated with
+every concept. Vanilla atoms are *pluripotent* — every direction picks
+up at least a faint signal for every continuous concept we tested.
+
+Manifold-SAE: 34–41% of atoms per concept. Concepts are *localized* to
+roughly half the dictionary, leaving the other half free for other
+features.
+
+This is the architectural-localization claim landing on real LM
+activations. The 'best atom' Spearman saturates trivially with small
+label counts (any of 128 atoms can hit |ρ| = 1.0 on 6–18 distinct
+labels) — that's why the figure uses the count-above-threshold metric.
+
 ## Pipeline brought up tonight
 
 Bringing Manifold-SAE up on the cluster surfaced nine silent-failure
