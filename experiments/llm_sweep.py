@@ -69,9 +69,9 @@ class SweepConfig:
     top_k_min: int = int(os.environ.get("MSAE_TOPK_MIN", "2"))
     top_k_ratio: float = float(os.environ.get("MSAE_TOPK_RATIO", str(1.0 / 128.0)))
 
-    # Architecture
-    sae_n_basis: int = 10
-    sae_intrinsic_rank: int = 2
+    # Architecture (env-overridable for cluster-side variant sweeps)
+    sae_n_basis: int = int(os.environ.get("MSAE_N_BASIS", "10"))
+    sae_intrinsic_rank: int = int(os.environ.get("MSAE_INTRINSIC_RANK", "2"))
     sae_sparsity_weight: float = 3e-4
     sae_ortho_weight: float = 1e-3
 
