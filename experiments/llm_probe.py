@@ -371,8 +371,23 @@ def phase2_probe_concept(
 ) -> dict:
     """For one concept-layer pair, load whichever SAE checkpoints exist and
     summarize each architecture's per-atom Spearman correlation with rank.
+
+    Also computes a train/test-split metric: 80% of prompts pick the best
+    atom by Spearman; the same atom's |ρ| is reported on the held-out 20%.
+    A genuinely concept-encoding atom keeps |ρ| high on holdout; an
+    overfit best-of-F atom drops sharply.
     """
     out: dict = {"sae_F": F}
+    # Train/test split — same seed for vanilla and curve so the comparison
+    # is fair (same partition of prompts).
+    rng = np.random.default_rng(0)
+    N = X.shape[0]
+    perm = rng.permutation(N)
+    n_train = max(1, int(0.8 * N))
+    train_idx = perm[:n_train]
+    test_idx = perm[n_train:]
+    ranks_train = ranks[train_idx]
+    ranks_test = ranks[test_idx]
 
     vanilla_path = ckpt_dir / f"vanilla_F{F}.pt"
     if vanilla_path.exists():
@@ -387,6 +402,13 @@ def phase2_probe_concept(
         rhos = [spearman_corr(z_np[:, k], ranks) for k in range(sig["F"])]
         out["vanilla"] = _summarize_per_atom(rhos, cfg.rho_strong, cfg.rho_moderate)
         out["vanilla"]["per_atom_rho"] = rhos
+        # Train/test holdout: pick best atom on train, evaluate on test.
+        rhos_train = [spearman_corr(z_np[train_idx, k], ranks_train) for k in range(sig["F"])]
+        best_atom_train = int(np.argmax(np.abs(rhos_train)))
+        rho_test = spearman_corr(z_np[test_idx, best_atom_train], ranks_test)
+        out["vanilla"]["best_atom_train"] = best_atom_train
+        out["vanilla"]["best_atom_train_rho"] = rhos_train[best_atom_train]
+        out["vanilla"]["best_atom_test_rho"] = rho_test
     else:
         out["vanilla"] = None
         out["vanilla_skipped_reason"] = f"checkpoint not found at {vanilla_path}"
@@ -416,7 +438,14 @@ def phase2_probe_concept(
         amp_np = sae_out.amplitudes.cpu().numpy()
         rhos_pos = [spearman_corr(pos_np[:, k], ranks) for k in range(sig["F"])]
         rhos_amp = [spearman_corr(amp_np[:, k], ranks) for k in range(sig["F"])]
+        # Train/test holdout for curve atoms (positions metric).
+        rhos_pos_train = [spearman_corr(pos_np[train_idx, k], ranks_train) for k in range(sig["F"])]
+        best_atom_train = int(np.argmax(np.abs(rhos_pos_train)))
+        rho_pos_test = spearman_corr(pos_np[test_idx, best_atom_train], ranks_test)
         out["curve_position"] = _summarize_per_atom(rhos_pos, cfg.rho_strong, cfg.rho_moderate)
+        out["curve_position"]["best_atom_train"] = best_atom_train
+        out["curve_position"]["best_atom_train_rho"] = rhos_pos_train[best_atom_train]
+        out["curve_position"]["best_atom_test_rho"] = rho_pos_test
         out["curve_position"]["per_atom_rho"] = rhos_pos
         out["curve_amplitude"] = _summarize_per_atom(rhos_amp, cfg.rho_strong, cfg.rho_moderate)
         out["curve_amplitude"]["per_atom_rho"] = rhos_amp
