@@ -184,16 +184,31 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
     blocks = _find_blocks(model.model if hasattr(model, "model") else model.transformer)
     D = model.config.hidden_size
 
-    # Pick atom from probe results if not specified
-    atom = cfg.target_atom
-    if atom < 0 and cfg.probe_results_path:
-        atom = pick_atom_from_probe(Path(cfg.probe_results_path), cfg.target_concept)
-    if atom < 0:
-        atom = 0
-    print(f"[steer] target atom = {atom}, concept = {cfg.target_concept}", flush=True)
-
     sae, _ = load_curve_sae(Path(cfg.sae_checkpoint), D, device)
     print(f"[steer] loaded SAE F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
+
+    # Pick atom BY ACTIVITY on the test prompts (more robust than the old
+    # path of loading from a stale probe file). The atom we want to steer
+    # is the one with highest mean amplitude across all `cfg.prompts`.
+    if cfg.target_atom < 0:
+        amp_sums = torch.zeros(sae.config.n_features, device=device)
+        cap = {}
+        hh = blocks[cfg.layer].register_forward_hook(
+            lambda m, i, o: cap.__setitem__("h", (o[0] if isinstance(o, tuple) else o).detach())
+        )
+        with torch.no_grad():
+            for prompt in cfg.prompts:
+                inputs = tok(prompt, return_tensors="pt").to(device)
+                model(**inputs)
+                r = cap["h"][0, -1, :]
+                out = sae(r.unsqueeze(0))
+                amp_sums += out.amplitudes[0]
+        hh.remove()
+        atom = int(amp_sums.argmax().item())
+        print(f"[steer] picked atom={atom} by activity (mean amp on prompts: {amp_sums[atom].item()/len(cfg.prompts):.3f})", flush=True)
+    else:
+        atom = cfg.target_atom
+        print(f"[steer] using explicit target_atom={atom}", flush=True)
 
     captured: dict = {}
     saved_block = blocks[cfg.layer]
