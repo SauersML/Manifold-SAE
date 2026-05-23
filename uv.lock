@@ -850,7 +850,7 @@ http = [
 
 [[package]]
 name = "gamfit"
-version = "0.1.109"
+version = "0.1.112"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nvidia-cublas-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
@@ -859,15 +859,15 @@ dependencies = [
     { name = "nvidia-cusparse-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "nvidia-nvjitlink-cu12", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/99/e758a7082b652c6c7d1247a6466bb3562106bded312d04dabd6f3853070a/gamfit-0.1.109.tar.gz", hash = "sha256:7f53e1c1f092f0ed929e4ddd92284b3ab3d14d0edbd14a4a27c401a836490208", size = 3317635, upload-time = "2026-05-22T22:19:05.824Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/dc/228b279c1ee6ef68fc174b74c0b91c4e2f7c2a75cd06abfc22479151ca04/gamfit-0.1.112.tar.gz", hash = "sha256:5fe9f46f7157ff76e0b34843be706374ae5c56e9e3bb8270ada31353c82a19db", size = 3334778, upload-time = "2026-05-23T03:31:03.949Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/02/a164cad2ed141b89178e3e236b4245540c109f0055b848a283878a8e4ae0/gamfit-0.1.109-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:0d1927d3e945f888495154f81e2a23a961c484a532d695c7469954e18a59b1ac", size = 13023318, upload-time = "2026-05-22T22:18:45.637Z" },
-    { url = "https://files.pythonhosted.org/packages/25/e1/1b0c6175ef42305a7e90739bcd08983c328e8d1be661558c051f72260af2/gamfit-0.1.109-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:4cdaf9eecbba0e9ab9147ddcfa8879ecb2310678a18bfdb191ea99231d61ac24", size = 11621923, upload-time = "2026-05-22T22:18:48.719Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/36/c9e9a1c87f0e47cf7847820fe2f1f8fb3cbbcd7b76c58fbe8f2bdca0b1ec/gamfit-0.1.109-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6db89b12bf2b640dd8761154b6661bb8cf1c4438cbe64843cae947b3bf5a3907", size = 11835476, upload-time = "2026-05-22T22:18:51.868Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/7b/c9896114601692e9a354627079faec82be2e569fa3d0da52c22945e05b92/gamfit-0.1.109-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:875c2134842ac0972ec9860ddc38acac42dd0261e4754ce017c6c1a7643991ae", size = 13625579, upload-time = "2026-05-22T22:18:55.129Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/54/d7f220a891b436f0a2f7031d962b1e22fc9543db5cbbfcdf434019add533/gamfit-0.1.109-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:1768131d07b0166dbd386ed2eece9ebf709e88c2d3f4e8aaca747a10a845f21f", size = 12011590, upload-time = "2026-05-22T22:18:57.913Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/53/ea8e98e25f180c3d7bff80b41c7a3f0055d015f30dfd7091f73dc33247c3/gamfit-0.1.109-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:6580ee71636b393b6352740b3ab58484a6de79190c955e8ccb72387136271699", size = 13723656, upload-time = "2026-05-22T22:19:00.675Z" },
-    { url = "https://files.pythonhosted.org/packages/ff/9e/d2dfca8770a0bc370460b06e8cb78cda7219399f4d2fcb66fc0ca59e9ff9/gamfit-0.1.109-cp310-abi3-win_amd64.whl", hash = "sha256:59ad0c4a1c451278ff6754d5d4a9608f3b282ba084c4b2102a44711f76394574", size = 14387902, upload-time = "2026-05-22T22:19:03.495Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/a6/74ff0c0df2044eed6ce479d2b0469de24e8805c1eda127956eeb3bc6c322/gamfit-0.1.112-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:41d0581b65ef18e3e643d03a472fc0986898cf88089e5456fcdf5c2efc2393c8", size = 13045889, upload-time = "2026-05-23T03:30:45.77Z" },
+    { url = "https://files.pythonhosted.org/packages/35/47/948928c0d4b83e8eba37e008e8e896289172e2b63cb67452ce2c89da4ddb/gamfit-0.1.112-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:48dbba157e001c4bbb86d6bdd01b96d1271af3195d3d53b81d0ad76161b77fbe", size = 11637546, upload-time = "2026-05-23T03:30:48.638Z" },
+    { url = "https://files.pythonhosted.org/packages/a7/fc/d3c49fbcdaad81cdf162bd6521850a07767cc067aabe72db0f0d14d4e87b/gamfit-0.1.112-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:808d73855f3e2fffe73c8f2bfaef5688c2991c5c42003fc1aed3913913cdda6a", size = 11853512, upload-time = "2026-05-23T03:30:50.697Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/8e/bd0633dba8d8216d08c430f5804caff33ca18ac1c18994c8e9106e9b00a2/gamfit-0.1.112-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ad9034fe9b4f70217d7c9bb3e17fdfba1b5fea60aec48d5982e33b4d522faf1b", size = 13645949, upload-time = "2026-05-23T03:30:53.507Z" },
+    { url = "https://files.pythonhosted.org/packages/37/a3/1fe6f2c1b9ab6b1764ae66910be51655e1561c9975ffa394918e366a374f/gamfit-0.1.112-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:edfd5ca976d11edc090f454ddef9be106fe6a6c3b5dff6406922d55552288014", size = 12025119, upload-time = "2026-05-23T03:30:56.249Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/21/6f54614a91ab268fc468aab7e40a94d86071c6d96dd87468ba953b0804f8/gamfit-0.1.112-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:fe45cf8f5e188f4629005bab2ebe50eb91f30e4fa2c31e3bdb2b4c919be85a0e", size = 13747305, upload-time = "2026-05-23T03:30:58.899Z" },
+    { url = "https://files.pythonhosted.org/packages/96/d4/c7dd16adcf72fa133d44e536813f55e07a6fb3a5f581b305e2044e37eab2/gamfit-0.1.112-cp310-abi3-win_amd64.whl", hash = "sha256:0d4941a2f21efc31b1d429ade99af461c13e664294d8a30562725307b1770720", size = 14412429, upload-time = "2026-05-23T03:31:01.545Z" },
 ]
 
 [[package]]

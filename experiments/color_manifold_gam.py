@@ -164,6 +164,12 @@ class Config:
     # matching the harvest's layer; analysis runs on however many full colors
     # the cache covers (we floor to floor(N / n_templates)).
     harvest_from: str = os.environ.get("MSAE_HARVEST_FROM", "")
+    # Comma-separated template indices (0..27) to keep when averaging per
+    # color. Empty/unset = use all 28 templates. Setting this to e.g.
+    # "8,13,16,17,18,5" restricts the per-color centroid to a hand-picked
+    # subset (e.g. the color-focused templates that score highest in the
+    # per-template alignment analysis).
+    template_subset: str = os.environ.get("MSAE_TEMPLATE_SUBSET", "")
 
 
 def _find_blocks(model) -> nn.ModuleList:
@@ -498,6 +504,41 @@ SPECS = {
     "L_joint_lab": ("smooth_lab",),                    # 3D Duchon in CIE-Lab
     "L_joint_rgb_with_hue": ("smooth_rgb_plus_hue",),
     "L_tensor_bspline_rgb": ("tensor_bspline_rgb",),   # tensor-product B-spline in RGB
+    # PERCEPTUAL color spaces (Oklab, Lch) — different inductive biases for "color distance"
+    "L_lin_oklab":           ("ridge_oklab",),           # linear in Oklab (2020 state of the art)
+    "L_joint_oklab":         ("smooth_oklab",),          # 3D Duchon in Oklab
+    "L_lin_lch":             ("ridge_lch",),             # linear in CIE-Lch (cylindrical Lab)
+    "L_lch_with_cyclic_h":   ("lch_with_cyclic_hue",),   # 2D Duchon (L, C) + cyclic h
+    "L_lab_with_cyclic_hue": ("lab_with_cyclic_hue",),   # 3D Lab + cyclic h additive
+    "L_perceptual_add":      ("perceptual_additive",),   # 1D B-splines on (L, C) + cyclic h
+    # HIGHER-DEGREE polynomials
+    "L_poly3_rgb": ("poly3_rgb",),                       # degree-3 RGB polynomial
+    "L_poly3_hsv": ("poly3_hsv",),                       # degree-3 HSV polynomial
+    "L_poly3_lab": ("poly3_lab",),                       # degree-3 polynomial in CIE-Lab
+    "L_poly4_hsv": ("poly4_hsv",),                       # degree-4 HSV polynomial — overfit?
+    "L_poly_lab":  ("poly_lab",),                        # degree-2 polynomial in CIE-Lab
+    "L_poly_oklab":("poly_oklab",),                      # degree-2 polynomial in Oklab
+    "L_poly_lch":  ("poly_lch",),                        # degree-2 polynomial in Lch (h lifted to cos/sin)
+    "L_const_mean": ("const_mean_baseline",),            # predicts training Z mean — R² should be ≈ 0
+    # MORE SURFACE FITS — alternative parametrizations
+    "M_hsv_bicone":          ("manifold_hsv_bicone",),       # double-cone (sat = 0 at both V=0 and V=1)
+    "M_chroma_disk":         ("manifold_chroma_disk",),      # 2D color wheel disk (chroma*cos h, chroma*sin h)
+    "M_chroma_disk_plus_L":  ("manifold_disk_plus_L",),      # disk + 1D lightness
+    "M_rgb_finer_grid":      ("manifold_rgb_7x7x7",),        # 7³=343 centers vs default 5³=125
+    "L_kernel_rbf_rgb":      ("kernel_rbf_rgb",),            # explicit Gaussian RBF kernel ridge
+    "L_rgb_lab_combo":       ("rgb_lab_multi_smooth",),      # 3D RGB + 3D Lab additive
+    "L_joint_oklab_with_h": ("joint_oklab_with_h",),     # 3D Oklab Duchon + cyclic hue
+    "L_chroma_lum_2d":       ("chroma_lum_2d",),         # 2D Duchon on (chroma, lightness) — no hue
+    "L_hue_polyharmonic":    ("hue_polyharmonic",),      # cyclic B-spline on hue + B-splines on C, L
+    # k-NN broader sweep
+    "N_knn_rgb_k30":  ("knn_rgb_30",),
+    "N_knn_lab_k30":  ("knn_lab_30",),
+    # k-NN SWEEP (the kNN family is competitive — see what k is best)
+    "N_knn_rgb_k5":   ("knn_rgb_5",),
+    "N_knn_rgb_k20":  ("knn_rgb_20",),
+    "N_knn_lab_k5":   ("knn_lab_5",),
+    "N_knn_lab_k20":  ("knn_lab_20",),
+    "N_knn_oklab_k10":("knn_oklab_10",),
     # CYCLIC B-spline (non-Duchon periodic) and multi-smooth combinations
     "L_cyclic_hue":                ("cyclic_hue",),               # 1D cyclic B-spline on hue
     "L_cyclic_hue_plus_lin_v":     ("cyclic_hue_plus_lin_v",),    # + linear value
@@ -524,6 +565,59 @@ SPECS = {
     "U_5d": ("unsup_5d",),
     "U_6d": ("unsup_6d",),
     "U_8d": ("unsup_8d",),
+    # NEW unsupervised approaches (different inductive biases)
+    "U_pca_2d": ("unsup_pca_2d",),                   # linear top-2 PCA reconstruction
+    "U_pca_3d": ("unsup_pca_3d",),                   # linear top-3 — baseline for U_3d
+    "U_pca_4d": ("unsup_pca_4d",),
+    "U_pca_8d": ("unsup_pca_8d",),
+    "U_pca_16d": ("unsup_pca_16d",),
+    "U_pca_24d": ("unsup_pca_24d",),
+    "U_pca_32d": ("unsup_pca_32d",),
+    "U_pca_48d": ("unsup_pca_48d",),
+    "U_pca_64d": ("unsup_pca_64d",),
+    "U_pca_96d": ("unsup_pca_96d",),
+    "U_pca_128d": ("unsup_pca_128d",),
+    # Hybrid: PCA latent + nonlinear Duchon smooth back to residuals
+    "U_pca8_smooth": ("unsup_pca_then_smooth_8d",),
+    "U_pca16_smooth": ("unsup_pca_then_smooth_16d",),
+    # Additive 1D smooths on PCA latent
+    "U_pca_add_3d":  ("unsup_pca_additive_3d",),
+    "U_pca_add_8d":  ("unsup_pca_additive_8d",),
+    "U_pca_add_16d": ("unsup_pca_additive_16d",),
+    # 2D-pair Duchon smooths on PCA latent (additive over consecutive pairs)
+    "U_pca_pairs_4d": ("unsup_pca_pairs_4d",),
+    "U_pca_pairs_8d": ("unsup_pca_pairs_8d",),
+    # PCA-init U_3d — start alternation at PCA-3 instead of random
+    "U_3d_pca_init": ("unsup_3d_pca_init",),
+    # PCA latent + tensor B-spline (different smooth family)
+    "U_pca3_tensor": ("unsup_pca_tensor_3d",),
+    # Non-negative matrix factorization (parts-based decomposition)
+    "U_nmf_8d":   ("unsup_nmf_8d",),
+    "U_nmf_16d":  ("unsup_nmf_16d",),
+    # Robust PCA via L1 (less sensitive to outlier colors)
+    "U_centroid_kde_smooth_3d": ("unsup_kde_3d",),
+    # Best-PCA-init followed by ridge-on-top
+    "U_pca_centered_8d_smooth": ("unsup_pca8_with_smooth",),
+    # ALL-DUCHON unsupervised GAM zoo on PCA latents (no B-splines)
+    "U_pca3_duchon_joint":      ("unsup_pca3_duchon_joint",),
+    "U_pca4_duchon_joint":      ("unsup_pca4_duchon_joint",),
+    "U_pca6_duchon_joint":      ("unsup_pca6_duchon_joint",),
+    "U_pca8_duchon_add1d":      ("unsup_pca8_duchon_additive",),     # 1D Duchon per PC, additive
+    "U_pca16_duchon_add1d":     ("unsup_pca16_duchon_additive",),
+    "U_pca24_duchon_add1d":     ("unsup_pca24_duchon_additive",),    # NEW — push higher
+    "U_pca32_duchon_add1d":     ("unsup_pca32_duchon_additive",),
+    "U_pca48_duchon_add1d":     ("unsup_pca48_duchon_additive",),
+    "U_pca16_duchon_pairs":     ("unsup_pca16_duchon_pairs",),
+    "U_pca6_duchon_triples":    ("unsup_pca6_duchon_triples",),       # 3D Duchon on PC triples (additive)
+    "U_pca12_duchon_triples":   ("unsup_pca12_duchon_triples",),
+    "U_pca8_duchon_m3":         ("unsup_pca8_duchon_m3",),            # higher m = smoother kernel
+    "U_pca16_duchon_m3":        ("unsup_pca16_duchon_m3",),
+    "U_pca8_duchon_finer_centers":  ("unsup_pca8_duchon_finer",),     # 200 centers vs 60 default
+    "U_kmeans_10": ("unsup_kmeans_10",),             # cluster-and-mean prediction
+    "U_kmeans_30": ("unsup_kmeans_30",),
+    "U_kmeans_50": ("unsup_kmeans_50",),
+    "U_loop_1d": ("unsup_loop_1d",),                 # 1D periodic latent (S¹)
+    "U_3d_multistart": ("unsup_3d_multistart",),     # U_3d with 5 random inits, pick best
 }
 
 
@@ -562,6 +656,51 @@ def _poly_features_degree2(X: np.ndarray) -> np.ndarray:
         for j in range(i, d):
             cols.append((X[:, i] * X[:, j])[:, None])
     return np.concatenate(cols, axis=1)
+
+
+def _poly_features_degree3(X: np.ndarray) -> np.ndarray:
+    """Degree-3 polynomial features. X (N, d) → (N, 1 + d + d(d+1)/2 + ...)."""
+    N, d = X.shape
+    cols = [np.ones((N, 1)), X]
+    for i in range(d):
+        for j in range(i, d):
+            cols.append((X[:, i] * X[:, j])[:, None])
+    for i in range(d):
+        for j in range(i, d):
+            for k in range(j, d):
+                cols.append((X[:, i] * X[:, j] * X[:, k])[:, None])
+    return np.concatenate(cols, axis=1)
+
+
+def rgb_to_oklab(rgb01: np.ndarray) -> np.ndarray:
+    """sRGB ∈ [0,1] → Oklab (Björn Ottosson, 2020) — current state of the
+    art perceptually uniform color space. Standard formula, no clipping."""
+    def linearize(c):
+        return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    rgb_lin = linearize(rgb01)
+    M1 = np.array([
+        [0.4122214708, 0.5363325363, 0.0514459929],
+        [0.2119034982, 0.6806995451, 0.1073969566],
+        [0.0883024619, 0.2817188376, 0.6299787005],
+    ])
+    lms = rgb_lin @ M1.T
+    lms_cbrt = np.cbrt(lms)
+    M2 = np.array([
+        [0.2104542553, 0.7936177850, -0.0040720468],
+        [1.9779984951, -2.4285922050, 0.4505937099],
+        [0.0259040371, 0.7827717662, -0.8086757660],
+    ])
+    return lms_cbrt @ M2.T          # (L, a, b)
+
+
+def rgb_to_lch(rgb01: np.ndarray) -> np.ndarray:
+    """RGB → CIE-Lch (cylindrical Lab): L (lightness, 0-100), C (chroma, ≥0),
+    h (hue angle in [0,1])."""
+    lab = rgb_to_lab(rgb01)
+    L = lab[:, 0]
+    C = np.sqrt(lab[:, 1] ** 2 + lab[:, 2] ** 2)
+    h = (np.arctan2(lab[:, 2], lab[:, 1]) / (2 * np.pi)) % 1.0
+    return np.stack([L, C, h], axis=1)
 
 
 def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3
@@ -794,6 +933,357 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
             [Phi_h_tr, Phi_rgb_tr], [P_h, P_rgb], train_Z,
             [Phi_h_te, Phi_rgb_te],
         )
+
+    # =====================================================================
+    # PERCEPTUAL color-space specs (Oklab, Lch)
+    # =====================================================================
+    train_X_oklab = rgb_to_oklab(train_X_rgb)
+    test_X_oklab = rgb_to_oklab(test_X_rgb)
+    train_X_lch = rgb_to_lch(train_X_rgb)
+    test_X_lch = rgb_to_lch(test_X_rgb)
+
+    if spec_name == "L_lin_oklab":
+        Phi_tr = np.concatenate([train_X_oklab, np.ones((train_X_oklab.shape[0], 1))], axis=1)
+        Phi_te = np.concatenate([test_X_oklab, np.ones((test_X_oklab.shape[0], 1))], axis=1)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_joint_oklab":
+        # 3D Duchon in Oklab. Centers placed on a 5×5×5 lattice bracketing
+        # the training data's Oklab bounding box.
+        lo, hi = train_X_oklab.min(0), train_X_oklab.max(0)
+        ax = [np.linspace(lo[d], hi[d], 5) for d in range(3)]
+        L_g, A_g, B_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), A_g.flatten(), B_g.flatten()], axis=1)
+        Phi_tr, P = duchon_basis_radial(train_X_oklab, centers)
+        Phi_te, _ = duchon_basis_radial(test_X_oklab, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "L_lin_lch":
+        # Lch is (L, C, h). Lift h to (cos, sin) so linear can see it.
+        h_tr = train_X_lch[:, 2]; h_te = test_X_lch[:, 2]
+        feat_tr = np.stack([
+            train_X_lch[:, 0], train_X_lch[:, 1],
+            np.cos(2*np.pi*h_tr), np.sin(2*np.pi*h_tr),
+        ], axis=1)
+        feat_te = np.stack([
+            test_X_lch[:, 0], test_X_lch[:, 1],
+            np.cos(2*np.pi*h_te), np.sin(2*np.pi*h_te),
+        ], axis=1)
+        Phi_tr = np.concatenate([feat_tr, np.ones((feat_tr.shape[0], 1))], axis=1)
+        Phi_te = np.concatenate([feat_te, np.ones((feat_te.shape[0], 1))], axis=1)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_lch_with_cyclic_h":
+        # 2D Duchon on (L, C) + cyclic B-spline on h.
+        feat_tr = train_X_lch[:, :2]; feat_te = test_X_lch[:, :2]
+        lo, hi = feat_tr.min(0), feat_tr.max(0)
+        ax = [np.linspace(lo[d], hi[d], 6) for d in range(2)]
+        L_g, C_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), C_g.flatten()], axis=1)
+        Phi_LC_tr, P_LC = duchon_basis_radial(feat_tr, centers)
+        Phi_LC_te, _ = duchon_basis_radial(feat_te, centers)
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(train_X_lch[:, 2], n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(test_X_lch[:, 2], n_basis=12)
+        return _additive_fit_predict(
+            [Phi_LC_tr, Phi_h_tr], [P_LC, P_h], train_Z,
+            [Phi_LC_te, Phi_h_te],
+        )
+
+    if spec_name == "L_lab_with_cyclic_hue":
+        # 3D Lab Duchon + cyclic hue (the perceptual analogue of
+        # L_joint_rgb_with_hue).
+        lab_tr = rgb_to_lab(train_X_rgb); lab_te = rgb_to_lab(test_X_rgb)
+        lo, hi = lab_tr.min(0), lab_tr.max(0)
+        ax = [np.linspace(lo[d], hi[d], 5) for d in range(3)]
+        L_g, A_g, B_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), A_g.flatten(), B_g.flatten()], axis=1)
+        Phi_lab_tr, P_lab = duchon_basis_radial(lab_tr, centers)
+        Phi_lab_te, _ = duchon_basis_radial(lab_te, centers)
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(train_X_lch[:, 2], n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(test_X_lch[:, 2], n_basis=12)
+        return _additive_fit_predict(
+            [Phi_lab_tr, Phi_h_tr], [P_lab, P_h], train_Z,
+            [Phi_lab_te, Phi_h_te],
+        )
+
+    if spec_name == "L_perceptual_add":
+        # Pure perceptual-additive: 1D B-spline on L (lightness), 1D B-spline
+        # on C (chroma), cyclic B-spline on hue. Tests the "color is just
+        # three perceptual axes processed independently" hypothesis.
+        Phi_L_tr, P_L = bspline_1d_basis(train_X_lch[:, 0] / 100.0, n_basis=10)
+        Phi_L_te, _ = bspline_1d_basis(test_X_lch[:, 0] / 100.0, n_basis=10)
+        C_max = max(float(train_X_lch[:, 1].max()), 1.0)
+        Phi_C_tr, P_C = bspline_1d_basis(train_X_lch[:, 1] / C_max, n_basis=10)
+        Phi_C_te, _ = bspline_1d_basis(test_X_lch[:, 1] / C_max, n_basis=10)
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(train_X_lch[:, 2], n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(test_X_lch[:, 2], n_basis=12)
+        return _additive_fit_predict(
+            [Phi_L_tr, Phi_C_tr, Phi_h_tr],
+            [P_L, P_C, P_h], train_Z,
+            [Phi_L_te, Phi_C_te, Phi_h_te],
+        )
+
+    if spec_name == "L_poly3_rgb":
+        Phi_tr = _poly_features_degree3(train_X_rgb)
+        Phi_te = _poly_features_degree3(test_X_rgb)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly3_hsv":
+        Phi_tr = _poly_features_degree3(train_X_hsv)
+        Phi_te = _poly_features_degree3(test_X_hsv)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly_lab":
+        Phi_tr = _poly_features_degree2(train_X_lab)
+        Phi_te = _poly_features_degree2(test_X_lab)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly3_lab":
+        Phi_tr = _poly_features_degree3(train_X_lab)
+        Phi_te = _poly_features_degree3(test_X_lab)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly4_hsv":
+        def _poly4(X):
+            N, d = X.shape
+            cols = [np.ones((N, 1)), X]
+            for i in range(d):
+                for j in range(i, d):
+                    cols.append((X[:, i] * X[:, j])[:, None])
+            for i in range(d):
+                for j in range(i, d):
+                    for k in range(j, d):
+                        cols.append((X[:, i] * X[:, j] * X[:, k])[:, None])
+            for i in range(d):
+                for j in range(i, d):
+                    for k in range(j, d):
+                        for l_ in range(k, d):
+                            cols.append((X[:, i] * X[:, j] * X[:, k] * X[:, l_])[:, None])
+            return np.concatenate(cols, axis=1)
+        Phi_tr = _poly4(train_X_hsv)
+        Phi_te = _poly4(test_X_hsv)
+        W = ridge_fit(Phi_tr, train_Z, alpha=10.0)        # stronger ridge for d4
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "M_hsv_bicone":
+        # HSV bicone: saturation vanishes at BOTH lightness extremes (white
+        # AND black), not just black. Closer to actual color appearance:
+        # very light or very dark colors have washed-out chroma. Coords:
+        #   x = s · v · sin(π·v) · cos(2π·h)
+        #   y = s · v · sin(π·v) · sin(2π·h)
+        #   z = v
+        # (The sin(πv) factor pinches the cone at both v=0 and v=1.)
+        def to_bicone(X_hsv4):
+            hue = (np.arctan2(X_hsv4[:, 1], X_hsv4[:, 0]) / (2*np.pi))
+            s, v = X_hsv4[:, 2], X_hsv4[:, 3]
+            r = s * v * np.sin(np.pi * v)
+            return np.stack([r * np.cos(2*np.pi*hue),
+                             r * np.sin(2*np.pi*hue), v], axis=1)
+        train_bi = to_bicone(train_X_hsv); test_bi = to_bicone(test_X_hsv)
+        # Centers along the bicone surface + axis
+        ang = np.linspace(0, 2*np.pi, 8, endpoint=False)
+        vs = np.linspace(0.1, 0.9, 4)
+        centers = []
+        for v in vs:
+            r = v * np.sin(np.pi * v)
+            for a in ang:
+                centers.append([r * np.cos(a), r * np.sin(a), v])
+            centers.append([0.0, 0.0, v])
+        centers = np.array(centers)
+        Phi_tr, P = duchon_basis_radial(train_bi, centers)
+        Phi_te, _ = duchon_basis_radial(test_bi, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "M_chroma_disk":
+        # 2D chromaticity disk — colors plotted by their (chroma, hue) only,
+        # ignoring lightness. (chroma * cos h, chroma * sin h)
+        def to_disk(X_lch_3):
+            h = X_lch_3[:, 2]
+            r = X_lch_3[:, 1] / 100.0     # normalize
+            return np.stack([r * np.cos(2*np.pi*h), r * np.sin(2*np.pi*h)], axis=1)
+        train_d = to_disk(train_X_lch); test_d = to_disk(test_X_lch)
+        ang = np.linspace(0, 2*np.pi, 12, endpoint=False)
+        rad = np.linspace(0.0, 1.2, 4)
+        centers = []
+        for r in rad:
+            for a in ang:
+                centers.append([r * np.cos(a), r * np.sin(a)])
+        centers = np.array(centers)
+        Phi_tr, P = duchon_basis_radial(train_d, centers)
+        Phi_te, _ = duchon_basis_radial(test_d, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "M_chroma_disk_plus_L":
+        # Disk + 1D lightness, additive
+        def to_disk(X_lch_3):
+            h = X_lch_3[:, 2]; r = X_lch_3[:, 1] / 100.0
+            return np.stack([r * np.cos(2*np.pi*h), r * np.sin(2*np.pi*h)], axis=1)
+        train_d = to_disk(train_X_lch); test_d = to_disk(test_X_lch)
+        ang = np.linspace(0, 2*np.pi, 12, endpoint=False)
+        rad = np.linspace(0.0, 1.2, 4)
+        centers = np.array([[r*np.cos(a), r*np.sin(a)] for r in rad for a in ang])
+        Phi_d_tr, P_d = duchon_basis_radial(train_d, centers)
+        Phi_d_te, _ = duchon_basis_radial(test_d, centers)
+        Phi_L_tr, P_L = bspline_1d_basis(train_X_lch[:, 0] / 100.0, n_basis=10)
+        Phi_L_te, _ = bspline_1d_basis(test_X_lch[:, 0] / 100.0, n_basis=10)
+        return _additive_fit_predict(
+            [Phi_d_tr, Phi_L_tr], [P_d, P_L], train_Z,
+            [Phi_d_te, Phi_L_te],
+        )
+
+    if spec_name == "M_rgb_finer_grid":
+        # Same 3D RGB Duchon as L_joint_rgb but with 7³=343 centers
+        # instead of 5³=125. Tests if more capacity helps.
+        ax = np.linspace(0.0, 1.0, 7)
+        R, G, B = np.meshgrid(ax, ax, ax, indexing="ij")
+        centers = np.stack([R.flatten(), G.flatten(), B.flatten()], axis=1)
+        Phi_tr, P = duchon_basis_radial(train_X_rgb, centers)
+        Phi_te, _ = duchon_basis_radial(test_X_rgb, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "L_kernel_rbf_rgb":
+        # Explicit Gaussian RBF kernel ridge — different kernel family than
+        # Duchon's polyharmonic. Same {centers, kernel function} structure
+        # but a Gaussian decays exponentially while Duchon's r grows linearly.
+        from scipy.spatial.distance import cdist
+        sigma = 0.25
+        D_tr = cdist(train_X_rgb, train_X_rgb)
+        D_te = cdist(test_X_rgb, train_X_rgb)
+        K_tr = np.exp(-(D_tr / sigma) ** 2 / 2)
+        K_te = np.exp(-(D_te / sigma) ** 2 / 2)
+        # Kernel ridge: B = (K + α I)^-1 y
+        alpha = 1.0
+        W = np.linalg.solve(K_tr + alpha * np.eye(K_tr.shape[0]), train_Z)
+        return K_tr @ W, K_te @ W
+
+    if spec_name == "L_rgb_lab_combo":
+        # Multi-smooth: 3D RGB Duchon + 3D Lab Duchon, additive. Tests
+        # whether RGB and Lab capture complementary structure.
+        from color_manifold_gam import lattice_centers as _lat
+        centers_rgb_local = _lat(cfg.lattice_per_side)
+        lab_tr = rgb_to_lab(train_X_rgb); lab_te = rgb_to_lab(test_X_rgb)
+        lo, hi = lab_tr.min(0), lab_tr.max(0)
+        ax_lab = [np.linspace(lo[d], hi[d], 5) for d in range(3)]
+        L_g, A_g, B_g = np.meshgrid(*ax_lab, indexing="ij")
+        centers_lab = np.stack([L_g.flatten(), A_g.flatten(), B_g.flatten()], axis=1)
+        Phi_rgb_tr, P_rgb = duchon_basis_radial(train_X_rgb, centers_rgb_local)
+        Phi_rgb_te, _ = duchon_basis_radial(test_X_rgb, centers_rgb_local)
+        Phi_lab_tr, P_lab = duchon_basis_radial(lab_tr, centers_lab)
+        Phi_lab_te, _ = duchon_basis_radial(lab_te, centers_lab)
+        return _additive_fit_predict(
+            [Phi_rgb_tr, Phi_lab_tr], [P_rgb, P_lab], train_Z,
+            [Phi_rgb_te, Phi_lab_te],
+        )
+
+    if spec_name == "L_const_mean":
+        # Predict training mean — sanity baseline. R² on held-out should be
+        # very near 0, slightly negative on average (mean prediction has zero
+        # explanatory power on truly held-out data).
+        mean_pred = train_Z.mean(axis=0, keepdims=True)
+        train_pred = np.repeat(mean_pred, train_Z.shape[0], axis=0)
+        test_pred = np.repeat(mean_pred, test_X_rgb.shape[0], axis=0)
+        return train_pred, test_pred
+
+    if spec_name == "L_poly_oklab":
+        Phi_tr = _poly_features_degree2(train_X_oklab)
+        Phi_te = _poly_features_degree2(test_X_oklab)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_poly_lch":
+        # Lch: lift h to (cos, sin) so polynomial features see angular structure.
+        h_tr = train_X_lch[:, 2]; h_te = test_X_lch[:, 2]
+        feat_tr = np.stack([
+            train_X_lch[:, 0] / 100.0, train_X_lch[:, 1] / 100.0,
+            np.cos(2*np.pi*h_tr), np.sin(2*np.pi*h_tr),
+        ], axis=1)
+        feat_te = np.stack([
+            test_X_lch[:, 0] / 100.0, test_X_lch[:, 1] / 100.0,
+            np.cos(2*np.pi*h_te), np.sin(2*np.pi*h_te),
+        ], axis=1)
+        Phi_tr = _poly_features_degree2(feat_tr)
+        Phi_te = _poly_features_degree2(feat_te)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name == "L_joint_oklab_with_h":
+        # 3D Oklab Duchon + cyclic hue (perceptual analogue of joint_rgb_with_hue)
+        lo, hi = train_X_oklab.min(0), train_X_oklab.max(0)
+        ax = [np.linspace(lo[d], hi[d], 5) for d in range(3)]
+        L_g, A_g, B_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), A_g.flatten(), B_g.flatten()], axis=1)
+        Phi_ok_tr, P_ok = duchon_basis_radial(train_X_oklab, centers)
+        Phi_ok_te, _ = duchon_basis_radial(test_X_oklab, centers)
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(train_X_lch[:, 2], n_basis=12)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(test_X_lch[:, 2], n_basis=12)
+        return _additive_fit_predict(
+            [Phi_ok_tr, Phi_h_tr], [P_ok, P_h], train_Z,
+            [Phi_ok_te, Phi_h_te],
+        )
+
+    if spec_name == "L_chroma_lum_2d":
+        # 2D Duchon on (L, C) only — no hue. Tests the "achromatic axis +
+        # how saturated the color is" prediction. If this scores nearly as
+        # well as the full hue-aware specs, color identity at L40 is mostly
+        # encoded by lightness and chroma, not hue.
+        feat_tr = np.stack([train_X_lch[:, 0] / 100.0,
+                              train_X_lch[:, 1] / 100.0], axis=1)
+        feat_te = np.stack([test_X_lch[:, 0] / 100.0,
+                              test_X_lch[:, 1] / 100.0], axis=1)
+        ax = [np.linspace(0, 1, 6), np.linspace(0, 1.5, 6)]
+        L_g, C_g = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([L_g.flatten(), C_g.flatten()], axis=1)
+        Phi_tr, P = duchon_basis_radial(feat_tr, centers)
+        Phi_te, _ = duchon_basis_radial(feat_te, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "L_hue_polyharmonic":
+        # Cyclic hue B-spline + B-splines on L and C — gives hue full smooth
+        # freedom while keeping L, C as separate 1D smooths.
+        Phi_h_tr, P_h = bspline_1d_cyclic_basis(train_X_lch[:, 2], n_basis=16)
+        Phi_h_te, _ = bspline_1d_cyclic_basis(test_X_lch[:, 2], n_basis=16)
+        Phi_L_tr, P_L = bspline_1d_basis(train_X_lch[:, 0] / 100.0, n_basis=10)
+        Phi_L_te, _ = bspline_1d_basis(test_X_lch[:, 0] / 100.0, n_basis=10)
+        Cmx = max(float(train_X_lch[:, 1].max()), 1.0)
+        Phi_C_tr, P_C = bspline_1d_basis(train_X_lch[:, 1] / Cmx, n_basis=10)
+        Phi_C_te, _ = bspline_1d_basis(test_X_lch[:, 1] / Cmx, n_basis=10)
+        return _additive_fit_predict(
+            [Phi_h_tr, Phi_L_tr, Phi_C_tr],
+            [P_h, P_L, P_C], train_Z,
+            [Phi_h_te, Phi_L_te, Phi_C_te],
+        )
+
+    if spec_name == "N_knn_rgb_k30":
+        return _knn_predict(train_X_rgb, train_Z, test_X_rgb, k=30)
+
+    if spec_name == "N_knn_lab_k30":
+        return _knn_predict(train_X_lab, train_Z, test_X_lab, k=30)
+
+    if spec_name == "N_knn_rgb_k5":
+        return _knn_predict(train_X_rgb, train_Z, test_X_rgb, k=5)
+
+    if spec_name == "N_knn_rgb_k20":
+        return _knn_predict(train_X_rgb, train_Z, test_X_rgb, k=20)
+
+    if spec_name == "N_knn_lab_k5":
+        return _knn_predict(train_X_lab, train_Z, test_X_lab, k=5)
+
+    if spec_name == "N_knn_lab_k20":
+        return _knn_predict(train_X_lab, train_Z, test_X_lab, k=20)
+
+    if spec_name == "N_knn_oklab_k10":
+        return _knn_predict(train_X_oklab, train_Z, test_X_oklab, k=10)
 
     if spec_name == "N_knn_rgb_k10":
         return _knn_predict(train_X_rgb, train_Z, test_X_rgb, k=10)
@@ -1042,6 +1532,450 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         _, Z_te_pred = predict_unsupervised(test_Z, fit, d)
         return Z_tr_pred, Z_te_pred
 
+    # ----- NEW unsupervised approaches -----
+
+    if spec_name.startswith("U_pca_add_"):
+        # Additive 1D smooths on each of the top-k PCs.
+        # Tests: are the PCs independently informative, or do they interact?
+        k = int(spec_name[len("U_pca_add_"):].rstrip("d"))
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:k]
+        T_tr = Zc @ proj.T
+        test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+        T_te = test_Zc @ proj.T
+        # Normalize each PC to [0,1] for the B-spline basis
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_n = (T_tr - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = (T_te - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = np.clip(T_te_n, 0.0, 1.0)
+        # Build list of (Phi_tr, Phi_te, P) per PC
+        designs_tr, designs_te, penalties = [], [], []
+        for i in range(k):
+            B_tr, P_i = bspline_1d_basis(T_tr_n[:, i], n_basis=10)
+            B_te, _ = bspline_1d_basis(T_te_n[:, i], n_basis=10)
+            designs_tr.append(B_tr); designs_te.append(B_te); penalties.append(P_i)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
+
+    if spec_name.startswith("U_pca_pairs_"):
+        # 2D Duchon smooths on consecutive PCA pairs (PC1-PC2, PC3-PC4, …)
+        # Additively combined. Tests pairwise interaction structure.
+        k = int(spec_name[len("U_pca_pairs_"):].rstrip("d"))
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:k]
+        T_tr = Zc @ proj.T
+        test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+        T_te = test_Zc @ proj.T
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_n = (T_tr - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = (T_te - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = np.clip(T_te_n, 0.0, 1.0)
+        designs_tr, designs_te, penalties = [], [], []
+        for pair_i in range(0, k, 2):
+            j_end = min(pair_i + 2, k)
+            pair_tr = T_tr_n[:, pair_i:j_end]
+            pair_te = T_te_n[:, pair_i:j_end]
+            if pair_tr.shape[1] == 1:
+                B_tr, P_p = bspline_1d_basis(pair_tr[:, 0], n_basis=10)
+                B_te, _ = bspline_1d_basis(pair_te[:, 0], n_basis=10)
+            else:
+                ax_pair = [np.linspace(0, 1, 5), np.linspace(0, 1, 5)]
+                xg, yg = np.meshgrid(*ax_pair, indexing="ij")
+                centers_pair = np.stack([xg.flatten(), yg.flatten()], axis=1)
+                B_tr, P_p = duchon_basis_radial(pair_tr, centers_pair)
+                B_te, _ = duchon_basis_radial(pair_te, centers_pair)
+            designs_tr.append(B_tr); designs_te.append(B_te); penalties.append(P_p)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
+
+    if spec_name == "U_3d_pca_init":
+        # Init U_3d's alternation with PCA-3d coords. Should converge to a
+        # higher-R² local optimum than the default deterministic init.
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        T_pca = Zc @ Vt.T[:, :3]
+        t_min = T_pca.min(0); t_max = T_pca.max(0)
+        T0 = np.clip((T_pca - t_min) / (t_max - t_min + 1e-9), 0.001, 0.999)
+        fit = fit_unsupervised_manifold(train_Z, 3, cfg, n_iters=15,
+                                         verbose=False, init_T=T0)
+        Phi_tr, _ = duchon_basis_radial(fit["T"], fit["centers"])
+        Z_tr_pred = Phi_tr @ fit["B"]
+        _, Z_te_pred = predict_unsupervised(test_Z, fit, 3)
+        return Z_tr_pred, Z_te_pred
+
+    if spec_name.startswith("U_nmf_"):
+        # NMF on shifted-positive train_Z. Test: project via least-squares
+        # then reconstruct via the fitted W. NMF gives "parts-based"
+        # decomposition (additive components, all positive). Useful when
+        # the structure is genuinely additive non-negative.
+        k = int(spec_name[len("U_nmf_"):].rstrip("d"))
+        # Shift train data to be non-negative
+        shift = train_Z.min(axis=0, keepdims=True) - 1e-3
+        train_pos = train_Z - shift
+        test_pos = test_Z - shift
+        from sklearn.decomposition import NMF
+        try:
+            nmf = NMF(n_components=k, init="random", random_state=0,
+                       max_iter=300, tol=1e-4)
+            H_tr = nmf.fit_transform(train_pos)            # (N, k)
+            W = nmf.components_                            # (k, D)
+            train_pred = H_tr @ W + shift
+            # Project test via least squares: argmin ||test_pos - H W||²
+            # H_te = test_pos @ W^T @ (W W^T)^-1, clipped to nonneg
+            WWt = W @ W.T
+            H_te = test_pos @ W.T @ np.linalg.pinv(WWt)
+            H_te = np.maximum(H_te, 0)
+            test_pred = H_te @ W + shift
+            return train_pred, test_pred
+        except Exception:
+            # NMF can fail to converge; fall back to PCA-k
+            Zc = train_Z - train_Z.mean(0, keepdims=True)
+            _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+            proj = Vt[:k]
+            train_pred = (Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
+            test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+            test_pred = (test_Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
+            return train_pred, test_pred
+
+    if spec_name == "U_centroid_kde_smooth_3d":
+        # Predict each test residual as a weighted average of training
+        # residuals, with weights from a Gaussian kernel in residual space
+        # (kernel density smoothing). Distance-decayed analogue of k-NN.
+        sigma_sq = float(np.mean(np.var(train_Z, axis=0)))    # ~ trace(cov)/D
+        d2_tr = np.sum((train_Z[:, None, :] - train_Z[None, :, :]) ** 2, axis=2)
+        np.fill_diagonal(d2_tr, np.inf)
+        # Use per-row exponential weights with scale ~ median of nearest 20
+        med = np.partition(d2_tr, 20, axis=1)[:, :20].mean(axis=1).mean()
+        w_tr = np.exp(-d2_tr / (2 * med))
+        w_tr = w_tr / (w_tr.sum(axis=1, keepdims=True) + 1e-9)
+        train_pred = w_tr @ train_Z
+        d2_te = np.sum((test_Z[:, None, :] - train_Z[None, :, :]) ** 2, axis=2)
+        w_te = np.exp(-d2_te / (2 * med))
+        w_te = w_te / (w_te.sum(axis=1, keepdims=True) + 1e-9)
+        test_pred = w_te @ train_Z
+        return train_pred, test_pred
+
+    # ALL-DUCHON unsupervised GAM zoo on PCA latents (no B-splines anywhere)
+
+    def _pca_latent(train_Z, test_Z, k):
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:k]
+        T_tr = Zc @ proj.T
+        T_te = (test_Z - train_Z.mean(0, keepdims=True)) @ proj.T
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_n = np.clip((T_tr - t_min) / (t_max - t_min + 1e-9), 0.001, 0.999)
+        T_te_n = np.clip((T_te - t_min) / (t_max - t_min + 1e-9), 0.001, 0.999)
+        return T_tr_n, T_te_n
+
+    def _joint_duchon_on_latent(T_tr_n, T_te_n, n_per_axis: int = 4):
+        """Joint Duchon on the k-D PCA latent. Centers on a uniform lattice."""
+        k = T_tr_n.shape[1]
+        ax = [np.linspace(0, 1, n_per_axis) for _ in range(k)]
+        grids = np.meshgrid(*ax, indexing="ij")
+        centers = np.stack([g.flatten() for g in grids], axis=1)
+        Phi_tr, P = duchon_basis_radial(T_tr_n, centers)
+        Phi_te, _ = duchon_basis_radial(T_te_n, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name in ("U_pca3_duchon_joint", "U_pca4_duchon_joint", "U_pca6_duchon_joint"):
+        k = int(spec_name[len("U_pca"):].split("_")[0])
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, k)
+        # Adapt n_per_axis so total centers stay reasonable
+        n_per = {3: 5, 4: 4, 6: 3}[k]
+        return _joint_duchon_on_latent(T_tr_n, T_te_n, n_per_axis=n_per)
+
+    if spec_name.startswith("U_pca") and spec_name.endswith("_duchon_add1d"):
+        k = int(spec_name[len("U_pca"):].split("_")[0])
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, k)
+        # 1D Duchon per PC additively
+        designs_tr, designs_te, penalties = [], [], []
+        centers_1d = np.linspace(0, 1, 12).reshape(-1, 1)
+        for i in range(k):
+            pts_tr = T_tr_n[:, i:i+1]
+            pts_te = T_te_n[:, i:i+1]
+            Phi_tr, P = duchon_basis_radial(pts_tr, centers_1d)
+            Phi_te, _ = duchon_basis_radial(pts_te, centers_1d)
+            designs_tr.append(Phi_tr); designs_te.append(Phi_te); penalties.append(P)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
+
+    if spec_name == "U_pca16_duchon_pairs":
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, 16)
+        designs_tr, designs_te, penalties = [], [], []
+        ax_pair = [np.linspace(0, 1, 5), np.linspace(0, 1, 5)]
+        xg, yg = np.meshgrid(*ax_pair, indexing="ij")
+        centers_pair = np.stack([xg.flatten(), yg.flatten()], axis=1)
+        for i in range(0, 16, 2):
+            pair_tr = T_tr_n[:, i:i+2]; pair_te = T_te_n[:, i:i+2]
+            Phi_tr, P = duchon_basis_radial(pair_tr, centers_pair)
+            Phi_te, _ = duchon_basis_radial(pair_te, centers_pair)
+            designs_tr.append(Phi_tr); designs_te.append(Phi_te); penalties.append(P)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
+
+    if spec_name in ("U_pca6_duchon_triples", "U_pca12_duchon_triples"):
+        k = int(spec_name[len("U_pca"):].split("_")[0])
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, k)
+        designs_tr, designs_te, penalties = [], [], []
+        ax = [np.linspace(0, 1, 4) for _ in range(3)]
+        xg, yg, zg = np.meshgrid(*ax, indexing="ij")
+        centers_tri = np.stack([xg.flatten(), yg.flatten(), zg.flatten()], axis=1)
+        for i in range(0, k, 3):
+            tri_tr = T_tr_n[:, i:i+3]; tri_te = T_te_n[:, i:i+3]
+            Phi_tr, P = duchon_basis_radial(tri_tr, centers_tri)
+            Phi_te, _ = duchon_basis_radial(tri_te, centers_tri)
+            designs_tr.append(Phi_tr); designs_te.append(Phi_te); penalties.append(P)
+        return _additive_fit_predict(designs_tr, penalties, train_Z, designs_te)
+
+    if spec_name in ("U_pca8_duchon_m3", "U_pca16_duchon_m3"):
+        # Force gamfit to use m=3 (smoother polyharmonic kernel). Centers
+        # placed via k-means on the latent (bounded count, not full lattice
+        # which would OOM at d=16 with 2^16 = 65536 grid points).
+        k = 8 if spec_name == "U_pca8_duchon_m3" else 16
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, k)
+        from numpy.random import default_rng
+        K = 80
+        rng = default_rng(0)
+        idx = rng.choice(T_tr_n.shape[0], min(K, T_tr_n.shape[0]), replace=False)
+        centers = T_tr_n[idx].copy()
+        for _ in range(10):
+            d2 = np.sum((T_tr_n[:, None, :] - centers[None, :, :]) ** 2, axis=2)
+            a = d2.argmin(axis=1)
+            for ki in range(len(centers)):
+                m = (a == ki)
+                if m.any():
+                    centers[ki] = T_tr_n[m].mean(0)
+        import gamfit
+        try:
+            Phi_tr = np.asarray(gamfit.duchon_basis(T_tr_n, centers, m=3, periodic_per_axis=(False,)*k))
+            Phi_te = np.asarray(gamfit.duchon_basis(T_te_n, centers, m=3, periodic_per_axis=(False,)*k))
+            P = np.asarray(gamfit.duchon_function_norm_penalty(centers, m=3, periodic_per_axis=(False,)*k))
+            B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+            return Phi_tr @ B, Phi_te @ B
+        except Exception:
+            Phi_tr, P = duchon_basis_radial(T_tr_n, centers)
+            Phi_te, _ = duchon_basis_radial(T_te_n, centers)
+            B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+            return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "U_pca8_duchon_finer_centers":
+        T_tr_n, T_te_n = _pca_latent(train_Z, test_Z, 8)
+        # Place 200 centers via k-means on the latent for finer adaptation
+        from numpy.random import default_rng
+        rng = default_rng(0)
+        K = 200
+        idx = rng.choice(T_tr_n.shape[0], min(K, T_tr_n.shape[0]), replace=False)
+        centers = T_tr_n[idx].copy()
+        for _ in range(10):
+            d2 = np.sum((T_tr_n[:, None, :] - centers[None, :, :]) ** 2, axis=2)
+            a = d2.argmin(axis=1)
+            for ki in range(len(centers)):
+                m = (a == ki)
+                if m.any():
+                    centers[ki] = T_tr_n[m].mean(0)
+        Phi_tr, P = duchon_basis_radial(T_tr_n, centers)
+        Phi_te, _ = duchon_basis_radial(T_te_n, centers)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        return Phi_tr @ B, Phi_te @ B
+
+    if spec_name == "U_pca_centered_8d_smooth":
+        # PCA-8d latent + smooth fit in PC-latent space. Same as U_pca8_smooth
+        # but using centers placed via k-means on the PC-latent for finer
+        # adaptation to data density.
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:8]
+        T_tr = Zc @ proj.T
+        test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+        T_te = test_Zc @ proj.T
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_n = (T_tr - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = np.clip((T_te - t_min) / (t_max - t_min + 1e-9), 0.001, 0.999)
+        # k-means centers in the normalized latent
+        rng = np.random.default_rng(0)
+        K = 32
+        idx = rng.choice(T_tr_n.shape[0], K, replace=False)
+        centers = T_tr_n[idx].copy()
+        for _ in range(15):
+            d2 = np.sum((T_tr_n[:, None, :] - centers[None, :, :]) ** 2, axis=2)
+            a = d2.argmin(axis=1)
+            for ki in range(K):
+                m = (a == ki)
+                if m.any():
+                    centers[ki] = T_tr_n[m].mean(0)
+        try:
+            Phi_tr, P = duchon_basis_radial(T_tr_n, centers)
+            B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+            Phi_te, _ = duchon_basis_radial(T_te_n, centers)
+            return Phi_tr @ B, Phi_te @ B
+        except Exception:
+            train_pred = T_tr @ proj + train_Z.mean(0, keepdims=True)
+            test_pred = T_te @ proj + train_Z.mean(0, keepdims=True)
+            return train_pred, test_pred
+
+    if spec_name == "U_pca3_tensor":
+        # PCA-3 latent + tensor-product B-spline (different smooth family
+        # than Duchon's radial kernel).
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:3]
+        T_tr = Zc @ proj.T
+        test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+        T_te = test_Zc @ proj.T
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_n = (T_tr - t_min) / (t_max - t_min + 1e-9)
+        T_te_n = np.clip((T_te - t_min) / (t_max - t_min + 1e-9), 0.0, 1.0)
+        def tprod(X, n_per_axis: int = 6):
+            cols = []
+            for ax in range(3):
+                Bk, _ = bspline_1d_basis(X[:, ax], n_basis=n_per_axis)
+                cols.append(Bk)
+            out = cols[0][:, :, None, None] * cols[1][:, None, :, None] * cols[2][:, None, None, :]
+            return out.reshape(X.shape[0], -1)
+        Phi_tr = tprod(T_tr_n)
+        Phi_te = tprod(T_te_n)
+        W = ridge_fit(Phi_tr, train_Z, alpha=1.0)
+        return Phi_tr @ W, Phi_te @ W
+
+    if spec_name in ("U_pca8_smooth", "U_pca16_smooth"):
+        k = 8 if spec_name == "U_pca8_smooth" else 16
+        # Project to top-k PCs to get a k-d "latent" T, then fit a
+        # nonlinear Duchon smooth from T → residual. Held-out: project test
+        # residual to k PCs, predict via smooth. This separates the
+        # subspace discovery (linear, PCA) from the nonlinear surface fit.
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:k]
+        T_tr = Zc @ proj.T
+        # Normalize to [0,1]^k for Duchon centers
+        t_min = T_tr.min(0); t_max = T_tr.max(0)
+        T_tr_norm = (T_tr - t_min) / (t_max - t_min + 1e-9)
+        T_tr_norm = np.clip(T_tr_norm, 0.001, 0.999)
+        # Centers: random subset of training T (10% capped at 60)
+        n_centers = min(60, max(20, T_tr_norm.shape[0] // 10))
+        rng = np.random.default_rng(0)
+        center_idx = rng.choice(T_tr_norm.shape[0], n_centers, replace=False)
+        centers = T_tr_norm[center_idx]
+        try:
+            Phi_tr, P = duchon_basis_radial(T_tr_norm, centers)
+            B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+            test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+            T_te = test_Zc @ proj.T
+            T_te_norm = (T_te - t_min) / (t_max - t_min + 1e-9)
+            T_te_norm = np.clip(T_te_norm, 0.001, 0.999)
+            Phi_te, _ = duchon_basis_radial(T_te_norm, centers)
+            return Phi_tr @ B, Phi_te @ B
+        except Exception as exc:
+            # If high-d Duchon penalty rejects this, return linear PCA fallback
+            train_pred = T_tr @ proj + train_Z.mean(0, keepdims=True)
+            test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+            test_pred = (test_Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
+            return train_pred, test_pred
+
+    if spec_name.startswith("U_pca_"):
+        k = int(spec_name[len("U_pca_"):].rstrip("d"))
+        # Linear unsupervised: top-k PCs of train_Z; predict via reconstruction.
+        # Held-out R² = how much of test_Z lies in the top-k-PC subspace
+        # learned from training. This is the linear baseline U_kd alternation
+        # should beat if it's actually finding nonlinear manifold structure.
+        Zc = train_Z - train_Z.mean(0, keepdims=True)
+        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        proj = Vt[:k]
+        train_pred = (Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
+        test_Zc = test_Z - train_Z.mean(0, keepdims=True)
+        test_pred = (test_Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
+        return train_pred, test_pred
+
+    if spec_name.startswith("U_kmeans_"):
+        K = int(spec_name[len("U_kmeans_"):])
+        # k-means cluster-and-mean: train centroids, predict held-out via
+        # nearest training cluster. If colors cluster by category (e.g.
+        # "all the blues" together), this works well; if they spread
+        # continuously, this is a stair-step approximation.
+        # Simple Lloyd's: init by random training rows, 20 iterations.
+        rng = np.random.default_rng(0)
+        N_tr, D = train_Z.shape
+        idx = rng.choice(N_tr, size=K, replace=False)
+        C = train_Z[idx].copy()
+        for _ in range(20):
+            d2 = np.sum((train_Z[:, None, :] - C[None, :, :]) ** 2, axis=2)
+            assignments = d2.argmin(axis=1)
+            for ki in range(K):
+                m = (assignments == ki)
+                if m.any():
+                    C[ki] = train_Z[m].mean(0)
+        # Assign training to nearest cluster
+        d2_tr = np.sum((train_Z[:, None, :] - C[None, :, :]) ** 2, axis=2)
+        a_tr = d2_tr.argmin(axis=1)
+        train_pred = C[a_tr]
+        d2_te = np.sum((test_Z[:, None, :] - C[None, :, :]) ** 2, axis=2)
+        a_te = d2_te.argmin(axis=1)
+        test_pred = C[a_te]
+        return train_pred, test_pred
+
+    if spec_name == "U_loop_1d":
+        # 1D PERIODIC latent — discover a closed loop. Constrains the
+        # color manifold to be a circle (color wheel hypothesis).
+        # Init t uniformly on [0,1), refine with cyclic B-spline smooth.
+        N_tr = train_Z.shape[0]
+        rng = np.random.default_rng(0)
+        t = rng.uniform(0, 1, N_tr)
+        for it in range(15):
+            Phi_tr, P = bspline_1d_cyclic_basis(t, n_basis=12)
+            B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+            # Re-project: grid search over [0, 1) periodic
+            grid = np.linspace(0, 1, 400, endpoint=False)
+            Phi_grid, _ = bspline_1d_cyclic_basis(grid, n_basis=12)
+            preds = Phi_grid @ B
+            # For each training point, find best grid t
+            d_to_grid = np.sum((train_Z[:, None, :] - preds[None, :, :]) ** 2, axis=2)
+            t_new = grid[d_to_grid.argmin(axis=1)]
+            if np.allclose(t, t_new, atol=1e-4):
+                break
+            t = t_new
+        # Final fit
+        Phi_tr, P = bspline_1d_cyclic_basis(t, n_basis=12)
+        B, _ = reml_fit(Phi_tr, train_Z, P, cfg.init_log_lambda)
+        train_pred = Phi_tr @ B
+        # Predict test by projection onto the same loop
+        grid = np.linspace(0, 1, 400, endpoint=False)
+        Phi_grid, _ = bspline_1d_cyclic_basis(grid, n_basis=12)
+        preds = Phi_grid @ B
+        d_to_grid = np.sum((test_Z[:, None, :] - preds[None, :, :]) ** 2, axis=2)
+        t_test = grid[d_to_grid.argmin(axis=1)]
+        Phi_te, _ = bspline_1d_cyclic_basis(t_test, n_basis=12)
+        test_pred = Phi_te @ B
+        return train_pred, test_pred
+
+    if spec_name == "U_3d_multistart":
+        # U_3d with 5 random inits via different seeds — pick the one with
+        # the lowest TRAINING MSE (proxy for best local optimum).
+        best_fit = None
+        best_train_mse = float("inf")
+        for seed in range(5):
+            # The existing fit_unsupervised_manifold uses a deterministic init;
+            # we perturb by passing init_T via small random noise on a PCA init.
+            rng = np.random.default_rng(seed)
+            Zc = train_Z - train_Z.mean(0, keepdims=True)
+            _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+            T_pca = (Zc @ Vt.T[:, :3])
+            # Normalize to [0, 1] cube
+            t_min = T_pca.min(0); t_max = T_pca.max(0)
+            T0 = (T_pca - t_min) / (t_max - t_min + 1e-9)
+            T0 = T0 + 0.02 * rng.standard_normal(T0.shape)
+            T0 = np.clip(T0, 0.001, 0.999)
+            fit = fit_unsupervised_manifold(
+                train_Z, 3, cfg, n_iters=12, verbose=False, init_T=T0,
+            )
+            mse = fit["history"][-1]["train_mse"]
+            if mse < best_train_mse:
+                best_train_mse = mse
+                best_fit = fit
+        Phi_tr, _ = duchon_basis_radial(best_fit["T"], best_fit["centers"])
+        Z_tr_pred = Phi_tr @ best_fit["B"]
+        _, Z_te_pred = predict_unsupervised(test_Z, best_fit, 3)
+        return Z_tr_pred, Z_te_pred
+
     raise ValueError(f"unknown spec: {spec_name}")
 
 
@@ -1194,12 +2128,32 @@ def main() -> int:
         print(f"[save] residuals → {out_dir/'residuals.pt'}", flush=True)
 
     per_layer_results = {}
+    # Optional template subset (per-template analysis showed that ~6 templates
+    # produce 3-4× stronger color signal than the rest; averaging across all
+    # 28 dilutes the signal). MSAE_TEMPLATE_SUBSET="8,13,16,17,18,5" keeps
+    # only those template-indexed rows for the per-color centroid.
+    template_subset_mask: np.ndarray | None = None
+    if cfg.template_subset.strip():
+        keep_idx = sorted({int(x) for x in cfg.template_subset.split(",")})
+        n_t_total = len(TEMPLATES)
+        # Build a mask of length N=n_c*n_t selecting only the kept templates
+        template_subset_mask = np.zeros(len(c_idx), dtype=bool)
+        for ci in range(n_c):
+            base = ci * n_t_total
+            for ti in keep_idx:
+                if 0 <= ti < n_t_total:
+                    template_subset_mask[base + ti] = True
+        print(f"[template_subset] keeping templates {keep_idx} ({len(keep_idx)}/"
+              f"{n_t_total}) → {int(template_subset_mask.sum())} prompts",
+              flush=True)
     for L in cfg.layers:
         X_full = layer_resids[L]                          # (N, D) fp32
-        # Per-color average: collapse the 28-template noise
+        # Per-color average across (subset of) templates
         per_color = torch.zeros(n_c, X_full.shape[1])
         for ci in range(n_c):
             m = (c_idx == ci)
+            if template_subset_mask is not None:
+                m = m & template_subset_mask
             per_color[ci] = X_full[m].mean(0)
         # Per-dim normalize
         mu = per_color.mean(0, keepdim=True)
