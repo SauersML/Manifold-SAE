@@ -625,9 +625,11 @@ def multi_output_ridge_cv(
 
 
 def pc_axis_spearmans(X: torch.Tensor, axes: dict, n_pcs: int) -> dict:
-    Xc = X - X.mean(0, keepdim=True)
-    _, _, Vt = torch.linalg.svd(Xc, full_matrices=False)
-    pcs = (Xc @ Vt.T[:, :n_pcs]).numpy()
+    # Center-only PCA via sklearn (consistent with _pca_basis.top_pcs); no
+    # standardization because the caller's per_dim_normalize has already
+    # whitened X when appropriate.
+    from _pca_basis import top_pcs
+    pcs = top_pcs(X.numpy().astype(np.float64), d=n_pcs, standardize=False)
     out = {}
     for ax, vals in axes.items():
         rhos = [spearman(pcs[:, k], vals) for k in range(n_pcs)]

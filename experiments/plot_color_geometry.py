@@ -70,10 +70,13 @@ def load_harvest(cache_path: Path) -> np.ndarray:
 
 
 def pca_to_d(X: np.ndarray, d: int) -> np.ndarray:
-    """First d PCs of X (N, D). Returns (N, d). Center but don't scale."""
-    Xc = X - X.mean(axis=0, keepdims=True)
-    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
-    return Xc @ Vt.T[:, :d]
+    """First d PCs of X (N, D). Returns (N, d). Center but don't scale.
+
+    Delegates to ``_pca_basis.top_pcs`` (sklearn.decomposition.PCA) so all
+    PCA in this repo uses one code path.
+    """
+    from _pca_basis import top_pcs
+    return top_pcs(X, d=d, standardize=False)
 
 
 def umap_to_d(X: np.ndarray, d: int, seed: int = 0) -> np.ndarray:

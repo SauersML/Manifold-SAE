@@ -23,11 +23,15 @@ import numpy as np
 sys.path.insert(0, "/Users/user/Manifold-SAE/experiments")
 from plot_color_geometry import load_xkcd_colors, load_harvest
 from color_filter_list import filter_colors
+# Single source of truth for the TOP_TEMPLATES centroid convention so all
+# downstream PCA / probe / GAM analyses use IDENTICAL per-color vectors.
+from _pca_basis import (
+    N_TEMPLATES as N_T,
+    TOP_TEMPLATES,
+    _per_color_centroids,
+)
 
-
-N_T = 28
 LAYER = 40
-TOP_TEMPLATES = [8, 13, 16, 17, 18, 5]   # color-focused templates
 
 
 def main() -> int:
@@ -36,12 +40,10 @@ def main() -> int:
     n_colors = X_full.shape[0] // N_T
     X_full = X_full[: n_colors * N_T]
 
-    # Per-color centroids — top-6 color-focused templates only
-    centroids_all = np.zeros((n_colors, X_full.shape[1]), dtype=np.float64)
-    for ci in range(n_colors):
-        base = ci * N_T
-        rows = [base + ti for ti in TOP_TEMPLATES]
-        centroids_all[ci] = X_full[rows].mean(axis=0)
+    # Per-color centroids — top-6 color-focused templates only.
+    centroids_all = _per_color_centroids(
+        X_full, n_templates=N_T, template_subset=TOP_TEMPLATES,
+    )
 
     colors_all = load_xkcd_colors()[:n_colors]
     kept, kept_idx = filter_colors(colors_all)

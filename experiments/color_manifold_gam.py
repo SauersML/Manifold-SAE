@@ -62,6 +62,19 @@ from manifold_sae._cluster_bridge import bypass_gamfit_cuda_check, require_cuda_
 bypass_gamfit_cuda_check()
 
 
+def _pca_Vt(Zc: np.ndarray) -> np.ndarray:
+    """Return Vt = (min(N,D), D) for ALREADY-CENTERED Zc, via sklearn PCA.
+
+    Drop-in for ``Vt = _pca_Vt(Zc); Vt``.
+    Uses _pca_basis.fit_top_pcs (sklearn.decomposition.PCA, svd_solver=full)
+    so all PCA in this repo uses one code path.
+    """
+    from _pca_basis import fit_top_pcs
+    k = min(Zc.shape[0], Zc.shape[1])
+    _, Vt = fit_top_pcs(Zc, d=k, standardize=False)
+    return Vt
+
+
 # =============================================================================
 # Templates — 28 diverse, beautiful, varied syntactic roles
 # =============================================================================
@@ -384,7 +397,7 @@ def _rescale_T_to_unit(T: np.ndarray) -> np.ndarray:
 def _initialize_T_from_pca(Z: np.ndarray, d: int) -> np.ndarray:
     """Initial latent coords = top-d PCs of Z, rescaled to [0, 1]^d."""
     Zc = Z - Z.mean(0, keepdims=True)
-    _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+    Vt = _pca_Vt(Zc)
     T = Zc @ Vt.T[:, :d]
     return _rescale_T_to_unit(T)
 
@@ -1539,7 +1552,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # Tests: are the PCs independently informative, or do they interact?
         k = int(spec_name[len("U_pca_add_"):].rstrip("d"))
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:k]
         T_tr = Zc @ proj.T
         test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1562,7 +1575,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # Additively combined. Tests pairwise interaction structure.
         k = int(spec_name[len("U_pca_pairs_"):].rstrip("d"))
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:k]
         T_tr = Zc @ proj.T
         test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1592,7 +1605,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # Init U_3d's alternation with PCA-3d coords. Should converge to a
         # higher-R² local optimum than the default deterministic init.
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         T_pca = Zc @ Vt.T[:, :3]
         t_min = T_pca.min(0); t_max = T_pca.max(0)
         T0 = np.clip((T_pca - t_min) / (t_max - t_min + 1e-9), 0.001, 0.999)
@@ -1630,7 +1643,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         except Exception:
             # NMF can fail to converge; fall back to PCA-k
             Zc = train_Z - train_Z.mean(0, keepdims=True)
-            _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+            Vt = _pca_Vt(Zc)
             proj = Vt[:k]
             train_pred = (Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
             test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1659,7 +1672,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
 
     def _pca_latent(train_Z, test_Z, k):
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:k]
         T_tr = Zc @ proj.T
         T_te = (test_Z - train_Z.mean(0, keepdims=True)) @ proj.T
@@ -1783,7 +1796,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # but using centers placed via k-means on the PC-latent for finer
         # adaptation to data density.
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:8]
         T_tr = Zc @ proj.T
         test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1817,7 +1830,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # PCA-3 latent + tensor-product B-spline (different smooth family
         # than Duchon's radial kernel).
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:3]
         T_tr = Zc @ proj.T
         test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1844,7 +1857,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # residual to k PCs, predict via smooth. This separates the
         # subspace discovery (linear, PCA) from the nonlinear surface fit.
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:k]
         T_tr = Zc @ proj.T
         # Normalize to [0,1]^k for Duchon centers
@@ -1879,7 +1892,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
         # learned from training. This is the linear baseline U_kd alternation
         # should beat if it's actually finding nonlinear manifold structure.
         Zc = train_Z - train_Z.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+        Vt = _pca_Vt(Zc)
         proj = Vt[:k]
         train_pred = (Zc @ proj.T) @ proj + train_Z.mean(0, keepdims=True)
         test_Zc = test_Z - train_Z.mean(0, keepdims=True)
@@ -1957,7 +1970,7 @@ def fit_and_predict(spec_name: str, train_X_rgb, train_X_hsv, train_Z,
             # we perturb by passing init_T via small random noise on a PCA init.
             rng = np.random.default_rng(seed)
             Zc = train_Z - train_Z.mean(0, keepdims=True)
-            _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+            Vt = _pca_Vt(Zc)
             T_pca = (Zc @ Vt.T[:, :3])
             # Normalize to [0, 1] cube
             t_min = T_pca.min(0); t_max = T_pca.max(0)
@@ -2159,10 +2172,14 @@ def main() -> int:
         mu = per_color.mean(0, keepdim=True)
         sigma = per_color.std(0, keepdim=True).clamp(min=1e-6)
         Xn = ((per_color - mu) / sigma).numpy().astype(np.float64)
-        # Top-K PCA
-        U, S, Vt = np.linalg.svd(Xn - Xn.mean(0, keepdims=True), full_matrices=False)
-        Z = (Xn - Xn.mean(0, keepdims=True)) @ Vt.T[:, :cfg.n_pcs]    # (954, K_pcs)
-        explained_var_ratio = (S[:cfg.n_pcs] ** 2) / (S ** 2).sum()
+        # Top-K PCA — sklearn.decomposition.PCA via _pca_basis (one source
+        # of truth for PCA in this repo). sklearn centers internally; Xn is
+        # already per-feature-standardized so this is a single centering.
+        from sklearn.decomposition import PCA as _SkPCA
+        _pca = _SkPCA(n_components=cfg.n_pcs, svd_solver="full").fit(Xn)
+        Vt = _pca.components_                                         # (K_pcs, D)
+        Z = (Xn - Xn.mean(0, keepdims=True)) @ Vt.T                   # (954, K_pcs)
+        explained_var_ratio = _pca.explained_variance_ratio_
         print(f"\n=== L={L} ===  D={X_full.shape[1]}  top-{cfg.n_pcs}-PCs explain "
               f"{explained_var_ratio.sum():.2%}", flush=True)
 

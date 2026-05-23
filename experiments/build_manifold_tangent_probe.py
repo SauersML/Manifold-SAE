@@ -27,11 +27,14 @@ import numpy as np
 sys.path.insert(0, "/Users/user/Manifold-SAE/experiments")
 from plot_color_geometry import load_xkcd_colors, load_harvest
 from color_filter_list import filter_colors
+# Single source of truth for TOP_TEMPLATES centroid convention.
+from _pca_basis import (
+    N_TEMPLATES as N_T,
+    TOP_TEMPLATES,
+    _per_color_centroids,
+)
 
-
-N_T = 28
 LAYER = 40
-TOP_TEMPLATES = [8, 13, 16, 17, 18, 5]
 D_LATENT = 3            # U_3d
 EPS = 1e-3              # finite-diff step for Jacobian
 
@@ -42,10 +45,9 @@ def main() -> int:
     n_colors = X_full.shape[0] // N_T
     X_full = X_full[: n_colors * N_T]
 
-    centroids_all = np.zeros((n_colors, X_full.shape[1]), dtype=np.float64)
-    for ci in range(n_colors):
-        rows = [ci * N_T + ti for ti in TOP_TEMPLATES]
-        centroids_all[ci] = X_full[rows].mean(axis=0)
+    centroids_all = _per_color_centroids(
+        X_full, n_templates=N_T, template_subset=TOP_TEMPLATES,
+    )
 
     colors_all = load_xkcd_colors()[:n_colors]
     kept, kept_idx = filter_colors(colors_all)

@@ -80,9 +80,11 @@ def fit_paired(train_centroids: np.ndarray, test_centroids: np.ndarray,
     """
     import gamfit
     from color_manifold_gam import reml_fit
+    from _pca_basis import fit_top_pcs
     mu = train_centroids.mean(0, keepdims=True)
     Xc = train_centroids - mu
-    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
+    # sklearn PCA (center-only; matches prior np.linalg.svd behavior)
+    _, Vt = fit_top_pcs(Xc, d=d, standardize=False)
     proj = Vt[:d]
     T_tr = Xc @ proj.T
     test_Xc = test_centroids - mu

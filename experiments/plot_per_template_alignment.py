@@ -147,13 +147,12 @@ def main() -> int:
     results = {}                      # template_idx -> {spec_label: (r2_mean, r2_std)}
     for t in range(N_T):
         X_t = X_full[t::N_T, :]       # (949, D) — one per color, this template
-        # Per-dim standardize, PCA-K
+        # Per-dim standardize, PCA-K (sklearn via _pca_basis.top_pcs).
+        from _pca_basis import top_pcs
         mu = X_t.mean(0, keepdims=True)
         sigma = X_t.std(0, keepdims=True).clip(min=1e-6)
         Xn = (X_t - mu) / sigma
-        Xc = Xn - Xn.mean(0, keepdims=True)
-        _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
-        Z = Xc @ Vt.T[:, :K_PC]                 # (949, K_PC)
+        Z = top_pcs(Xn, d=K_PC, standardize=False)   # (949, K_PC)
         per_spec = {}
         for label, sid in SPECS:
             fold_r2 = []

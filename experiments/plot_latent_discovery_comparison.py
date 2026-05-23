@@ -78,9 +78,11 @@ def kmeans_centers(X, K, seed=0, iters=12):
 
 
 def discover_pca(train_X, test_X, d):
+    # sklearn PCA via _pca_basis.fit_top_pcs (center-only; same as before).
+    from _pca_basis import fit_top_pcs
     mu = train_X.mean(0, keepdims=True)
     Xc = train_X - mu
-    _, _, Vt = np.linalg.svd(Xc, full_matrices=False)
+    _, Vt = fit_top_pcs(Xc, d=d, standardize=False)
     proj = Vt[:d]
     return Xc @ proj.T, (test_X - mu) @ proj.T
 
