@@ -28,7 +28,9 @@ class ManifoldEncoder(nn.Module):
         self.n_features = n_features
         self.input_dim = input_dim
         self.top_k = top_k
-        H = hidden_dim if hidden_dim is not None else max(4 * input_dim, 8 * n_features)
+        # Default H caps at 256: the per-feature `(F, in_dim, H)` weight is F× bigger
+        # than a shared encoder. Old default max(4*D, 8*F) silently OOMs at D=7168, F=512.
+        H = hidden_dim if hidden_dim is not None else min(256, max(64, 8 * n_features))
         self.hidden_dim = H
 
         D = input_dim

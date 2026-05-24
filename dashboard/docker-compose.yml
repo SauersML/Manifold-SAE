@@ -1,0 +1,25 @@
+# Top-level convenience: `cd dashboard && docker-compose up`.
+# Identical to docker/docker-compose.yml but with paths anchored at the repo root.
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: dashboard/docker/Dockerfile.backend
+    container_name: manifold-sae-backend
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: dashboard/docker/Dockerfile.frontend
+    container_name: manifold-sae-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend

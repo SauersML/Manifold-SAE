@@ -202,14 +202,14 @@ class ManifoldSAE(nn.Module):
         amp = F.softplus(amp_raw) * torch.exp(self.log_ard)
         cs = self.theta(x)  # (B, F, 2)
         phi = self.fourier_basis(cs)  # (B, F, 2M+1)
-        # Memory-efficient: contract F first.
-        # weight = gate*amp (B,F); weighted basis: w_phi = weight.unsqueeze(-1) * phi → (B,F,P)
-        # Then recon[b,d] = sum_f sum_p w_phi[b,f,p] * D_k[f,p,d]
-        # = w_phi.reshape(B, F*P) @ D_k.reshape(F*P, D)  → (B,D). NO (B,F,D) tensor.
-        w = (gate * amp).unsqueeze(-1)  # (B,F,1)
-        w_phi = (w * phi).reshape(x.shape[0], -1)  # (B, F*P)
-        D_flat = self.D_k.reshape(-1, self.D_k.shape[-1])  # (F*P, D)
-        recon = w_phi @ D_flat + self.b_d
+        # Curve-atom decode: dispatch dense (small F) vs sparse (F > 8192).
+        # The sparse path scales O(B·K_active·D) instead of O(B·F·P + F·P·D),
+        # unlocking F ≥ 2^16 on MPS. Identical math up to f32 round-off
+        # (verified max-abs < 1e-4 at F=512; see tests/test_sparse_decode.py
+        # and project_sparse_decode_kernel memory).
+        from manifold_sae.scale import curve_decode_auto
+        weight = gate * amp  # (B, F)
+        recon = curve_decode_auto(weight, atoms=phi, basis_coeffs=self.D_k) + self.b_d
         return recon, gate, amp
     def encode_for_eval(self, x):
         # returns (B, F) activation magnitude (gate * amp)

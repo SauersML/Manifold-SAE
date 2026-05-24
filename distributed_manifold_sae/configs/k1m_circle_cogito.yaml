@@ -1,0 +1,37 @@
+# K=1M Manifold-SAE on cogito-L40 activations, Circle topology per atom.
+# Compose into a runnable training step via:
+#   torchrun --standalone --nproc_per_node=4 -m distributed_manifold_sae.train \
+#       --config distributed_manifold_sae/configs/k1m_circle_cogito.yaml
+
+model:
+  input_dim: 7168                # cogito-L40 hidden size
+  n_atoms: 1000000               # K=1M
+  d_atom: 2                      # Circle = S^1 ⊂ R^2
+  top_k: 32
+  encoder_hidden: 4096
+  gumbel_tau_init: 1.0
+  gumbel_tau_final: 0.1
+  use_grad_checkpoint: true
+  manifold: circle
+  anchor_init_scale: 0.02
+  tangent_init_scale: 0.01
+
+loss:
+  w_recon: 1.0
+  w_ibp: 1.0e-2
+  w_iso: 1.0e-3
+  w_ard: 1.0e-4
+  w_mech: 1.0e-3
+  w_anchor: 1.0e-4
+  w_tangent: 1.0e-5
+  ibp_target_rate: 32.0
+  ard_alpha: 1.0
+  ard_beta: 1.0
+
+data:
+  activations_path: data/X_L40.npy
+  batch_size: 256
+  num_workers: 4
+  pin_memory: true
+  drop_last: true
+  cast_dtype: float32

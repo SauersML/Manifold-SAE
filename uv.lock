@@ -1150,6 +1150,11 @@ llm = [
     { name = "transformers" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate", marker = "extra == 'llm'" },
@@ -1167,6 +1172,9 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'llm'" },
 ]
 provides-extras = ["llm", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "markdown-it-py"

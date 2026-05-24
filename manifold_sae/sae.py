@@ -354,9 +354,10 @@ class ManifoldSAE(nn.Module):
         # The joint additive fit shares a scalar λ and a scalar REML score.
         # Broadcast to per-feature shape (F,) for backward compat with
         # downstream loggers that index per atom.
-        lam_scalar = result.lambdas.reshape(())
+        # Fix: gamfit may return lambdas of shape (F,) not (1,); mean-collapse safely.
+        lam_scalar = result.lambdas.reshape(-1).mean()
         lams = lam_scalar.expand(F).contiguous().to(x_dtype)
-        reml_scores = result.reml_score.reshape(()).expand(F).contiguous().to(x_dtype)
+        reml_scores = result.reml_score.reshape(-1).mean().expand(F).contiguous().to(x_dtype)
 
         fitted = fitted_all.to(x_dtype)
 

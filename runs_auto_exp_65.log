@@ -1,0 +1,32 @@
+[auto_exp_65] device=mps
+[setup] n_c=949 D=7168 F=256 train=791 val=158
+
+=== Training DAS-SAE (λ_intv=1.0) ===
+[DAS ep00] recon=1.3906 intv=0.7044 val_R²=0.526
+[DAS ep01] recon=0.7400 intv=0.3845 val_R²=0.644
+[DAS ep02] recon=0.5448 intv=0.2876 val_R²=0.687
+[DAS ep03] recon=0.4630 intv=0.2483 val_R²=0.713
+[DAS ep04] recon=0.3955 intv=0.2124 val_R²=0.727
+[DAS ep05] recon=0.3521 intv=0.1945 val_R²=0.737
+[DAS ep06] recon=0.3198 intv=0.1764 val_R²=0.747
+[DAS ep07] recon=0.2932 intv=0.1639 val_R²=0.751
+
+=== Training vanilla L1 SAE (λ_intv=0) ===
+[VAN ep00] recon=1.3928 intv=0.7043 val_R²=0.525
+[VAN ep01] recon=0.7208 intv=0.3824 val_R²=0.652
+[VAN ep02] recon=0.5366 intv=0.2897 val_R²=0.695
+[VAN ep03] recon=0.4428 intv=0.2414 val_R²=0.719
+[VAN ep04] recon=0.3839 intv=0.2163 val_R²=0.735
+[VAN ep05] recon=0.3381 intv=0.1935 val_R²=0.743
+[VAN ep06] recon=0.3095 intv=0.1799 val_R²=0.750
+[VAN ep07] recon=0.2837 intv=0.1666 val_R²=0.754
+
+=== Summary ===
+{
+  "das_finds_more_hue_features": false,
+  "das_hue_set_is_small": true,
+  "das_group_swap_better": true
+}
+DAS identified: 0 | vanilla identified: 0
+DAS group-swap R²: 0.750 | vanilla: 0.734
+runtime=25.4s

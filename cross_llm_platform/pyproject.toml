@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cross-llm-platform"
+version = "0.1.0"
+description = "Cross-LLM concept interpretability: activation harvest, gauge fitting, diagnostics, atlas, and steering API."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "Manifold-SAE" }]
+dependencies = [
+  "numpy>=1.26",
+  "click>=8.1",
+]
+
+[project.optional-dependencies]
+hf = [
+  "torch>=2.2",
+  "transformers>=4.50",
+  "accelerate",
+]
+server = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2",
+]
+plot = [
+  "matplotlib>=3.8",
+]
+test = [
+  "pytest>=8",
+]
+all = [
+  "torch>=2.2",
+  "transformers>=4.50",
+  "accelerate",
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "pydantic>=2",
+  "matplotlib>=3.8",
+  "pytest>=8",
+]
+
+[project.scripts]
+cls = "cross_llm_platform.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cross_llm_platform"]
+artifacts = ["cross_llm_platform/py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["cross_llm_platform/tests"]
+addopts = "-ra -q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
