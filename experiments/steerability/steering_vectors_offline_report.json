@@ -1,0 +1,76 @@
+{
+  "axes": {
+    "hue": {
+      "auc_hue_within_30deg": 0.8448511534106199,
+      "target_hue": 0.0,
+      "proj_mean": 0.1017201617360115,
+      "proj_std": 0.23975510895252228,
+      "norm": 1.0
+    },
+    "sat": {
+      "auc_hue_within_30deg": 0.5230784841076821,
+      "target_hue": 0.0,
+      "proj_mean": 0.18140240013599396,
+      "proj_std": 0.20094817876815796,
+      "norm": 1.0
+    },
+    "val": {
+      "auc_hue_within_30deg": 0.5359545999911602,
+      "target_hue": 0.0,
+      "proj_mean": 0.06739932298660278,
+      "proj_std": 0.2062125951051712,
+      "norm": 1.0
+    },
+    "pc1": {
+      "auc_hue_within_30deg": 0.5319660211522721,
+      "target_hue": 0.0,
+      "proj_mean": -22.141027450561523,
+      "proj_std": 10.525854110717773,
+      "norm": 1.0000000000000007
+    },
+    "pc2": {
+      "auc_hue_within_30deg": 0.5788824679174159,
+      "target_hue": 0.33,
+      "proj_mean": 0.5439425110816956,
+      "proj_std": 8.270706176757812,
+      "norm": 0.9999999999999993
+    },
+    "pc3": {
+      "auc_hue_within_30deg": 0.611551874876164,
+      "target_hue": 0.62,
+      "proj_mean": -5.136605262756348,
+      "proj_std": 5.902938365936279,
+      "norm": 0.9999999999999996
+    },
+    "red": {
+      "auc_hue_within_30deg": 0.7699917438190014,
+      "target_hue": 0.0,
+      "proj_mean": -1.7458631992340088,
+      "proj_std": 5.352766513824463,
+      "norm": 1.0
+    },
+    "blue": {
+      "auc_hue_within_30deg": 0.8504040766792154,
+      "target_hue": 0.62,
+      "proj_mean": 2.041290760040283,
+      "proj_std": 4.033138751983643,
+      "norm": 1.0
+    },
+    "green": {
+      "auc_hue_within_30deg": 0.7678351598453261,
+      "target_hue": 0.33,
+      "proj_mean": 1.422204852104187,
+      "proj_std": 4.804113864898682,
+      "norm": 0.9999999403953552
+    },
+    "achromatic": {
+      "auc_hue_within_30deg": 0.5057287986335253,
+      "target_hue": 0.0,
+      "proj_mean": 1.0930129289627075,
+      "proj_std": 4.997504711151123,
+      "norm": 1.0
+    }
+  },
+  "n_rows": 26572,
+  "d": 7168
+}
