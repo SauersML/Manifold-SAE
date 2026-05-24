@@ -56,7 +56,7 @@ bypass_gamfit_cuda_check()
 class Config:
     checkpoint: str = os.environ.get(
         "MSAE_CHECKPOINT",
-        "/home/athuser/gnome_home/manifold_sae/runs/llm_sweep/curve_F256.pt",
+        "<repo_root>/runs/llm_sweep/curve_F256.pt",
     )
     model_name: str = os.environ.get("MSAE_MODEL", "Qwen/Qwen2.5-0.5B")
     layer: int = int(os.environ.get("MSAE_LAYER", "12"))

@@ -39,7 +39,7 @@ Usage (offline, design time):
   python cogito_intervene.py --axis hue --prompts color_prompts.json --dry-run
 
 Live (VPN up):
-  COGITO_API_BASE=http://node1.datasci.ath:8000 \\
+  COGITO_API_BASE=http://<host>:8000 \\
   python cogito_intervene.py --axis hue --prompts color_prompts.json
 
 Output: appends results to `cogito_intervention_results.jsonl`.

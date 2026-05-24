@@ -18,20 +18,23 @@ Verdict:
   - If anchor probes ALSO both push warm, hypothesis is falsified; color
     identity lives elsewhere (HSV-axis subspace, or non-color_manifold probes).
 
-Endpoint: http://node1.datasci.ath:8000 (VPN required).
+Endpoint: <COGITO_API_BASE> (VPN required).
 Uses /v1/chat/completions with SSE streaming (non-streaming returns
 "not yet implemented"). /v1/encode is avoided (stuck queue from exp_43).
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from pathlib import Path
 
 import requests
 
-BASE = "http://node1.datasci.ath:8000"
+BASE = os.environ.get(
+    "COGITO_API_BASE", os.environ.get("COGITO_URL", "http://localhost:8000")
+)
 OUT = Path(__file__).resolve().parents[1] / "runs" / "auto_exp_46_anchor_vs_tangent"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -159,7 +162,7 @@ def main():
         probes = resp.json()
     except Exception as e:
         msg = (f"ABORT: cannot reach {BASE} ({e}).\n"
-               "  The cogito-probed server (node1.datasci.ath:8000) is not\n"
+               "  The cogito-probed server (<COGITO_API_BASE>) is not\n"
                "  responding (connection refused as of this run). Cannot list\n"
                "  color_manifold probe labels or run the steering harness.\n"
                "  Action: ask user to restart the probe server, then re-run.")

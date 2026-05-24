@@ -54,7 +54,7 @@ bypass_gamfit_cuda_check()
 class Config:
     checkpoint: str = os.environ.get(
         "MSAE_CHECKPOINT",
-        "/home/athuser/gnome_home/manifold_sae/runs/llm_sweep/curve_F256.pt",
+        "<repo_root>/runs/llm_sweep/curve_F256.pt",
     )
     # Optional second checkpoint for cross-SAE alignment. If empty, we
     # train one in-job from a fresh seed.

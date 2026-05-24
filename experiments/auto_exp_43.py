@@ -5,7 +5,7 @@ gauge-fix per auto_exp_38 separately at each layer, and ask whether the 2D
 name-semantic free-block structure (established at L40 by auto_exp_40) is
 already present at L20 (depth-invariant) or only emerges at deeper layers.
 
-OUTCOME: the cogito-probed inference server at node1.datasci.ath:8000 hooks
+OUTCOME: the cogito-probed inference server at <COGITO_API_BASE> hooks
 ONLY layer 40 (per /v1/config — every probe targets layer 40; /v1/encode
 with `"layers":[20]` returns `{"error":"Layer 20 not hooked. Available: [40]"}`).
 Without a server-side hook reconfiguration (which is OUT OF SCOPE per the
@@ -20,13 +20,16 @@ from __future__ import annotations
 
 import json
 import time
+import os
 import urllib.request
 from pathlib import Path
 
 ROOT = Path("/Users/user/Manifold-SAE")
 OUT_DIR = ROOT / "runs" / "COLOR_COGITO_L20_L40_mini"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-COGITO_URL = "http://node1.datasci.ath:8000"
+COGITO_URL = os.environ.get(
+    "COGITO_API_BASE", os.environ.get("COGITO_URL", "http://localhost:8000")
+)
 
 
 def _get(path: str, timeout: float = 10.0) -> dict:

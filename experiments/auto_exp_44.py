@@ -5,7 +5,7 @@ points on the U_3d nonlinear color manifold) causally steer generation toward
 their associated color semantics. Picks pair of opposed anchors (red vs blue),
 runs color-agnostic prompts at alpha in {0, 2, 5}, scores warm/cool word ratio.
 
-Endpoint: http://node1.datasci.ath:8000 (VPN required).
+Endpoint: <COGITO_API_BASE> (VPN required).
 Uses /v1/chat/completions only — /v1/encode is skipped (stuck queue from exp_43).
 
 Request schema (verified via probe_server_vllm.py source):
@@ -19,12 +19,15 @@ Request schema (verified via probe_server_vllm.py source):
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
 import requests
 
-BASE = "http://node1.datasci.ath:8000"
+BASE = os.environ.get(
+    "COGITO_API_BASE", os.environ.get("COGITO_URL", "http://localhost:8000")
+)
 OUT = Path(__file__).resolve().parents[1] / "runs" / "auto_exp_44_steering"
 OUT.mkdir(parents=True, exist_ok=True)
 

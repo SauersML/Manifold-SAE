@@ -13,7 +13,7 @@ experiment. Pulls together what's otherwise scattered across:
 Usage:
   python tools/aggregate_results.py <runs_dir>
   python tools/aggregate_results.py <runs_dir> > REPORT.md
-  python tools/aggregate_results.py --remote node2:/home/athuser/gnome_home/manifold_sae/runs
+  python tools/aggregate_results.py --remote <host>:<repo_root>/runs
 
 The --remote variant rsyncs the JSONs locally first (skips the huge
 checkpoints), then aggregates. Useful when the cluster ran jobs and

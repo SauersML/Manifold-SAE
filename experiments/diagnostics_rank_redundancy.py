@@ -50,11 +50,11 @@ class Config:
     n_tokens: int = 20_000
     curve_checkpoint: str = os.environ.get(
         "MSAE_CHECKPOINT",
-        "/home/athuser/gnome_home/manifold_sae/runs/llm_sweep_q15b_L18/curve_F128.pt",
+        "<repo_root>/runs/llm_sweep_q15b_L18/curve_F128.pt",
     )
     vanilla_checkpoint: str = os.environ.get(
         "MSAE_CHECKPOINT_V",
-        "/home/athuser/gnome_home/manifold_sae/runs/llm_sweep_q15b_L18/vanilla_F128.pt",
+        "<repo_root>/runs/llm_sweep_q15b_L18/vanilla_F128.pt",
     )
     # For intra-SAE atom redundancy / cross-SAE alignment, SAEs are trained
     # at this layer. Must match the saved checkpoints' training layer.

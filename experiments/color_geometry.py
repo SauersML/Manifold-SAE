@@ -180,7 +180,9 @@ class Config:
         ).split(",")
     ))
     # Cogito-probed server endpoint (only used when use_local=False).
-    cogito_url: str = os.environ.get("COGITO_URL", "http://node1.datasci.ath:8000")
+    cogito_url: str = os.environ.get(
+        "COGITO_API_BASE", os.environ.get("COGITO_URL", "http://localhost:8000")
+    )
     # Aggregation mode for /v1/encode. "mean" pools over the prompt;
     # "tokens" returns per-token (we keep the last) — bandwidth-heavy.
     aggregate: str = os.environ.get("COGITO_AGGREGATE", "mean")

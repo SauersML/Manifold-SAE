@@ -69,7 +69,7 @@ CONCEPT_TASKS = {
 class Config:
     checkpoint: str = os.environ.get(
         "MSAE_CHECKPOINT",
-        "/home/athuser/gnome_home/manifold_sae/runs/llm_sweep_q15b_L18/curve_F128.pt",
+        "<repo_root>/runs/llm_sweep_q15b_L18/curve_F128.pt",
     )
     model_name: str = os.environ.get("MSAE_MODEL", "Qwen/Qwen2.5-1.5B")
     layer: int = int(os.environ.get("MSAE_LAYER", "18"))
