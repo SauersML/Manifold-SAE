@@ -27,6 +27,8 @@ import math
 import torch
 from torch import nn
 
+from gamfit.torch import IBPAssignmentPenalty  # gamfit >= 0.1.123
+
 
 def _relu(x: torch.Tensor) -> torch.Tensor:
     return torch.relu(x)
@@ -100,6 +102,13 @@ class AdaptiveKv2SAE(nn.Module):
         target_norm = float(min(max(target_norm, 1e-3), 1 - 1e-3))
         with torch.no_grad():
             self.k_head[-1].bias.fill_(math.log(target_norm / (1 - target_norm)))
+
+        # Composable Bayesian-nonparametric prior; complements the target-K
+        # head loss with a finite-IBP descriptor over the pre-activation
+        # logits. Optional — set sparsity_weight=0 to disable.
+        self.ibp_prior = IBPAssignmentPenalty(
+            k_max=F, alpha=float(k_target) / float(F), tau=1.0,
+        )
 
     # ------------------------------------------------------------------
 

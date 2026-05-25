@@ -31,6 +31,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from gamfit.torch import IBPAssignmentPenalty  # gamfit >= 0.1.123
+
 
 @dataclass
 class AdaptiveKSAEConfig:
@@ -76,6 +78,17 @@ class AdaptiveKSAE(nn.Module):
         # learns to reconstruct, then the λ pressure trims K down).
         with torch.no_grad():
             self.k_head[-1].bias.fill_(2.0)  # sigmoid(2) ≈ 0.88
+
+        # gamfit IBP-assignment prior over the encoder pre-activation logits:
+        # finite Indian-Buffet-Process penalty with expected K = k_max·alpha.
+        # Acts as a richer Bayesian-nonparametric stand-in for the hand-rolled
+        # population-mean K penalty (which has a degenerate fixed point at
+        # k_min; see auto_exp_74 for why v2 added clipped-hinge to work around
+        # that). The IBP prior pulls per-row K toward `alpha` atoms without
+        # collapsing to zero.
+        self.ibp_prior = IBPAssignmentPenalty(
+            k_max=F, alpha=float(k_min) / float(F), tau=1.0,
+        )
 
     # ------------------------------------------------------------------
     # K prediction
@@ -140,11 +153,13 @@ class AdaptiveKSAE(nn.Module):
     def loss(self, x: torch.Tensor) -> dict:
         recon, z_sparse, k_pred = self.forward(x)
         mse = (recon - x).pow(2).mean()
-        # Normalize K to [0, 1] before penalizing so λ has a stable meaning
-        # across (k_min, k_max) settings. Without normalization a λ tuned for
-        # k_max=32 collapses the head to k_min when k_max=80.
-        k_norm = (k_pred - self.k_min) / max(self.k_max - self.k_min, 1)
-        sparsity = k_norm.mean()
+        # gamfit IBPAssignmentPenalty over the pre-activation logits — a
+        # Bayesian-nonparametric prior over per-row K that subsumes the v1
+        # population-mean penalty. Divide by N·F so the descriptor's sum
+        # reduces to a mean and `sparsity_weight` keeps its scale.
+        z_logits = (x - self.b_d) @ self.W_e + self.b_e
+        ibp_val = self.ibp_prior(z_logits)
+        sparsity = ibp_val / float(z_logits.numel())
         total = mse + self.sparsity_weight * sparsity
         n_active = (z_sparse.abs() > 0).float().sum(-1).mean()
         return {
