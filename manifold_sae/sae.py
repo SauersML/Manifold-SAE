@@ -1,5 +1,29 @@
 """Manifold-SAE: SAE with curve-valued atoms, REML training, lock-and-cache deploy.
 
+gamfit 0.1.123 migration note
+-----------------------------
+gamfit 0.1.123 exposes ``gamfit.ManifoldSAE`` (a result *dataclass* — the output
+of ``gamfit.sae_manifold_fit``, NOT a trainable nn.Module). The high-level
+``sae_manifold_fit`` API is a numpy-array one-shot fit that doesn't expose the
+PyTorch Module interface that 30+ downstream Manifold-SAE consumers
+(experiments/*.py, tools/*.py, tests/*.py, distributed_manifold_sae/, the
+training loop) depend on (``.forward(x) -> ManifoldSAEOutput`` with
+``positions``, ``mask_soft``, ``amplitudes``, ``coefficients``, ``directions``,
+plus the gauge-tiebreaker losses and the ``update_snapshot`` /
+``inference_mode`` lock-and-cache machinery).
+
+Where it CAN: ``gamfit.torch.fit`` + ``Duchon`` + ``duchon_basis`` are the
+gamfit primitives this module composes on. The per-atom basis-eval Python loops
+in ``_forward_inference`` and ``extract_feature_curves`` are now batched into a
+single ``duchon_basis`` call on stacked (F·B, 1) positions.
+
+Outstanding gamfit feature request: a Module-style adapter around
+``sae_manifold_fit`` that exposes ``.forward(x)`` + per-batch autograd would
+let us drop most of this file. Tracked as a gamfit-side issue; not
+re-implemented here as a wrapper around the numpy-array API because the
+``ManifoldEncoder``/``ManifoldEncoderLinear``/lock-and-cache stack lives
+upstream of any single-call REML fit.
+
 Architecture (Path B with lock-and-cache, joint additive REML):
 
   Training forward:
@@ -81,6 +105,11 @@ class ManifoldSAEConfig:
     # Override with "duchon" for plain single-λ function-norm. Not
     # compatible with `periodic=True` — falls back to "duchon" silently.
     basis_kind: str = "duchon_multipenalty"
+    # Shared-trunk encoder mode: one (D, H) trunk + F-head, instead of the
+    # per-feature (F, D, H) tensor that OOMs at large F·D·H. Defaults False
+    # to preserve identical optimization geometry for existing checkpoints;
+    # new large-F runs (F >= 512 at D >= 4096) should set True.
+    shared_encoder: bool = False
 
 
 @dataclass
@@ -154,12 +183,17 @@ class ManifoldSAE(nn.Module):
         super().__init__()
         self.config = config
         EncoderCls = ManifoldEncoderLinear if getattr(config, "encoder_type", "mlp") == "linear" else ManifoldEncoder
-        self.encoder = EncoderCls(
+        encoder_kwargs = dict(
             intrinsic_rank=config.intrinsic_rank,
             n_features=config.n_features,
             input_dim=config.input_dim,
             top_k=config.top_k,
         )
+        # Only the MLP encoder supports shared-trunk; the linear encoder is
+        # already O(D + F·R) so the trap doesn't apply.
+        if EncoderCls is ManifoldEncoder and bool(getattr(config, "shared_encoder", False)):
+            encoder_kwargs["shared_encoder"] = True
+        self.encoder = EncoderCls(**encoder_kwargs)
         self.encoder.continuous_amp = bool(getattr(config, "continuous_amp", False))
 
         K = int(config.n_basis)
@@ -336,16 +370,17 @@ class ManifoldSAE(nn.Module):
         coefs_list = result.coefficients  # list[(K, D)]
         coefs = torch.stack(coefs_list, dim=0)  # (F, K, D)
 
-        # Per-atom ambient-space contributions (autograd-aware). We rebuild
-        # them from the basis at the atom's positions × the atom's (K, D)
-        # block (no extra REML call). Used both for downstream reporting and
-        # for the locked-mode self-test in update_snapshot.
-        fitted_all = torch.zeros(F, B, D, dtype=torch.float64, device=device)
-        for k in range(F):
-            phi_k = gt.duchon_basis(
-                pos64[:, k:k+1], self.centers, m=2, periodic_per_axis=per_axis,
-            )                                                      # (B, K)
-            fitted_all[k] = (phi_k @ coefs_list[k]) * by64[:, k:k+1]
+        # Per-atom ambient-space contributions (autograd-aware). Batched basis
+        # eval: one (F*B, 1) → (F*B, K) call replaces the per-atom Python loop.
+        # Autograd flows correctly because each coefs_list[k] is a leaf with
+        # the joint-fit graph; matmul preserves the chain.
+        flat_pos = pos64.transpose(0, 1).reshape(F * B, 1)
+        phi_flat = gt.duchon_basis(
+            flat_pos, self.centers, m=2, periodic_per_axis=per_axis,
+        )                                                          # (F*B, K)
+        phi_FBK = phi_flat.reshape(F, B, K)                         # (F, B, K)
+        fitted_all = torch.bmm(phi_FBK, coefs)                      # (F, B, D)
+        fitted_all = fitted_all * by64.transpose(0, 1).unsqueeze(-1)
 
         # Joint reconstruction: gamfit's ``result.fitted`` already sums the
         # per-atom (by-gated) contributions over k. Add the decoder bias.
@@ -398,20 +433,25 @@ class ManifoldSAE(nn.Module):
         B, F = positions.shape
         D = b_dec.shape[0]
 
-        # Evaluate the basis at this batch's positions, atom by atom. The
-        # (F*B, 1) batched basis call is also valid and shaves a Python
-        # loop, but B_locked is now per-atom so we go atom-wise for clarity.
+        # Batched basis eval: stack all (B,F) positions into one (B*F, 1) call.
+        # The previous per-atom Python loop was O(F) calls into Rust and dominated
+        # inference latency at F >= 256. duchon_basis is structural on `points`
+        # (no gradient), so this is mathematically identical.
         periodic = bool(self.config.periodic)
         per_axis = (periodic,) if periodic else None
         pos64 = positions.to(torch.float64)
         amp64 = mask_binary.to(torch.float64)
 
-        g_all = torch.zeros(F, B, D, dtype=torch.float64, device=positions.device)
-        for k in range(F):
-            phi_k = gt.duchon_basis(
-                pos64[:, k:k+1], self.centers, m=2, periodic_per_axis=per_axis,
-            )                                                      # (B, K)
-            g_all[k] = (phi_k @ self.B_locked[k]) * amp64[:, k:k+1]
+        # (B*F, 1) → (B*F, K) → (B, F, K) → (F, B, K)
+        flat_pos = pos64.transpose(0, 1).reshape(F * B, 1)
+        phi_flat = gt.duchon_basis(
+            flat_pos, self.centers, m=2, periodic_per_axis=per_axis,
+        )                                                          # (F*B, K)
+        K = self.centers.shape[0]
+        phi = phi_flat.reshape(F, B, K)                             # (F, B, K)
+        # g_all[f, b, d] = phi[f, b, k] @ B_locked[f, k, d] * amp[b, f]
+        g_all = torch.bmm(phi, self.B_locked)                       # (F, B, D)
+        g_all = g_all * amp64.transpose(0, 1).unsqueeze(-1)         # gate by amp_f
 
         recon = g_all.sum(dim=0).to(x_dtype) + b_dec.unsqueeze(0)
         g = g_all.to(x_dtype)
@@ -572,25 +612,28 @@ def extract_feature_curves(
     F = sae.B_locked.shape[0]
     T = t_grid_f64.shape[0]
     D = sae.directions.shape[1]
-    curves = torch.zeros(F, T, D, dtype=torch.float64, device=device)
+    periodic = bool(sae.config.periodic)
+    per_axis = (periodic,) if periodic else None
+
+    # Compute per-atom (t_lo, t_hi) in vectorized form first.
+    t_los = torch.zeros(F, dtype=torch.float64, device=device)
+    t_his = torch.ones(F, dtype=torch.float64, device=device)
     for k in range(F):
         m = firing[:, k]
-        if m.sum() < 2:
-            t_lo, t_hi = 0.0, 1.0
-        else:
+        if m.sum() >= 2:
             pos_k = pos[m, k].to(torch.float64)
-            t_lo = float(pos_k.quantile(0.02).item())
-            t_hi = float(pos_k.quantile(0.98).item())
-            if t_hi - t_lo < 1e-3:
-                t_lo, t_hi = 0.0, 1.0
-        t_k = t_lo + (t_hi - t_lo) * t_grid_f64
-        periodic = bool(sae.config.periodic)
-        per_axis = (periodic,) if periodic else None
-        phi_k = gt.duchon_basis(
-            t_k.unsqueeze(1), sae.centers, m=2, periodic_per_axis=per_axis,
-        )
-        # B_locked[k] is now (K, D) — already in ambient space (the joint
-        # additive fit absorbed the previous per-atom W_k embedding into
-        # the coefficient block). No further W_k matmul needed.
-        curves[k] = phi_k @ sae.B_locked[k]
+            lo = float(pos_k.quantile(0.02).item())
+            hi = float(pos_k.quantile(0.98).item())
+            if hi - lo >= 1e-3:
+                t_los[k] = lo
+                t_his[k] = hi
+
+    # All F atoms' grids in one (F*T, 1) basis call.
+    t_all = t_los.unsqueeze(1) + (t_his - t_los).unsqueeze(1) * t_grid_f64.unsqueeze(0)
+    phi_flat = gt.duchon_basis(
+        t_all.reshape(F * T, 1), sae.centers, m=2, periodic_per_axis=per_axis,
+    )                                                              # (F*T, K)
+    phi = phi_flat.reshape(F, T, sae.centers.shape[0])             # (F, T, K)
+    # B_locked is (F, K, D) — already in ambient space.
+    curves = torch.bmm(phi, sae.B_locked)                          # (F, T, D)
     return curves.to(activations.dtype)
