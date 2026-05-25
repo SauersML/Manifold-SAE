@@ -29,12 +29,11 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-# Use the local /Users/user/gam dev copy of gamfit (has the new primitives).
-sys.path.insert(0, "/Users/user/gam")
+# gamfit 0.1.123+ ships equivariant_smooth as a first-class primitive.
 import gamfit
 gameq = gamfit
 assert hasattr(gameq, "equivariant_smooth"), \
-    f"Loaded gamfit at {gamfit.__file__} lacks equivariant_smooth"
+    f"Loaded gamfit {gamfit.__version__} at {gamfit.__file__} lacks equivariant_smooth — need >=0.1.123"
 print(f"[setup] gamfit loaded from {gamfit.__file__}", flush=True)
 
 OUT = ROOT / "runs"
