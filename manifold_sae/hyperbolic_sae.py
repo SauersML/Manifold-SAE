@@ -40,6 +40,8 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
+from gamfit.torch import JumpReLUPenalty  # gamfit >= 0.1.123
+
 from .kernels.poincare import exp_0, log_0, mobius_add, poincare_distance
 
 
@@ -51,6 +53,7 @@ class HyperbolicSAEConfig:
     curvature: float = 1.0  # magnitude (geometric curvature is -c)
     sparsity_weight: float = 1e-3
     bias: bool = True
+    jumprelu_threshold: float = 0.05  # gamfit JumpReLU prior; 0 ⇒ fall back to L1
 
 
 class HyperbolicSAE(nn.Module):
@@ -71,6 +74,7 @@ class HyperbolicSAE(nn.Module):
         ball_dim: int = 32,
         curvature: float = 1.0,
         sparsity_weight: float = 1e-3,
+        jumprelu_threshold: float = 0.05,
     ):
         super().__init__()
         self.cfg = HyperbolicSAEConfig(
@@ -79,6 +83,7 @@ class HyperbolicSAE(nn.Module):
             ball_dim=ball_dim,
             curvature=float(curvature),
             sparsity_weight=float(sparsity_weight),
+            jumprelu_threshold=float(jumprelu_threshold),
         )
         D, F, d = input_dim, n_features, ball_dim
         self.D, self.F, self.d = D, F, d
@@ -96,6 +101,18 @@ class HyperbolicSAE(nn.Module):
 
         # Tangent → ambient readout.
         self.W_dec_out = nn.Linear(d, D, bias=True)
+
+        # gamfit JumpReLU prior on the gate vector (replaces hand-rolled L1).
+        # weight=1.0 keeps the descriptor canonical; outer sparsity_weight scales
+        # the penalty value in `loss`.
+        if jumprelu_threshold > 0.0:
+            self.jumprelu = JumpReLUPenalty(
+                thresholds=torch.full((F,), float(jumprelu_threshold), dtype=torch.float64),
+                weight=1.0,
+                smoothing_eps=1e-3,
+            )
+        else:
+            self.jumprelu = None
 
         # Init: small encoder, identity-ish gate bias 0.
         nn.init.kaiming_uniform_(self.W_enc.weight, a=5 ** 0.5)
@@ -149,7 +166,15 @@ class HyperbolicSAE(nn.Module):
         atom_centers = self.atom_positions()  # (F, d)
         dists = poincare_distance(atoms_pos, atom_centers.unsqueeze(0), c=self.c)  # (B, F)
 
-        l1 = gates.abs().mean() * self.cfg.sparsity_weight
+        # gamfit JumpReLU prior on gate vector (smoothed-L0 surrogate); if
+        # disabled, fall back to the original L1.
+        if self.jumprelu is not None:
+            jr_val = self.jumprelu(gates)
+            # JumpReLUPenalty returns a sum over (B, F); normalize to mean per
+            # element so the weight has the same meaning as the original L1.
+            l1 = jr_val / float(gates.numel()) * self.cfg.sparsity_weight
+        else:
+            l1 = gates.abs().mean() * self.cfg.sparsity_weight
         dist_l1 = (gates * dists).mean() * self.cfg.sparsity_weight  # Möbius-distance gates
 
         return {
