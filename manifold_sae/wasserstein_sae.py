@@ -3,34 +3,38 @@
 Reference
 ---------
 Schmitz et al. 2018, "Wasserstein Dictionary Learning" (arXiv:1708.01955)
-Mishne et al. 2022, "Geometric Sparse Coding" (arXiv:2210.12135)
+Mishne et al. 2022, "Geometric Sparse Coding"      (arXiv:2210.12135)
 
 Motivation
 ----------
-The cogito-L40 hue axis is intrinsically circular (S^1). A linear sum of
-point-atoms can't span a circle without shattering it across many atoms
-("feature absorption"). OT barycenters of hue-supported distributions
-interpolate along the manifold instead of through ambient space — a single
-atom can be multi-modal, and the barycenter of two atoms is a hue-arc move.
+The cogito-L40 hue axis is intrinsically circular. A linear sum of point
+atoms can't span a circle without shattering it across many atoms ("feature
+absorption"). OT barycenters of hue-supported distributions interpolate
+along the manifold instead of through ambient space — a single atom is
+multi-modal, and the barycenter of two atoms is a hue-arc move.
 
 Pipeline
 --------
     x ∈ R^D
-      └─ encoder (linear → softmax)        → π ∈ Δ^F          (B, F)
-                                              simplex weights over F atoms
-      └─ atoms[k] ∈ Δ^M     parameterized as softmax(θ_k)     (F, M)
+      └─ encoder (linear → softmax/tau)     → π ∈ Δ^F          (B, F)
+      └─ atoms[k] ∈ Δ^M  = softmax(θ_k)     (F, M) on hue circle
       └─ barycenter = Sinkhorn(atoms, π, ε)                    (B, M)
-                                              on the M-point hue circle
       └─ readout (linear M → D) + bias                         (B, D)
 
-Loss
-----
-    MSE(x, x̂)
-    + λ_neighbor · Σ_b Σ_{(k, l) far apart} π_b[k] π_b[l]
-        (Mishne's neighborhood penalty: encourages weight to concentrate
-         on geodesically-nearby atoms — measured by ½-Wasserstein dist
-         between their hue distributions, computed once per epoch as a
-         buffer.)
+History note
+------------
+v1 used raw softmax, ε fixed → π collapsed to one-hot and Sinkhorn
+underflowed under sharpening. v2 added τ-annealed softmax, v3 added ε-floor
+coupling + nan_to_num + logit clamp. All three are folded into this single
+class; legacy ``eps=`` constructor kw is preserved for tests, while the
+hardened path activates whenever ``tau_schedule`` or ``logit_clamp`` is
+set.
+
+gamfit primitive integration
+----------------------------
+The Sinkhorn IBP barycenter lives in :mod:`manifold_sae.kernels.sinkhorn`
+(no Sinkhorn primitive in gamfit 0.1.123 — would be a clean addition as
+``gamfit.kernels.sinkhorn_barycenter``).
 """
 from __future__ import annotations
 
@@ -45,31 +49,50 @@ from .kernels.sinkhorn import circular_cost_matrix, sinkhorn_barycenter
 @dataclass
 class WassersteinSAEConfig:
     input_dim: int = 7168
-    n_features: int = 128       # F atoms
-    n_support: int = 64         # M support points on S^1
-    eps: float = 0.01           # Sinkhorn regularization
+    n_features: int = 128
+    n_support: int = 64
+    eps: float = 0.01
     n_sinkhorn_iter: int = 20
     neighbor_weight: float = 1e-3
-    readout_hidden: int | None = None
+    # NaN-hardening + temperature schedule (folded in from v2/v3)
+    tau_start: float | None = None        # None → vanilla softmax
+    tau_end: float = 1.5
+    eps_scale: float = 0.05              # eps = max(eps_floor, eps_scale * tau)
+    logit_clamp: float | None = None     # None → no clamp
 
 
 class WassersteinSAE(nn.Module):
-    def __init__(self, F: int = 128, M: int = 64, D: int = 7168,
-                 eps: float = 0.01, n_sinkhorn_iter: int = 20,
-                 neighbor_weight: float = 1e-3) -> None:
+    def __init__(
+        self,
+        F: int = 128,
+        M: int = 64,
+        D: int = 7168,
+        eps: float = 0.01,
+        n_sinkhorn_iter: int = 20,
+        neighbor_weight: float = 1e-3,
+        *,
+        tau_start: float | None = None,
+        tau_end: float = 1.5,
+        eps_scale: float = 0.05,
+        logit_clamp: float | None = None,
+    ) -> None:
         super().__init__()
         self.F = int(F)
         self.M = int(M)
         self.D = int(D)
-        self.eps = float(eps)
+        self.eps_floor = float(eps)
+        self.eps_scale = float(eps_scale)
         self.n_sinkhorn_iter = int(n_sinkhorn_iter)
         self.neighbor_weight = float(neighbor_weight)
+        self.tau_end = float(tau_end)
+        self.logit_clamp = None if logit_clamp is None else float(logit_clamp)
+        # Tau buffer always present (used when tau_start is set);
+        # a value of 1.0 reduces softmax(logits / tau) to plain softmax.
+        self.register_buffer("tau", torch.tensor(float(tau_start if tau_start is not None else 1.0)))
+        self._use_tau_schedule = tau_start is not None
 
-        # Encoder: linear x → R^F, softmax → simplex Δ^F.
         self.encoder = nn.Linear(D, F)
 
-        # Atoms: parameterized as logits θ ∈ R^(F, M), softmax → Δ^M.
-        # Init each atom as a smooth bump centered at a unique hue angle.
         with torch.no_grad():
             theta = torch.randn(F, M) * 0.1
             centers = torch.linspace(0, M, F + 1)[:F]
@@ -80,28 +103,49 @@ class WassersteinSAE(nn.Module):
                 theta[k] += -((d / (M / 8.0)) ** 2)
         self.atom_logits = nn.Parameter(theta)
 
-        # Readout: M-bin hue distribution → R^D ambient.
         self.readout = nn.Linear(M, D)
         self.b_dec = nn.Parameter(torch.zeros(D))
+        self.register_buffer("C", circular_cost_matrix(M))
 
-        # Cost matrix on the hue circle — registered buffer so it moves with
-        # `.to(device)`.
-        C = circular_cost_matrix(M)
-        self.register_buffer("C", C)
+    # ------------------------------------------------------------------
+    # NaN-hardening / scheduling API
+    # ------------------------------------------------------------------
+    def set_tau(self, value: float) -> None:
+        with torch.no_grad():
+            self.tau.fill_(float(value))
+
+    def current_eps(self) -> float:
+        if self._use_tau_schedule:
+            return float(max(self.eps_floor, self.eps_scale * float(self.tau)))
+        return self.eps_floor
 
     # ------------------------------------------------------------------
     def atoms(self) -> torch.Tensor:
         return torch.softmax(self.atom_logits, dim=-1)
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.softmax(self.encoder(x), dim=-1)
+        logits = self.encoder(x)
+        if self.logit_clamp is not None:
+            logits = logits.clamp(-self.logit_clamp, self.logit_clamp)
+        if self._use_tau_schedule:
+            tau = self.tau.clamp_min(1e-3)
+            pi = torch.softmax(logits / tau, dim=-1)
+        else:
+            pi = torch.softmax(logits, dim=-1)
+        if self.logit_clamp is not None or self._use_tau_schedule:
+            pi = torch.nan_to_num(pi, nan=1.0 / self.F, posinf=1.0 / self.F, neginf=1.0 / self.F)
+            pi = pi / pi.sum(dim=-1, keepdim=True).clamp_min(1e-12)
+        return pi
 
     def decode(self, pi: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         atoms = self.atoms()
         bary = sinkhorn_barycenter(
             atoms, pi, self.C,
-            eps=self.eps, n_iter=self.n_sinkhorn_iter,
+            eps=self.current_eps(), n_iter=self.n_sinkhorn_iter,
         )
+        if self.logit_clamp is not None or self._use_tau_schedule:
+            bary = torch.nan_to_num(bary, nan=1.0 / self.M, posinf=1.0 / self.M, neginf=1.0 / self.M)
+            bary = bary / bary.sum(dim=-1, keepdim=True).clamp_min(1e-12)
         recon = self.readout(bary) + self.b_dec
         return recon, bary
 
@@ -112,28 +156,17 @@ class WassersteinSAE(nn.Module):
 
     # ------------------------------------------------------------------
     def neighbor_penalty(self, pi: torch.Tensor) -> torch.Tensor:
-        """Mishne-style geometric sparsity.
-
-        Computes Σ_b Σ_{k,l} π_b[k] π_b[l] · d(atom_k, atom_l)^2
-        where d is a cheap proxy for ½-Wasserstein distance between atoms:
-        the circular distance between atom centers of mass.
-
-        Atoms that fire together should be NEARBY on the hue circle, not
-        scattered across it.
-        """
+        """Mishne-style geometric sparsity: COM-angle weighted co-firing."""
         with torch.no_grad():
-            atoms = self.atoms()                                       # (F, M)
+            atoms = self.atoms()
             M = self.M
-            # Embed M-point circle in R^2, compute COM, recover angle.
             angles = 2 * torch.pi * torch.arange(M, device=atoms.device) / M
             cx = (atoms * torch.cos(angles)).sum(-1)
             cy = (atoms * torch.sin(angles)).sum(-1)
-            com_angle = torch.atan2(cy, cx)                            # (F,)
+            com_angle = torch.atan2(cy, cx)
             d = (com_angle.unsqueeze(0) - com_angle.unsqueeze(1)).abs()
             d = torch.minimum(d, 2 * torch.pi - d)
-            D_atoms = (d / torch.pi) ** 2                              # (F, F) in [0,1]
-        # gradient flows through pi only — D_atoms is a slowly-changing buffer
-        # (Mishne treats it as a fixed neighborhood graph).
+            D_atoms = (d / torch.pi) ** 2
         return torch.einsum("bf,bg,fg->", pi, pi, D_atoms) / pi.shape[0]
 
     def loss(self, x: torch.Tensor) -> dict:
@@ -141,17 +174,16 @@ class WassersteinSAE(nn.Module):
         mse = (out["recon"] - x).pow(2).mean()
         neigh = self.neighbor_penalty(out["pi"])
         total = mse + self.neighbor_weight * neigh
-        return {
-            "total": total, "mse": mse, "neighbor": neigh,
-            "pi": out["pi"], "recon": out["recon"], "bary": out["bary"],
-        }
+        return {"total": total, "mse": mse, "neighbor": neigh,
+                "pi": out["pi"], "recon": out["recon"], "bary": out["bary"]}
 
     @torch.no_grad()
     def atom_compactness(self) -> torch.Tensor:
-        """Per-atom hue-arc compactness ∈ [0, 1]; 1 = single bin, 0 = uniform.
-
-        Returns 1 − H(atom) / log(M).
-        """
         atoms = self.atoms()
         ent = -(atoms * torch.log(atoms.clamp(min=1e-30))).sum(-1)
         return 1.0 - ent / torch.log(torch.tensor(self.M, dtype=atoms.dtype))
+
+    @torch.no_grad()
+    def pi_entropy(self, x: torch.Tensor) -> torch.Tensor:
+        pi = self.encode(x)
+        return -(pi * torch.log(pi.clamp_min(1e-30))).sum(-1)
