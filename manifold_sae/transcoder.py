@@ -30,10 +30,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-try:
-    from gamfit.torch import SkipAffineSmooth  # type: ignore
-except ImportError:  # gamfit<0.1.99 lacks SkipAffineSmooth — keep module importable
-    SkipAffineSmooth = None  # type: ignore
+from gamfit.torch import SkipAffineSmooth  # gamfit >= 0.1.123 required
 
 
 @dataclass
