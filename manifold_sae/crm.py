@@ -8,84 +8,84 @@ For an L-layer stack we have L SAEs and L−1 transcoders. The training loss
 is the sum of (a) per-stage reconstruction at each SAE and (b) per-stage
 activation match — predicted vs ground-truth layer activations.
 
-This is a skeleton: the architecture, end-to-end loss, and training loop
-work. Attribution-graph extraction (which SAE features mediate a specific
-prediction) is a follow-up — the per-stage SAE.encode results already
-expose the sparse latent dictionaries needed for it.
+This skeleton uses :class:`gamfit.torch.SkipAffineSmooth` for both halves:
+
+* ``rank_skip=0`` ⇒ pure sparse SAE on a single layer (no bypass).
+* ``rank_skip>0`` ⇒ paired-residual transcoder with low-rank affine bypass
+  (Paulo, Shabalin, Belrose 2025).
+
+The JumpReLU prior + atom dictionary live in the gamfit primitive; we only
+own the chaining + per-stage loss + diagnostics.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Sequence
 
-import math
 import torch
 from torch import nn
-import torch.nn.functional as F
+
+from gamfit.torch import SkipAffineSmooth  # gamfit >= 0.1.123
 
 
-class SimpleTopKSAE(nn.Module):
-    """Minimal TopK SAE (reused for each layer of the CRM)."""
-
-    def __init__(self, d_in: int, n_feat: int, top_k: int) -> None:
-        super().__init__()
-        self.d_in = d_in
-        self.n_feat = n_feat
-        self.top_k = top_k
-        self.W_e = nn.Parameter(torch.randn(d_in, n_feat) * (1.0 / math.sqrt(d_in)))
-        self.b_e = nn.Parameter(torch.zeros(n_feat))
-        self.W_d = nn.Parameter(torch.randn(n_feat, d_in) * (1.0 / math.sqrt(n_feat)))
-        self.b_d = nn.Parameter(torch.zeros(d_in))
-
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
-        z = (x - self.b_d) @ self.W_e + self.b_e
-        topv, topi = z.topk(self.top_k, dim=-1)
-        z_sparse = torch.zeros_like(z)
-        z_sparse.scatter_(1, topi, F.relu(topv))
-        return z_sparse
-
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return z @ self.W_d + self.b_d
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        z = self.encode(x)
-        return self.decode(z), z
-
-
-class Transcoder(nn.Module):
-    """Sparse MLP-replacement: maps layer-l SAE latents → layer-(l+1) activations.
-
-    Architecture: latent → ReLU(W h + b) (overcomplete sparse mid) → linear out.
+def _build_skip_affine(
+    in_dim: int,
+    out_dim: int,
+    n_atoms: int,
+    rank_skip: int,
+    jumprelu_threshold: float,
+    dtype: torch.dtype | None = None,
+) -> SkipAffineSmooth:
+    """Build a SkipAffineSmooth, working around the gamfit 0.1.123 tied-init
+    crash when ``in_dim != out_dim`` (encoder is (in,F) but decoder is (F,out);
+    `W_dec.copy_(W_enc.t())` fails). For square cases we use the primitive
+    as-shipped; for rectangular cases we use square dummy dims for the
+    constructor (which only affects the discarded init) and overwrite the
+    parameter tensors with correctly-shaped Kaiming-init weights.
     """
-
-    def __init__(self, d_in: int, d_out: int, n_mid: int, top_k: int) -> None:
-        super().__init__()
-        self.top_k = top_k
-        self.W_e = nn.Parameter(torch.randn(d_in, n_mid) * (1.0 / math.sqrt(d_in)))
-        self.b_e = nn.Parameter(torch.zeros(n_mid))
-        self.W_d = nn.Parameter(torch.randn(n_mid, d_out) * (1.0 / math.sqrt(n_mid)))
-        self.b_d = nn.Parameter(torch.zeros(d_out))
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        z = x @ self.W_e + self.b_e
-        topv, topi = z.topk(self.top_k, dim=-1)
-        z_sparse = torch.zeros_like(z)
-        z_sparse.scatter_(1, topi, F.relu(topv))
-        out = z_sparse @ self.W_d + self.b_d
-        return out, z_sparse
+    dt = dtype if dtype is not None else torch.get_default_dtype()
+    if in_dim == out_dim:
+        return SkipAffineSmooth(
+            in_dim=in_dim, out_dim=out_dim, n_atoms=n_atoms,
+            rank_skip=rank_skip, jumprelu_threshold=jumprelu_threshold, dtype=dt,
+        )
+    # Construct under matched dims, then reshape decoder/bypass to (F, out_dim).
+    sm = SkipAffineSmooth(
+        in_dim=in_dim, out_dim=in_dim, n_atoms=n_atoms,
+        rank_skip=min(rank_skip, in_dim), jumprelu_threshold=jumprelu_threshold, dtype=dt,
+    )
+    sm.out_dim = out_dim
+    sm.W_dec = nn.Parameter(torch.empty(n_atoms, out_dim, dtype=dt))
+    nn.init.kaiming_uniform_(sm.W_dec, a=5**0.5)
+    sm.b_out = nn.Parameter(torch.zeros(out_dim, dtype=dt))
+    if rank_skip > 0:
+        sm.skip_U = nn.Parameter(torch.empty(out_dim, min(rank_skip, in_dim, out_dim), dtype=dt))
+        nn.init.kaiming_uniform_(sm.skip_U, a=5**0.5)
+    return sm
 
 
 @dataclass
 class CRMConfig:
     layer_dims: List[int]                       # [d_0, d_1, ..., d_{L-1}]
     n_features_per_sae: int = 512
-    sae_top_k: int = 32
     transcoder_mid: int = 1024
-    transcoder_top_k: int = 64
+    transcoder_rank_skip: int = 32
+    jumprelu_threshold: float = 0.05
+    # Back-compat: pre-0.1.123 CRM exposed `sae_top_k` / `transcoder_top_k`.
+    # These are ignored under the gamfit SkipAffineSmooth backend (sparsity is
+    # JumpReLU-gated, not hard-K) but accepted so existing call-sites keep
+    # working. Drop in a future cleanup pass.
+    sae_top_k: int | None = None
+    transcoder_top_k: int | None = None
 
 
 class CompleteReplacementModel(nn.Module):
-    """Chains L SAEs and L−1 transcoders for full-model replacement."""
+    """Chains L sparse-SAE smooths and L−1 sparse-transcoder smooths.
+
+    All eight building blocks are :class:`gamfit.torch.SkipAffineSmooth`
+    instances. SAEs use ``rank_skip=0`` (no bypass); transcoders use
+    ``rank_skip>0`` (Paulo et al. low-rank affine bypass).
+    """
 
     def __init__(self, config: CRMConfig) -> None:
         super().__init__()
@@ -93,41 +93,45 @@ class CompleteReplacementModel(nn.Module):
         self.L = len(config.layer_dims)
         assert self.L >= 2, "Need at least 2 layers"
 
+        # Per-layer SAEs: rank_skip=0 → pure sparse code, in_dim == out_dim.
+        dt = torch.get_default_dtype()
         self.saes = nn.ModuleList(
             [
-                SimpleTopKSAE(d, config.n_features_per_sae, config.sae_top_k)
+                SkipAffineSmooth(
+                    in_dim=d,
+                    out_dim=d,
+                    n_atoms=config.n_features_per_sae,
+                    rank_skip=0,
+                    jumprelu_threshold=config.jumprelu_threshold,
+                    dtype=dt,
+                )
                 for d in config.layer_dims
             ]
         )
+        # Inter-layer transcoders: rank_skip>0 → paired-residual bypass.
         self.transcoders = nn.ModuleList(
             [
-                Transcoder(
-                    config.layer_dims[l],
-                    config.layer_dims[l + 1],
-                    config.transcoder_mid,
-                    config.transcoder_top_k,
+                _build_skip_affine(
+                    in_dim=config.layer_dims[l],
+                    out_dim=config.layer_dims[l + 1],
+                    n_atoms=config.transcoder_mid,
+                    rank_skip=min(
+                        config.transcoder_rank_skip,
+                        config.layer_dims[l],
+                        config.layer_dims[l + 1],
+                    ),
+                    jumprelu_threshold=config.jumprelu_threshold,
                 )
                 for l in range(self.L - 1)
             ]
         )
 
     def forward(self, xs: Sequence[torch.Tensor]) -> dict:
-        """Forward chained replacement.
-
-        xs: list of L tensors, each (B, d_l) — the ground-truth activations
-            at each layer for the same input batch.
-
-        Returns dict with per-stage reconstructions and latents.
-        """
+        """Chained forward; feeds each SAE the previous transcoder's output."""
         assert len(xs) == self.L, (len(xs), self.L)
-
         recons: list[torch.Tensor] = []
         latents_sae: list[torch.Tensor] = []
         latents_tc: list[torch.Tensor] = []
-
-        # Chain: feed each SAE the *output of the previous transcoder*
-        # (or the original x_0 at the first layer). Compare each
-        # reconstruction against the ground-truth at that layer.
         prev_x = xs[0]
         for l in range(self.L):
             recon_l, z_l = self.saes[l](prev_x)
@@ -137,17 +141,14 @@ class CompleteReplacementModel(nn.Module):
                 tc_out, tc_z = self.transcoders[l](recon_l)
                 latents_tc.append(tc_z)
                 prev_x = tc_out
-        return {
-            "recons": recons,
-            "latents_sae": latents_sae,
-            "latents_tc": latents_tc,
-        }
+        return {"recons": recons, "latents_sae": latents_sae, "latents_tc": latents_tc}
 
     def loss(
         self,
         xs: Sequence[torch.Tensor],
         recon_weight: float = 1.0,
         match_weight: float = 1.0,
+        sparsity_weight: float = 1e-3,
     ) -> dict:
         out = self.forward(xs)
         per_stage = []
@@ -155,15 +156,13 @@ class CompleteReplacementModel(nn.Module):
         for l in range(self.L):
             mse_l = (out["recons"][l] - xs[l]).pow(2).mean()
             per_stage.append(mse_l.detach())
-            # Layer-0 recon is the "input reconstruction"; downstream are
-            # activation-match terms.
             w = recon_weight if l == 0 else match_weight
             total = total + w * mse_l
-        return {
-            "loss": total,
-            "per_stage_mse": per_stage,
-            "out": out,
-        }
+            # gamfit JumpReLU prior on each SAE latent.
+            total = total + sparsity_weight * self.saes[l].jumprelu(out["latents_sae"][l])
+        for l, z_tc in enumerate(out["latents_tc"]):
+            total = total + sparsity_weight * self.transcoders[l].jumprelu(z_tc)
+        return {"loss": total, "per_stage_mse": per_stage, "out": out}
 
     @torch.no_grad()
     def per_stage_r2(self, xs: Sequence[torch.Tensor]) -> List[float]:
@@ -174,3 +173,6 @@ class CompleteReplacementModel(nn.Module):
             var = xs[l].var().item()
             r2s.append(1.0 - res / max(var, 1e-12))
         return r2s
+
+
+__all__ = ["CRMConfig", "CompleteReplacementModel"]

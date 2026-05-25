@@ -97,9 +97,9 @@ def train(epochs=5, bs=256, lr=3e-4):
     config = CRMConfig(
         layer_dims=dims,
         n_features_per_sae=512,
-        sae_top_k=32,
         transcoder_mid=1024,
-        transcoder_top_k=64,
+        transcoder_rank_skip=32,
+        jumprelu_threshold=0.05,
     )
     model = CompleteReplacementModel(config).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -140,9 +140,9 @@ def train(epochs=5, bs=256, lr=3e-4):
         "layer_dims": dims,
         "config": {
             "n_features_per_sae": config.n_features_per_sae,
-            "sae_top_k": config.sae_top_k,
             "transcoder_mid": config.transcoder_mid,
-            "transcoder_top_k": config.transcoder_top_k,
+            "transcoder_rank_skip": config.transcoder_rank_skip,
+            "jumprelu_threshold": config.jumprelu_threshold,
         },
     }
     (OUT / "crm_summary.json").write_text(json.dumps(summary, indent=2))
