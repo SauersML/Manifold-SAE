@@ -68,7 +68,7 @@ model = CylinderSAE(
     top_k=TOP_K,
     sparsity_weight=1e-3,
     ard_weight=1e-3,
-    hidden_dim=64,  # avoid per-feature OOM: default max(2*D, 4*F)=14336 → 210 GB at F=512 D=7168
+    hidden_dim=512,  # shared encoder, no per-feature blowup post-0.1.123 migration
 ).to(DEVICE)
 
 n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

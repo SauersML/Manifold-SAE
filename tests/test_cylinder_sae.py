@@ -46,7 +46,7 @@ def test_forward_shape() -> None:
     # TopK fires exactly top_k atoms per row
     assert torch.allclose(
         (out["amp"] > 0.5).float().sum(dim=1),
-        torch.full((B,), 4.0),
+        torch.full((B,), 4.0, dtype=torch.float32),
     )
     # basis size = (2H+1) * K_ell = 7 * 4 = 28
     assert model.M == 28
