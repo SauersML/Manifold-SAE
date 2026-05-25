@@ -22,10 +22,15 @@ from manifold_sae.matryoshka import (
 OUT = ROOT / "runs" / "MATRYOSHKA_F512_SHELLS_64_128_256_512"
 OUT.mkdir(parents=True, exist_ok=True)
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device("mps")
+else:
+    DEVICE = torch.device("cpu")
 print(f"[setup] device={DEVICE}", flush=True)
 
-DATA = Path(os.environ.get("X_L40", str(Path.home() / "data" / "X_L40.npy")))
+DATA = Path(os.environ.get("X_L40", str(ROOT / "runs" / "COLOR_COGITO_L40" / "X_L40.npy")))
 X = np.load(DATA, mmap_mode="r")
 N, D = X.shape
 print(f"[data] X shape={X.shape}", flush=True)
