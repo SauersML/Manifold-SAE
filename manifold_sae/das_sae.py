@@ -48,6 +48,8 @@ from typing import Literal
 import torch
 from torch import nn
 
+from gamfit.torch import JumpReLUPenalty  # gamfit >= 0.1.123 (replaces hand L1)
+
 
 @dataclass
 class DASSAEConfig:
@@ -58,6 +60,7 @@ class DASSAEConfig:
     tied_weights: bool = False
     init_gate_logit: float = -2.0     # sigmoid(-2) ≈ 0.12 — start sparse-ish
     normalize_decoder: bool = True
+    jumprelu_threshold: float = 0.0   # >0 ⇒ swap hand-rolled L1 for gamfit JumpReLU
 
 
 @dataclass
@@ -103,6 +106,16 @@ class DASSAE(nn.Module):
         self.gate_logits = nn.Parameter(
             torch.full((F,), float(config.init_gate_logit))
         )
+
+        # Optional gamfit JumpReLU prior on the SAE latent (smoothed-L0).
+        if getattr(config, "jumprelu_threshold", 0.0) > 0.0:
+            self.jumprelu = JumpReLUPenalty(
+                thresholds=torch.full((F,), float(config.jumprelu_threshold), dtype=torch.float64),
+                weight=1.0,
+                smoothing_eps=1e-3,
+            )
+        else:
+            self.jumprelu = None
 
     # ----- accessors -----------------------------------------------------
     def encoder_weight(self) -> torch.Tensor:
@@ -192,7 +205,13 @@ class DASSAE(nn.Module):
         gate_entropy = -(mask * (mask + 1e-8).log()
                          + (1 - mask) * (1 - mask + 1e-8).log()).mean()
 
-        l1_loss = (out_a.z.abs().mean() + out_b.z.abs().mean())
+        if self.jumprelu is not None:
+            # gamfit smoothed-L0 prior (sum over (B,F)); normalize to mean
+            # element-wise so lambda_l1 has the same scale as the L1 path.
+            denom = float(out_a.z.numel())
+            l1_loss = (self.jumprelu(out_a.z) + self.jumprelu(out_b.z)) / denom
+        else:
+            l1_loss = (out_a.z.abs().mean() + out_b.z.abs().mean())
 
         total = (
             recon_loss
