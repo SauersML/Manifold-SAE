@@ -109,7 +109,7 @@ def side_by_side_hue_ring(
 ) -> Path:
     """2-panel polar plot: cogito best-hue atom + SD best-hue atom."""
     import matplotlib.pyplot as plt
-    from experiments.auto_exp_77_diffusion_sae import (   # local import to avoid cycle at import time
+    from experiments.slop.auto_exp_77_diffusion_sae import (   # local import to avoid cycle at import time
         best_atom_hue_corr,
         rgb_to_hue_radians,
     )
