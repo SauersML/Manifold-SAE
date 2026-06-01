@@ -32,9 +32,12 @@ set.
 
 gamfit primitive integration
 ----------------------------
-The Sinkhorn IBP barycenter lives in :mod:`manifold_sae.kernels.sinkhorn`
-(no Sinkhorn primitive in gamfit 0.1.123 — would be a clean addition as
-``gamfit.kernels.sinkhorn_barycenter``).
+The Sinkhorn IBP barycenter lives in :mod:`manifold_sae.kernels.sinkhorn`.
+gamfit 0.1.134 ships ``gamfit.kernels.sinkhorn_barycenter`` (+ ``_vjp``), but
+it is a numpy->numpy primitive: routing the SAE decode through it would force
+a host/numpy roundtrip per forward and a hand-rolled ``autograd.Function`` VJP
+shim, breaking device residency and autograd-native gradients. The trainable
+SAE therefore keeps the torch-native log-domain kernel deliberately.
 """
 from __future__ import annotations
 

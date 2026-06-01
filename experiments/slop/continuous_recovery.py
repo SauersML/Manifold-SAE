@@ -214,28 +214,30 @@ def train_vanilla(s: Scenario, X: torch.Tensor, device: torch.device) -> nn.Modu
 
 def train_curve(s: Scenario, X: torch.Tensor, device: torch.device) -> nn.Module:
     from manifold_sae.losses import total_loss
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig, SparsityConfig
 
+    manifold = "circle" if s.R <= 1 else "product"
+    rank = 1 if s.R <= 1 else s.R
     cfg = ManifoldSAEConfig(
-        input_dim=s.D, n_features=s.F_curve, n_basis=s.n_basis,
-        top_k=s.top_k, intrinsic_rank=s.R, encoder_type="linear",
-        continuous_amp=True,
+        input_dim=s.D, n_atoms=s.F_curve, n_basis_per_atom=s.n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=s.top_k),
     )
     sae = ManifoldSAE(cfg).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=s.lr)
-    X = X.to(device)
+    X = X.to(device=device, dtype=cfg.dtype)
     for step in range(s.n_steps_curve):
         idx = torch.randint(0, X.shape[0], (s.batch_size,))
         batch = X[idx]
         opt.zero_grad()
         out = sae(batch)
-        loss = total_loss(out, batch, cfg)["total"]
+        loss = total_loss(out, batch, sae)["total"]
         loss.backward(); opt.step()
         if step % 500 == 0:
-            print(f"  [crv step {step}] mse={F_nn.mse_loss(out.reconstruction, batch).item():.4e}", flush=True)
+            print(f"  [crv step {step}] mse={F_nn.mse_loss(out.x_hat, batch).item():.4e}", flush=True)
     sae.eval()
-    sae.update_snapshot(X[:min(2048, X.shape[0])])
-    sae.inference_mode = True
+    sae.fit(X[:min(2048, X.shape[0])])
+    sae.lock_snapshot()
     return sae
 
 
@@ -270,8 +272,8 @@ def best_atom_spearman_curve(sae: nn.Module, X: torch.Tensor, z_per_curve: np.nd
     tracks z restricted to samples where the GT curve is active.
     """
     with torch.no_grad():
-        out = sae(X.to(device))
-    pos = out.positions.cpu().numpy()
+        out = sae(X.to(device=device, dtype=sae.cfg.dtype))
+    pos = out.positions[..., 0].cpu().numpy()
     F_c = pos.shape[1]
     K = z_per_curve.shape[1]
     best = np.zeros(K)
@@ -317,7 +319,7 @@ def run_scenario(s: Scenario, output_dir: Path) -> dict:
 
     with torch.no_grad():
         rec_v, _ = sae_v(X_n.to(device))
-        rec_c = sae_c(X_n.to(device)).reconstruction
+        rec_c = sae_c(X_n.to(device=device, dtype=sae_c.cfg.dtype)).x_hat.to(torch.float32)
     mse_v = F_nn.mse_loss(rec_v, X_n.to(device)).item()
     mse_c = F_nn.mse_loss(rec_c, X_n.to(device)).item()
     var = float(X_n.var().item())

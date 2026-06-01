@@ -415,26 +415,13 @@ def phase2_probe_concept(
 
     curve_path = ckpt_dir / f"curve_F{F}.pt"
     if curve_path.exists():
-        from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+        from manifold_sae.sae import load_sae
 
-        ckpt = torch.load(curve_path, map_location="cpu", weights_only=False)
-        sig = ckpt.get("sig", {})
-        sae_cfg = ManifoldSAEConfig(
-            input_dim=X.shape[1],
-            n_features=sig["F"],
-            n_basis=sig.get("n_basis", 10),
-            top_k=sig["top_k"],
-            intrinsic_rank=sig.get("intrinsic_rank", 2),
-            encoder_type="linear",
-            continuous_amp=True,
-        )
-        sae = ManifoldSAE(sae_cfg).to(device)
-        sae.load_state_dict(ckpt["sae"])
-        sae.eval()
-        sae.inference_mode = bool(sae.has_snapshot.item())
+        sae = load_sae(curve_path, input_dim=X.shape[1], device=device)
+        sig = {"F": sae.cfg.n_atoms, "top_k": sae.cfg.sparsity.target_k}
         with torch.no_grad():
-            sae_out = sae(X.to(device))
-        pos_np = sae_out.positions.cpu().numpy()
+            sae_out = sae(X.to(device=device, dtype=sae.cfg.dtype))
+        pos_np = sae_out.positions[..., 0].cpu().numpy()
         amp_np = sae_out.amplitudes.cpu().numpy()
         rhos_pos = [spearman_corr(pos_np[:, k], ranks) for k in range(sig["F"])]
         rhos_amp = [spearman_corr(amp_np[:, k], ranks) for k in range(sig["F"])]

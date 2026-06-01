@@ -32,6 +32,11 @@ def position_amplitude_grad_ratio(
     g_a = torch.zeros_like(amplitudes) if g_a is None else g_a
     pos_mag = g_p.abs().mean(dim=0)
     amp_mag = g_a.abs().mean(dim=0)
+    # positions are (N, F, d) for intrinsic_rank d > 1, so pos_mag is (F, d);
+    # collapse the trailing intrinsic dim to a per-feature scalar so it
+    # broadcasts against the (F,) amplitude magnitudes.
+    if pos_mag.dim() > amp_mag.dim():
+        pos_mag = pos_mag.flatten(amp_mag.dim()).mean(dim=amp_mag.dim())
     ratio = pos_mag / (amp_mag + eps)
     return {
         "position_grad_mag": pos_mag,

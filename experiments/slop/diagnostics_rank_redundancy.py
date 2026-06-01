@@ -184,33 +184,20 @@ def load_vanilla_sae(path: Path, D: int, device):
 
 
 def load_curve_sae(path: Path, D: int, device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    from manifold_sae.sae import load_sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 def curve_atom_effective_direction(sae, atom_k: int, device) -> torch.Tensor:
-    """The atom's effective direction = W_k @ (mean curve eval).
-    A single vector in ℝ^D that summarizes where the atom 'points' in
-    residual space on average over its parameterization domain.
+    """The atom's effective ambient direction = mean of its ambient curve.
+
+    Cutover: the decoder block lives in ambient R^D, so the curve is read
+    straight off the primitive (no W_k lift).
     """
-    import gamfit.torch as gt
+    from manifold_sae.sae import lift_atom_curve
     t_grid = torch.linspace(0.05, 0.95, 21, dtype=torch.float64, device=device)
-    phi = gt.duchon_basis_1d(t_grid, sae.centers.to(device), m=2, periodic=False)
-    B_k = sae.B_locked[atom_k].to(device)
-    g_intrinsic = (phi @ B_k).mean(dim=0)             # (R,)
-    W_k = sae.directions[atom_k].to(device)           # (D, R)
-    return W_k @ g_intrinsic.to(W_k.dtype)            # (D,)
+    curve_ambient = lift_atom_curve(sae, atom_k, t_grid).to(device)  # (21, D)
+    return curve_ambient.mean(dim=0)                  # (D,)
 
 
 def curve_atom_curve_span(sae, atom_k: int, device) -> tuple[float, float]:
@@ -219,13 +206,9 @@ def curve_atom_curve_span(sae, atom_k: int, device) -> tuple[float, float]:
     variance / mean-direction variance is ~0, the curve is doing
     nothing (atom is essentially vanilla).
     """
-    import gamfit.torch as gt
+    from manifold_sae.sae import lift_atom_curve
     t_grid = torch.linspace(0.05, 0.95, 41, dtype=torch.float64, device=device)
-    phi = gt.duchon_basis_1d(t_grid, sae.centers.to(device), m=2, periodic=False)
-    B_k = sae.B_locked[atom_k].to(device)
-    g = phi @ B_k                                      # (41, R)
-    W_k = sae.directions[atom_k].to(device)            # (D, R)
-    curve_ambient = g.to(W_k.dtype) @ W_k.t()          # (41, D)
+    curve_ambient = lift_atom_curve(sae, atom_k, t_grid).to(device)  # (41, D)
     mean_dir = curve_ambient.mean(dim=0)               # (D,)
     deviations = curve_ambient - mean_dir.unsqueeze(0) # (41, D)
     along_var = float((deviations ** 2).mean().item())
@@ -308,10 +291,10 @@ def main() -> int:
     if Path(cfg.curve_checkpoint).exists():
         sae = load_curve_sae(Path(cfg.curve_checkpoint), D, device)
         with torch.no_grad():
-            out = sae(X_n.to(device))
+            out = sae(X_n.to(device=device, dtype=sae.cfg.dtype))
         amp = out.amplitudes.cpu().numpy()
         fire_c = (amp > 1e-6).sum(0)
-        alive_c = [k for k in range(sae.config.n_features) if fire_c[k] >= 5]
+        alive_c = [k for k in range(sae.cfg.n_atoms) if fire_c[k] >= 5]
 
         # Effective direction per atom
         eff_dirs = torch.stack([curve_atom_effective_direction(sae, k, device) for k in alive_c])

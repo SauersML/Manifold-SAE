@@ -249,8 +249,9 @@ def train_one(sae, X, n_steps: int, batch_size: int, lr: float, label: str,
         opt.zero_grad(set_to_none=True)
         if is_curve:
             from manifold_sae.losses import total_loss
+            batch = batch.to(dtype=sae.cfg.dtype)
             out = sae(batch)
-            losses = total_loss(out, batch, sae_cfg)
+            losses = total_loss(out, batch, sae)
             loss = losses["total"]
             mse = losses["mse"]
         else:
@@ -293,9 +294,9 @@ def eval_curve(sae, X_eval, F: int, chunk: int) -> tuple[float, int]:
     alive_mask = torch.zeros(F, dtype=torch.bool, device=device)
     with torch.no_grad():
         for start in range(0, X_eval.shape[0], chunk):
-            x = X_eval[start : start + chunk]
+            x = X_eval[start : start + chunk].to(dtype=sae.cfg.dtype)
             out = sae(x)
-            sq_sum += float(((out.reconstruction - x) ** 2).sum())
+            sq_sum += float(((out.x_hat - x) ** 2).sum())
             n_tok += x.numel()
             alive_mask |= (out.amplitudes > 1e-3).any(0)
     return sq_sum / max(n_tok, 1), int(alive_mask.sum())
@@ -325,13 +326,13 @@ def extract_curves_2d(sae, t_grid: torch.Tensor, n_atoms: int) -> tuple[np.ndarr
         across t — 0 means "flat line" (architecturally equivalent to vanilla),
         1 means "fully 2D curve" (architecturally distinct from vanilla)
     """
-    import gamfit.torch as gt
-
-    device = next(sae.parameters()).device
-    t = t_grid.to(device=device, dtype=torch.float64)
-    phi = gt.duchon_basis_1d(t, sae.centers, m=2, periodic=False)         # (T, K)
-    g_intrinsic = torch.einsum("tk,fkr->ftr", phi, sae.B_locked)          # (F, T, R)
-    g_ambient = torch.einsum("ftr,fdr->ftd", g_intrinsic, sae.directions.to(torch.float64))  # (F, T, D)
+    # The gamfit decoder blocks already live in ambient R^D, so the per-atom
+    # curve g_k(t) (shape (T, D)) comes straight from extract_feature_curves;
+    # no more (phi @ B) @ W lift via the removed centers/B_locked/directions.
+    T = int(t_grid.shape[0])
+    curve_dict = sae.extract_feature_curves(grid_size=T)                  # {k -> (T, D)}
+    F_atoms = int(sae.cfg.n_atoms)
+    g_ambient = torch.stack([curve_dict[k] for k in range(F_atoms)], dim=0).to(torch.float64)  # (F, T, D)
 
     norms = g_ambient.reshape(g_ambient.shape[0], -1).norm(dim=1).cpu().numpy()
     chosen = list(np.argsort(-norms)[:n_atoms])
@@ -452,16 +453,15 @@ def plot_intrinsic_dim_hist(sae, F: int, out_dir: Path) -> None:
     Tells you whether the curve SAE is actually using its 2D intrinsic
     capacity or collapsing to vanilla-SAE-style direction atoms.
     """
-    import gamfit.torch as gt
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    device = next(sae.parameters()).device
-    t = torch.linspace(0.02, 0.98, 64, dtype=torch.float64, device=device)
-    phi = gt.duchon_basis_1d(t, sae.centers, m=2, periodic=False)
-    g = torch.einsum("tk,fkr->ftr", phi, sae.B_locked)
-    amb = torch.einsum("ftr,fdr->ftd", g, sae.directions.to(torch.float64)).cpu().numpy()
+    # Per-atom ambient curves g_k(t) (shape (F, T, D)) direct from the gamfit
+    # decoder blocks; the old centers/B_locked/directions lift is gone.
+    curve_dict = sae.extract_feature_curves(grid_size=64)
+    F_atoms = int(sae.cfg.n_atoms)
+    amb = torch.stack([curve_dict[k] for k in range(F_atoms)], dim=0).to(torch.float64).cpu().numpy()
 
     ratios = []
     norms = []
@@ -596,15 +596,20 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
     mse_v, alive_v = eval_vanilla(vanilla, X_eval, F)
 
     # --- Curve
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE,
+        ManifoldSAEConfig,
+        SparsityConfig,
+        DecoderConfig,
+    )
+    manifold = "circle" if cfg.sae_intrinsic_rank <= 1 else "product"
+    rank = 1 if cfg.sae_intrinsic_rank <= 1 else cfg.sae_intrinsic_rank
     sae_cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=F, n_basis=cfg.sae_n_basis, top_k=top_k,
-        intrinsic_rank=cfg.sae_intrinsic_rank,
-        sparsity_weight=cfg.sae_sparsity_weight,
-        ortho_weight=cfg.sae_ortho_weight,
-        encoder_type="linear",
-        continuous_amp=os.environ.get("MSAE_CONTINUOUS_AMP", "1") == "1",
-        basis_kind=os.environ.get("MSAE_BASIS_KIND", "duchon"),
+        input_dim=D, n_atoms=F, n_basis_per_atom=cfg.sae_n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.sae_ortho_weight),
+        dtype=torch.float64,
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())
@@ -620,40 +625,39 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
 
     # --- Lock-and-cache with a properly-sized snapshot batch.
     snap_n = snapshot_batch_size(F, cfg.sae_n_basis, cfg.snapshot_density_mib)
-    snap = X_n[: snap_n]
+    snap = X_n[: snap_n].to(dtype=curve.cfg.dtype)
     print(f"  [snapshot] fitting REML on {snap_n} tokens (~{F*snap_n*cfg.sae_n_basis*8/1024**2:.0f} MiB densified)", flush=True)
     # Capture training-mode reconstruction on the snapshot batch BEFORE
-    # update_snapshot so we can diagnose locked-vs-training MSE divergence
+    # locking so we can diagnose locked-vs-training MSE divergence
     # post hoc. If snapshot_training_mse is close to mse_c but locked_mse
     # is far, the issue is in the locked forward path or the rescale fix.
     with torch.no_grad():
         snapshot_training_recon = curve(snap)
-        snapshot_training_mse = float(((snapshot_training_recon.reconstruction - snap) ** 2).mean())
-    curve.update_snapshot(snap)
-    # Re-save curve checkpoint *after* update_snapshot so the locked
-    # buffers (B_locked, lam_locked, soft_min_locked, soft_max_locked,
-    # has_snapshot) persist across re-runs — next invocation reloads
-    # the snapshot-ready SAE without re-fitting.
+        snapshot_training_mse = float(((snapshot_training_recon.x_hat - snap) ** 2).mean())
+    curve.fit(snap)
+    curve.lock_snapshot()
+    # Re-save curve checkpoint *after* locking so the snapshot buffers
+    # persist across re-runs — next invocation reloads the snapshot-ready
+    # SAE without re-fitting.
     ckpt_path = out_dir / f"curve_F{F}.pt"
     if cfg.resume and ckpt_path.exists():
         ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
         ckpt["sae"] = curve.state_dict()
+        ckpt["locked"] = True
         tmp = ckpt_path.with_suffix(ckpt_path.suffix + ".tmp")
         torch.save(ckpt, tmp)
         tmp.replace(ckpt_path)
         print(f"  [snapshot] re-saved {ckpt_path} with snapshot buffers", flush=True)
-    curve.inference_mode = True
-    # Lock-and-cache health check: eval inference-mode on the SAME snapshot
+    # Lock-and-cache health check: eval the locked SAE on the SAME snapshot
     # batch. If this differs from snapshot_training_mse, the locked forward
     # path is broken; if it matches, the lock-and-cache architecturally
     # generalizes only to the snapshot data, not to chunks drawn from outside.
     with torch.no_grad():
         out_snap_inf = curve(snap)
-        snapshot_locked_mse = float(((out_snap_inf.reconstruction - snap) ** 2).mean())
+        snapshot_locked_mse = float(((out_snap_inf.x_hat - snap) ** 2).mean())
     print(f"  [diag] training-fwd on snapshot batch: mse={snapshot_training_mse:.4f}", flush=True)
     print(f"  [diag] locked-fwd   on snapshot batch: mse={snapshot_locked_mse:.4f}", flush=True)
     mse_locked, _ = eval_curve(curve, X_eval, F, cfg.eval_chunk)
-    curve.inference_mode = False
 
     print(f"  [F={F}] vanilla MSE={mse_v:.4f} expl={1-mse_v/var:.3f} alive={alive_v}/{F} params={n_v/1e6:.1f}M", flush=True)
     print(f"  [F={F}] curve   MSE={mse_c:.4f} expl={1-mse_c/var:.3f} alive={alive_c}/{F} params={n_c/1e6:.1f}M", flush=True)
@@ -681,23 +685,24 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         recon_c = torch.empty_like(X_eval)
         for start in range(0, X_eval.shape[0], cfg.eval_chunk):
             x = X_eval[start : start + cfg.eval_chunk]
-            recon_c[start : start + cfg.eval_chunk] = curve(x).reconstruction
+            recon_c[start : start + cfg.eval_chunk] = curve(
+                x.to(dtype=curve.cfg.dtype)
+            ).x_hat.to(dtype=X_eval.dtype)
         pc_c = per_pc_explained(X_eval, recon_c, k=pc_k)
     result["per_pc_vanilla"] = pc_v.tolist()
     result["per_pc_curve"] = pc_c.tolist()
 
     if do_visualize:
         print(f"  [viz] extracting curve atoms + positions for F={F}", flush=True)
-        curve.inference_mode = True
         t_grid = torch.linspace(0.01, 0.99, cfg.plot_t_resolution, dtype=torch.float64)
         curves_2d, atom_indices, intrinsic_dim = extract_curves_2d(curve, t_grid, cfg.plot_n_atoms)
         plot_curves(curves_2d, atom_indices, F, out_dir, intrinsic_dim)
         result["plotted_atom_intrinsic_dim"] = intrinsic_dim.tolist()
 
-        curve.inference_mode = False
         with torch.no_grad():
-            out = curve(X_eval[: min(2048, X_eval.shape[0])])
-            positions = out.positions.detach().cpu().numpy()
+            out = curve(X_eval[: min(2048, X_eval.shape[0])].to(dtype=curve.cfg.dtype))
+            # positions is now (N, F, d); take the first manifold coordinate.
+            positions = out.positions[..., 0].detach().cpu().numpy()
             alive = ((out.amplitudes > 1e-3).any(0).cpu().numpy()).nonzero()[0]
         plot_positions(positions, alive, F, out_dir)
 

@@ -163,10 +163,18 @@ def _load_wasserstein(path: str, d_in: int, device: str) -> SAEWrapper:
 
 def _load_das_sae(path: str, d_in: int, device: str) -> SAEWrapper:
     sd = torch.load(path, map_location=device, weights_only=True)
-    F = sd["W_enc"].shape[0]
+    # The decoder is a gamfit InterchangeSwapDecoder (``decoder.W_dec`` is
+    # (D, F)); ``W_enc`` is absent for tied checkpoints.
+    if "decoder.W_dec" not in sd:
+        raise KeyError(
+            "das_sae checkpoint missing 'decoder.W_dec'; only the new "
+            "InterchangeSwapDecoder-keyed format is supported"
+        )
+    F = sd["decoder.W_dec"].shape[1]
+    tied = "W_enc" not in sd
     from manifold_sae.das_sae import DASSAE, DASSAEConfig
 
-    model = DASSAE(DASSAEConfig(input_dim=d_in, n_features=F))
+    model = DASSAE(DASSAEConfig(input_dim=d_in, n_features=F, tied_weights=tied))
     model.load_state_dict(sd, strict=False)
     model.to(device).eval()
 

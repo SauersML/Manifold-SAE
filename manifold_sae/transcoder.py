@@ -30,7 +30,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from gamfit.torch import SkipAffineSmooth  # gamfit >= 0.1.123 required
+from gamfit.torch import SkipAffineSmooth
 
 
 @dataclass

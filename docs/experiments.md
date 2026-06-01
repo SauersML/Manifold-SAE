@@ -30,10 +30,14 @@ SAE checkpoints), `MSAE_PROBE_RESULTS` (optional path to a prior probe
 run's results.json for atom selection). Output: `phase1_heatmap.png`
 plus per-(concept × layer) `phase2_*.png`.
 
-**Result (May 2026)**: At Qwen-0.5B layer 18, curve atoms' holdout |ρ|
-for magnitude beats vanilla by 2.1× (0.81 vs 0.38). 15 of 30
-(concept × layer) pairs pass Phase 1 — Qwen really does encode these
-concepts as 1D manifolds.
+**Phase 1 result**: 15 of 30 (concept × layer) pairs have a top-PC
+projection that correlates with the concept rank (|ρ| > 0.7). Note that
+a 1D projection does not imply a 1D manifold — the intrinsic-dimension
+follow-up in `docs/findings.md` shows these concepts are 2–3D.
+
+The earlier Phase 2 holdout claim (curve beats vanilla 0.81 vs 0.38 on
+magnitude) was measured on a contaminated preprocessing path and has
+been retracted; see `docs/findings.md`.
 
 ### `experiments/llm_sweep.py` — head-to-head sweep with both architectures
 

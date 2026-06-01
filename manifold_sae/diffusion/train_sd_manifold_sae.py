@@ -35,11 +35,7 @@ class TrainConfig:
     n_basis: int = 16
     top_k: int = 16
     intrinsic_rank: int = 2
-    sparsity_weight: float = 1e-2
     ortho_weight: float = 1e-2
-    reml_weight: float = 1.0
-    encoder_type: str = "linear"
-    continuous_amp: bool = False
     epochs: int = 10
     batch_size: int = 64
     lr: float = 3e-4
@@ -66,7 +62,12 @@ def train(cfg: TrainConfig) -> dict:
     import torch
     from torch.utils.data import DataLoader, TensorDataset
 
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE,
+        ManifoldSAEConfig,
+        SparsityConfig,
+        DecoderConfig,
+    )
     from manifold_sae.losses import total_loss
 
     torch.manual_seed(cfg.seed); np.random.seed(cfg.seed)
@@ -90,17 +91,19 @@ def train(cfg: TrainConfig) -> dict:
     Xva = torch.from_numpy(Xn[va_idx]).float()
 
     device = _pick_device(cfg.device)
+    manifold = "circle" if cfg.intrinsic_rank <= 1 else "product"
+    rank = 1 if cfg.intrinsic_rank <= 1 else cfg.intrinsic_rank
+    # dtype stays float32: the MPS training loop runs float32 forward/backward,
+    # and ManifoldSAE.fit converts its input to numpy-float64 internally, so a
+    # float32 snapshot batch is fine for the closed-form solve.
     sae_cfg = ManifoldSAEConfig(
         input_dim=D,
-        n_features=cfg.n_features,
-        n_basis=cfg.n_basis,
-        top_k=cfg.top_k,
-        intrinsic_rank=cfg.intrinsic_rank,
-        sparsity_weight=cfg.sparsity_weight,
-        ortho_weight=cfg.ortho_weight,
-        reml_weight=cfg.reml_weight,
-        encoder_type=cfg.encoder_type,
-        continuous_amp=cfg.continuous_amp,
+        n_atoms=cfg.n_features,
+        n_basis_per_atom=cfg.n_basis,
+        intrinsic_rank=rank,
+        atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.ortho_weight),
     )
     model = ManifoldSAE(sae_cfg).to(device)
     n_params = sum(p.numel() for p in model.parameters())
@@ -124,7 +127,7 @@ def train(cfg: TrainConfig) -> dict:
             batch = batch.to(device)
             opt.zero_grad(set_to_none=True)
             out = model(batch)
-            losses = total_loss(out, batch, sae_cfg)
+            losses = total_loss(out, batch, model)
             loss = losses["total"]; mse = losses["mse"]
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -136,7 +139,7 @@ def train(cfg: TrainConfig) -> dict:
         with torch.no_grad():
             vb = Xva.to(device)
             out_v = model(vb)
-            mse_v = float(torch.mean((out_v.reconstruction - vb) ** 2).item())
+            mse_v = float(torch.mean((out_v.x_hat - vb) ** 2).item())
             r2_v = 1.0 - mse_v / var
             alive = int(((out_v.amplitudes.abs() > 1e-3).any(dim=0)).sum().item())
         row = dict(epoch=ep, train_mse=ep_recon / max(1, ep_n),
@@ -155,16 +158,17 @@ def train(cfg: TrainConfig) -> dict:
     with torch.no_grad():
         snap = torch.from_numpy(Xn[:min(2048, n)]).float().to(device)
         try:
-            model.update_snapshot(snap)
-            model.inference_mode = True
+            model.fit(snap)
+            model.lock_snapshot()
         except Exception as e:
             print(f"[train_sd_manifold_sae] WARN snapshot failed: {e}", flush=True)
 
         all_x = torch.from_numpy(Xn).float().to(device)
         out_all = model(all_x)
-        positions = out_all.positions.detach().cpu().numpy()      # (n, F)
-        amplitudes = out_all.amplitudes.detach().cpu().numpy()    # (n, F)
-        recon = out_all.reconstruction.detach().cpu().numpy()
+        # positions is now (n, F, d); take the first manifold coordinate.
+        positions = out_all.positions[..., 0].detach().cpu().numpy()  # (n, F)
+        amplitudes = out_all.amplitudes.detach().cpu().numpy()        # (n, F)
+        recon = out_all.x_hat.detach().cpu().numpy()
         full_mse = float(((recon - Xn) ** 2).mean())
         full_r2 = 1.0 - full_mse / var
 

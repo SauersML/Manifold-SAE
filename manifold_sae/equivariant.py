@@ -1,37 +1,22 @@
-"""EquivariantSAE — Lie-group atoms (SO(2)) + trivial atoms.
+"""EquivariantSAE — Lie-group atoms (SO(2)) + trivial atoms (gamfit 0.1.141).
 
-gamfit 0.1.123 migration
-------------------------
 The SO(2) ``LieAtom``, ``EquivariantPenalty`` (½‖[ρ(g), W] z‖²) and
-``GaugeCompanion`` (HSV auxiliary-supervised gauge fix) all ship as
-first-class ``gamfit`` primitives:
+``GaugeCompanion`` (HSV auxiliary-supervised gauge fix) ship as first-class
+``gamfit`` primitives and are constructed here for REML-side metadata:
 
   >>> import gamfit
   >>> atom, pen, gc = gamfit.equivariant_smooth(group="SO2", aux="HSV",
   ...                                            n_atoms=64, d_per_atom=2)
 
-``auto_exp_56_equivariant.py`` USES these primitives end-to-end (1-line
-constructor; numpy alternating fit). For the *torch* training pipeline
-(``scripts/train_equivariant.py``) we keep a torch-grad mirror because
-gamfit's penalty surfaces are **numpy-only FFI shims** that return a
-``float`` (see ``gamfit._equivariant.EquivariantPenalty.evaluate`` and
-``GaugeCompanion.loss``) and so are not differentiable through autograd.
-
-**Gap filed for gamfit**: torch-grad bindings for
-``EquivariantPenalty.evaluate`` and ``GaugeCompanion.loss`` (the rust
-``equivariant_penalty_value`` + ``equivariant_gauge_companion_loss`` FFI
-endpoints need autograd-aware Python wrappers analogous to
-``gamfit.torch.SkipAffineSmooth`` / ``JumpReLUPenalty``).
-
-What was deleted in the migration
----------------------------------
-- Trivial-rho / R1 branches of ``rho`` and ``GroupHead`` (never used by
-  ``train_equivariant.py``; ``EquivariantSAE`` only uses SO(2) + a
-  linear trivial-atom decoder).
-- SO(3) Rodrigues code path in this file (use ``gamfit.rho_so3`` /
-  ``gamfit.rho_so3_jvp`` for numpy-side needs; torch SAE doesn't need it).
-- Stand-alone module-level GROUP_DIM / GROUP_REP_DIM (lifted from
-  ``gamfit._equivariant``).
+For the *torch* training pipeline we keep torch-grad mirrors of the SO(2)
+rep, the commutator residual, and the gauge-companion loss, because the
+gamfit surfaces are **numpy-only** and not differentiable through autograd
+(verified in 0.1.141): ``gamfit.rho_so2`` takes/returns ``np.ndarray``,
+and both ``EquivariantPenalty.evaluate(W, g, z) -> float`` and
+``GaugeCompanion.loss(theta) -> float`` return a plain Python ``float``.
+TODO(gamfit): autograd-capable torch bindings for ``EquivariantPenalty``
+and ``GaugeCompanion`` (analogous to ``gamfit.torch.JumpReLUPenalty``);
+cut the mirrors below over once they exist.
 """
 from __future__ import annotations
 
@@ -40,18 +25,13 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-try:
-    import gamfit
-    _GAMFIT_OK = hasattr(gamfit, "equivariant_smooth")
-except Exception:  # pragma: no cover - gamfit optional
-    gamfit = None
-    _GAMFIT_OK = False
+import gamfit  # equivariant_smooth descriptors (numpy-side REML metadata)
+from gamfit.torch import SparsityPenalty
 
 
 # ---------------------------------------------------------------------------
-# Torch-grad SO(2) rep (mirror of gamfit.rho_so2; latter is numpy-only).
+# Torch-grad SO(2) rep (gamfit.rho_so2 is numpy-only — verified 0.1.141).
 # ---------------------------------------------------------------------------
 
 def rho_so2(theta: torch.Tensor) -> torch.Tensor:
@@ -98,7 +78,7 @@ class AmplitudeHead(nn.Module):
             gate = torch.sigmoid((gate_logit + g_noise) / tau)
         else:
             gate = torch.sigmoid(gate_logit)
-        amp = F.softplus(x @ self.W_amp)
+        amp = torch.nn.functional.softplus(x @ self.W_amp)
         return gate, amp
 
 
@@ -176,13 +156,10 @@ class EquivariantSAE(nn.Module):
         D, A2, A0 = config.d_in, config.n_so2, config.n_trivial
 
         # gamfit-side descriptors (no torch params; REML metadata only).
-        if _GAMFIT_OK:
-            self.lie_atom, self.eq_penalty, self.gauge = gamfit.equivariant_smooth(
-                group="SO2", aux=config.aux, n_atoms=A2, d_per_atom=2,
-                weight=config.eq_weight, ard_weight=config.ard_weight,
-            )
-        else:
-            self.lie_atom = self.eq_penalty = self.gauge = None
+        self.lie_atom, self.eq_penalty, self.gauge = gamfit.equivariant_smooth(
+            group="SO2", aux=config.aux, n_atoms=A2, d_per_atom=2,
+            weight=config.eq_weight, ard_weight=config.ard_weight,
+        )
 
         # SO(2) atom frames — orthonormal init (commutator residual ≈ 0 at t=0).
         W_so2 = torch.empty(A2, D, 2)
@@ -225,4 +202,7 @@ class EquivariantSAE(nn.Module):
         return torch.log(1e-2 + s2).mean() + torch.log(1e-2 + s0).mean()
 
     def sparsity_penalty(self, gate2, gate0):
-        return gate2.mean() + gate0.mean()
+        # gam-native L1 (SparsityPenalty("l1", 1.0) == gate.abs().mean()); gates
+        # are non-negative sigmoids so this equals the former gate.mean() sum.
+        l1 = SparsityPenalty("l1", 1.0)
+        return l1(gate2) + l1(gate0)

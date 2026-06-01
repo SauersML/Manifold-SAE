@@ -129,45 +129,54 @@ def circular_spearman(t_norm: np.ndarray, theta: np.ndarray) -> float:
 def train_variant(cfg: Config, X: torch.Tensor, device: torch.device,
                   variant: str) -> dict:
     from manifold_sae.losses import total_loss
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig, SparsityConfig
 
     K = 12 if variant == "perio_K12" else 8
     periodic = variant != "noperio"
+    # periodic -> S^1 atoms (intrinsic_rank forced to 1); non-periodic uses a
+    # product manifold carrying the requested intrinsic rank (or circle if R<=1).
+    if periodic:
+        manifold, rank = "circle", 1
+    elif cfg.sae_R <= 1:
+        manifold, rank = "circle", 1
+    else:
+        manifold, rank = "product", cfg.sae_R
     sae_cfg = ManifoldSAEConfig(
-        input_dim=cfg.d_ambient, n_features=cfg.sae_F, n_basis=K,
-        top_k=cfg.sae_top_k, intrinsic_rank=cfg.sae_R,
-        encoder_type="linear", continuous_amp=True, periodic=periodic,
+        input_dim=cfg.d_ambient, n_atoms=cfg.sae_F, n_basis_per_atom=K,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.sae_top_k),
+        dtype=torch.float64,
     )
     sae = ManifoldSAE(sae_cfg).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
-    X = X.to(device)
+    X = X.to(device=device, dtype=sae_cfg.dtype)
     for step in range(cfg.n_steps):
         idx = torch.randint(0, X.shape[0], (cfg.batch_size,))
         batch = X[idx]
         opt.zero_grad()
         out = sae(batch)
-        loss = total_loss(out, batch, sae_cfg)["total"]
+        loss = total_loss(out, batch, sae)["total"]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         opt.step()
         if step % 1000 == 0:
-            mse = F_nn.mse_loss(out.reconstruction, batch).item()
+            mse = F_nn.mse_loss(out.x_hat, batch).item()
             print(f"    [{variant} step {step:5d}] mse={mse:.4e}", flush=True)
     sae.eval()
-    sae.update_snapshot(X[: min(2048, X.shape[0])])
-    sae.inference_mode = True
+    sae.fit(X[: min(2048, X.shape[0])])
+    sae.lock_snapshot()
     return {"sae": sae, "cfg": sae_cfg}
 
 
 def evaluate(cfg: Config, sae, data: dict, device: torch.device) -> dict:
-    X = data["X"].to(device)
+    X = data["X"].to(device=device, dtype=sae.cfg.dtype)
     with torch.no_grad():
         out = sae(X)
-    mse = F_nn.mse_loss(out.reconstruction, X).item()
+    mse = F_nn.mse_loss(out.x_hat, X).item()
     var = float(X.var().item())
     ev = 1 - mse / var
     fire = (out.amplitudes > 1e-6).sum(dim=0).cpu().numpy()
-    pos = out.positions.cpu().numpy()      # (N, F) in [0,1]
+    pos = out.positions[..., 0].cpu().numpy()      # (N, F) — first manifold coord, in [0,1]
 
     per_cycle = []
     for g in range(cfg.n_cycles):

@@ -40,11 +40,11 @@ ROOT = Path("/Users/user/Manifold-SAE")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "experiments"))
 
+import torch  # noqa: E402
+from gamfit.torch import MechanismSparsityPenalty  # noqa: E402
+
 from _pca_basis import load_pc_basis  # type: ignore  # noqa: E402
-from manifold_sae.identifiable import (  # noqa: E402
-    abs_corr,
-    identifiable_manifold_sae,
-)
+from manifold_sae.identifiable import abs_corr  # noqa: E402
 
 RUN_DIR = ROOT / "runs" / "COLOR_MANIFOLD_GAM_COGITO_L40"
 RUN_DIR.mkdir(parents=True, exist_ok=True)
@@ -113,18 +113,68 @@ def name_features(names, tsig):
     return np.stack([mono, modc, tsig], axis=1)
 
 
+class _MechFit:
+    """Lightweight result holder mirroring IdentifiableFit (W, T)."""
+
+    def __init__(self, W, T, final_loss):
+        self.W = W
+        self.T = T
+        self.final_loss = final_loss
+
+
 def fit_one(T0, weight_mech, n_iter, seed):
-    return identifiable_manifold_sae(
-        X=T0,
-        aux_hsv=None,
-        n_supervised=0,
-        n_free=N_AXES,
-        weight_recon=1.0,
-        weight_free_prior=1.0e-2,
-        weight_mech=weight_mech,
-        epsilon_mech=1.0e-6,
-        n_iter=n_iter,
-        seed=seed,
+    """Pure mechanism-sparsity-only fit (no aux supervision).
+
+    gamfit.identifiable_factor_fit requires n_supervised >= 1, so the
+    unsupervised (n_supervised == 0) regime this experiment studies is no
+    longer expressible through the library primitive. We therefore drive the
+    public gamfit.torch.MechanismSparsityPenalty building block directly: an
+    SVD-warm-started torch-autograd fit of X ≈ T @ W.T with a group-lasso
+    column penalty on the decoder W (the Lachapelle 2401.04890 functional) and
+    a light Gaussian prior on T.
+    """
+    torch.manual_seed(int(seed))
+    Xnp = np.ascontiguousarray(T0, dtype=np.float64)
+    n, D = Xnp.shape
+    Xc_np = Xnp - Xnp.mean(0, keepdims=True)
+
+    U, S, Vt = np.linalg.svd(Xc_np, full_matrices=False)
+    k = min(N_AXES, S.shape[0])
+    W0 = np.zeros((D, N_AXES), dtype=np.float64)
+    W0[:, :k] = Vt[:k].T * S[:k][None, :] / max(np.sqrt(n - 1), 1.0)
+    T0init = Xc_np @ np.linalg.pinv(W0).T
+
+    Xc = torch.as_tensor(Xc_np, dtype=torch.float64)
+    T = torch.nn.Parameter(torch.as_tensor(T0init, dtype=torch.float64))
+    W = torch.nn.Parameter(torch.as_tensor(W0, dtype=torch.float64))
+
+    mech = MechanismSparsityPenalty(
+        feature_groups=[[d] for d in range(D)],
+        weight=float(weight_mech),
+        n_eff=float(N_AXES),
+        smoothing_eps=1.0e-6,
+    )
+    opt = torch.optim.Adam([T, W], lr=5.0e-2)
+
+    final_loss = {}
+    for _ in range(int(n_iter)):
+        opt.zero_grad(set_to_none=True)
+        recon = 0.5 * ((Xc - T @ W.t()) ** 2).sum()
+        free_prior = 0.5 * 1.0e-2 * (T ** 2).sum()
+        mech_loss = mech.forward(W.t().contiguous())
+        total = recon + free_prior + mech_loss
+        total.backward()
+        opt.step()
+        final_loss = {
+            "total": float(total.detach()),
+            "recon": float(recon.detach()),
+            "mech": float(mech_loss.detach()),
+        }
+
+    return _MechFit(
+        W=W.detach().cpu().numpy().astype(np.float64),
+        T=T.detach().cpu().numpy().astype(np.float64),
+        final_loss=final_loss,
     )
 
 
@@ -160,8 +210,7 @@ def main():
         results[name] = {
             "weight_mech": w_mech,
             "n_iter": n_iter,
-            "used_rust": bool(fit.used_rust),
-            "final_loss": fit.losses[-1] if fit.losses else None,
+            "final_loss": fit.final_loss,
             "corr_hsv": corr_hsv.tolist(),
             "corr_name": corr_name.tolist(),
             "best_axis_per_hsv_component": best_hsv.tolist(),

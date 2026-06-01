@@ -208,10 +208,10 @@ def main():
             tgt = build_target_swap(x_a, x_b, ha, hb, v_hue)
             zv_a = sae(x_a).z
             zv_b = sae(x_b).z
-            z_swap = sae.swap(zv_b, zv_a, mask=sae.hue_mask())
-            x_swap_hat = sae.decode(z_swap)
+            # Fused boolean-mask swap + gated decode: splice a's hue atoms into b.
+            x_swap_hat = sae.swap_decode(zv_a, zv_b, atom_mask=sae.hue_bool_mask())
             val_intv_r2 = r2(x_swap_hat, tgt)
-            n_hue_soft = int((sae.hue_mask() > 0.5).sum().item())
+            n_hue_soft = int(sae.hue_bool_mask().sum().item())
         entry = {"epoch": epoch, "val_recon_r2": val_recon_r2,
                  "val_intv_r2": val_intv_r2, "n_hue_soft": n_hue_soft, **ep_losses}
         history.append(entry)

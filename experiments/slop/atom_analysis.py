@@ -154,20 +154,9 @@ def harvest_multi_layer(model_name: str, layers: list[int], n_tokens: int,
 
 
 def load_curve_sae(path: Path, D: int, device: torch.device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import load_sae
 
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +170,7 @@ def polysemy_per_atom(sae, X: torch.Tensor, tokens: list[str], cfg: Config, devi
     """
     from sklearn.cluster import KMeans
     with torch.no_grad():
-        out = sae(X.to(device))
+        out = sae(X.to(device=device, dtype=sae.cfg.dtype))
     amp = out.amplitudes.cpu().numpy()                    # (N, F)
     fire_counts = (amp > 1e-6).sum(axis=0)
     alive = [k for k in range(amp.shape[1])
@@ -243,13 +232,17 @@ def cross_layer_transfer(sae, X_train_layer: torch.Tensor,
     High correlation = direction carries the concept across layers.
     """
     with torch.no_grad():
-        out_train = sae(X_train_layer.to(device))
+        out_train = sae(X_train_layer.to(device=device, dtype=sae.cfg.dtype))
     amp_train = out_train.amplitudes.cpu().numpy()        # (N, F)
-    # Per-atom direction: W_k averaged across R dims (simple summary)
-    W = sae.directions.detach().cpu().numpy()             # (F, D, R)
-    F_total = W.shape[0]
-    # Use the FIRST direction column as the atom's primary direction.
-    W_primary = W[:, :, 0]                                 # (F, D)
+    # Cutover: there is no `directions` (W_k) anymore. The atom's primary
+    # ambient direction is the top right-singular vector of its decoder block
+    # decoder_blocks[k] (K x D) — the dominant axis its curve sweeps in R^D.
+    blocks = sae.decoder_blocks.detach().cpu().numpy()    # (F, K, D)
+    F_total = blocks.shape[0]
+    W_primary = np.zeros((F_total, blocks.shape[2]), dtype=np.float64)
+    for k in range(F_total):
+        _, _, vt = np.linalg.svd(blocks[k].astype(np.float64), full_matrices=False)
+        W_primary[k] = vt[0]                              # (D,)
 
     results: dict[int, dict] = {}
     for L, X_L in X_other_layers.items():
@@ -436,8 +429,9 @@ def probe_classification(sae, model_name: str, layer: int, cfg: Config, device) 
 
     # Get SAE features.
     with torch.no_grad():
-        sae_out = sae(X_n.to(device))
-    sae_features = torch.cat([sae_out.positions, sae_out.amplitudes], dim=1).cpu().numpy()
+        sae_out = sae(X_n.to(device=device, dtype=sae.cfg.dtype))
+    pos_flat = sae_out.positions.reshape(sae_out.positions.shape[0], -1)  # (N, F*d)
+    sae_features = torch.cat([pos_flat, sae_out.amplitudes], dim=1).cpu().numpy()
     raw_features = X.cpu().numpy()
 
     # 80/20 train/test split (random shuffle, seeded).
@@ -488,7 +482,7 @@ def main() -> int:
     D = X_train_layer.shape[1]
 
     sae = load_curve_sae(Path(cfg.checkpoint), D, device)
-    print(f"[setup] loaded SAE F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
+    print(f"[setup] loaded SAE F={sae.cfg.n_atoms} top_k={sae.cfg.sparsity.target_k}", flush=True)
 
     # Save partial results after each benchmark so a later crash doesn't
     # lose the earlier work.

@@ -5,9 +5,9 @@ For each variant we:
     * run forward + backward under SGD,
     * verify the loss is finite and reduces in one step.
 
-For three pairs we then verify the composition runs end-to-end. All tests
-adapt for variant-specific quirks (eg. ManifoldSAE needs F >= 16 because
-gamfit's multi-penalty REML fit doesn't converge on F=8).
+For three pairs we then verify the composition runs end-to-end. Every variant,
+including ManifoldSAE, runs at the shared F=8 setting; the integration layer
+casts the input to each variant's expected dtype at the boundary.
 """
 from __future__ import annotations
 
@@ -38,28 +38,22 @@ def _data(B_: int = B, D_: int = D) -> torch.Tensor:
 # Per-variant minimum F (and possibly B) overrides — some variants need
 # a richer setting to even run forward+backward once.
 VARIANT_OVERRIDES: dict[str, dict] = {
-    "manifold": {"F": 16, "B": 64},   # gamfit needs more atoms + rows
     "transcoder": {"F": F},
 }
 
 
-# ManifoldSAE's joint-additive REML path reshapes ``result.lambdas`` to a
-# scalar — only valid when gamfit returns a single λ. With F atoms it
-# returns (F,) and the reshape raises. This is a known sae.py bug that
-# integration tests merely surface; do NOT patch sae.py from here.
-EXPECTED_BROKEN: set[str] = {"manifold"}
-
-
 @pytest.mark.parametrize("name", sorted(SAEModelRegistry.keys()))
 def test_variant_smoke(name: str) -> None:
-    """Instantiate, forward, backward, verify loss is finite + reduces."""
+    """Instantiate, forward, backward, verify loss is finite + reduces.
+
+    Every registered variant must pass — a failure here means the variant's
+    behavior is wrong and must be fixed, never marked expected-to-fail.
+    """
     overrides = VARIANT_OVERRIDES.get(name, {})
     F_local = int(overrides.get("F", F))
     B_local = int(overrides.get("B", B))
     X = _data(B_=B_local)
 
-    if name in EXPECTED_BROKEN:
-        pytest.xfail(f"{name}: pre-existing internal bug — integration audit only")
     result = train_any(name, X, F=F_local, steps=1, lr=1e-3)
 
     assert math.isfinite(result["loss_initial"]), f"{name}: loss_initial NaN/Inf"

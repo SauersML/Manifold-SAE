@@ -15,8 +15,42 @@ import matplotlib.pyplot as plt
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from gamfit.torch import PoincareAtoms  # noqa: E402
+
 from manifold_sae.hyperbolic_sae import HyperbolicSAE  # noqa: E402
-from manifold_sae.kernels.poincare import exp_0, log_0  # noqa: E402
+
+# Standalone exp_0 / log_0 at the origin, built directly on the gamfit
+# primitive (no shim module). Closed form for the Poincaré ball with geometric
+# curvature c = -κ (κ > 0): with conformal factor λ and ‖·‖ the Euclidean norm,
+#   exp_0(v) = tanh(√κ ‖v‖) · v / (√κ ‖v‖)
+#   log_0(x) = atanh(√κ ‖x‖) · x / (√κ ‖x‖)
+# These are the canonical maps the primitive implements internally; here we use
+# them only for tangent-space PCA visualization. project_into_ball keeps inputs
+# strictly interior so atanh never diverges.
+_NORM_EPS = 1e-15
+
+
+def _proj(x, kappa=1.0):
+    atoms = PoincareAtoms(F=1, ball_dim=int(x.shape[-1]), curvature=-float(kappa))
+    p = atoms.project_into_ball(x.contiguous())
+    # Clamp strictly inside (the primitive saturates onto the boundary).
+    max_norm = (1.0 - 1e-6) / (float(kappa) ** 0.5)
+    n = p.norm(dim=-1, keepdim=True).clamp_min(_NORM_EPS)
+    return p * torch.clamp(max_norm / n, max=1.0)
+
+
+def log_0(x, c=1.0):
+    x = _proj(x, c)
+    sc = float(c) ** 0.5
+    n = x.norm(dim=-1, keepdim=True).clamp_min(_NORM_EPS)
+    return torch.atanh((sc * n).clamp(max=1.0 - 1e-7)) * x / (sc * n)
+
+
+def exp_0(v, c=1.0):
+    sc = float(c) ** 0.5
+    n = v.norm(dim=-1, keepdim=True).clamp_min(_NORM_EPS)
+    out = torch.tanh(sc * n) * v / (sc * n)
+    return _proj(out, c)
 
 OUT_DIR = ROOT / "runs" / "HYPERBOLIC_SAE_COGITO"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,9 +80,10 @@ print(f"[exp68] atoms shape {atoms.shape}, mean radius {radii.mean():.3f}, "
 # 3) Score atoms against xkcd categorical structure -------------------------
 # Load cogito + xkcd metadata using the same conventions as train_sae_comparison.
 sd = torch.load(OUT_DIR / "hyperbolic_state.pt", map_location="cpu")
-D_in = sd["W_enc.weight"].shape[1]
-F_in = sd["atom_tangents"].shape[0]
-d_in = sd["atom_tangents"].shape[1]
+# gamfit-native keys: W_gate.weight (F, D), atoms_dict.atoms (F, d).
+D_in = sd["W_gate.weight"].shape[1]
+F_in = sd["atoms_dict.atoms"].shape[0]
+d_in = sd["atoms_dict.atoms"].shape[1]
 model = HyperbolicSAE(input_dim=D_in, n_features=F_in, ball_dim=d_in,
                       curvature=1.0, sparsity_weight=1e-3)
 model.load_state_dict(sd)

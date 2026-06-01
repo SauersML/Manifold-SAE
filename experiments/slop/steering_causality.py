@@ -95,20 +95,9 @@ def _find_blocks(model) -> nn.ModuleList:
 
 
 def load_curve_sae(checkpoint_path: Path, D: int, device: torch.device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae, cfg
+    from manifold_sae.sae import load_sae
+    sae = load_sae(checkpoint_path, input_dim=D, device=device)
+    return sae, sae.cfg
 
 
 def pick_atom_from_probe(probe_path: Path, concept: str) -> int:
@@ -132,46 +121,33 @@ def pick_atom_from_probe(probe_path: Path, concept: str) -> int:
     return int(best_atom)
 
 
-def encode_then_decode_modified(sae, r_L: torch.Tensor, atom: int, t_new: float, device):
-    """Run SAE on r_L, then modify atom `atom`'s t to `t_new` and re-decode."""
-    from manifold_sae.sae import _soft_rescale_positions
-    import gamfit.torch as gt
+def encode_then_decode_modified(sae, r_L: torch.Tensor, atom: int, t_new: float, device,
+                                grid_size: int = 256):
+    """Run SAE on r_L, then move atom `atom`'s position to `t_new` and re-decode.
 
-    sae_in = r_L.unsqueeze(0).to(device)               # (1, D)
-    x_centered = sae_in - sae.b_dec
-    y_proj = torch.einsum("bd,fdr->bfr", x_centered, sae.directions)
-    z_raw, mask_soft, mask_binary = sae.encoder(x_centered, y_proj)
+    Cutover: this no longer reaches into hand-rolled internals. We read the
+    original reconstruction + per-atom contribution off the gamfit output bundle
+    (``x_hat``, ``z``, ``curves``, ``decoder_blocks``), then swap atom k's
+    contribution for its ambient curve evaluated at ``t_new`` (nearest point on a
+    fine grid from ``extract_feature_curves``).
+    """
+    with torch.no_grad():
+        out = sae(r_L.unsqueeze(0).to(device=device, dtype=sae.cfg.dtype))
+    z_k = out.z[0, atom]
+    curve_k = out.curves[0, atom]                      # (K,)
+    block_k = sae.decoder_blocks[atom]                 # (K, D)
+    contrib_orig_k = z_k * (curve_k @ block_k)         # (D,)
+    recon_orig = out.x_hat[0]                           # (D,)
+    pos_orig = float(out.positions[0, atom, 0].item())
 
-    if sae.inference_mode and bool(sae.has_snapshot.item()):
-        positions, _, _ = _soft_rescale_positions(
-            z_raw,
-            frozen_min=sae.soft_min_locked.to(z_raw.dtype),
-            frozen_max=sae.soft_max_locked.to(z_raw.dtype),
-        )
-    else:
-        positions, _, _ = _soft_rescale_positions(z_raw)
+    # Atom k's ambient curve over a fine grid; pick the point nearest t_new.
+    grid = torch.linspace(0.0, 1.0, grid_size, dtype=sae.cfg.dtype, device=device)
+    curve_grid = sae.extract_feature_curves(grid_size=grid_size)[atom].to(device)  # (G, D)
+    j = int(torch.argmin((grid - float(t_new)).abs()).item())
+    contrib_new_k = z_k * curve_grid[j]                # (D,)
 
-    # Reconstruction at the ORIGINAL positions (for delta computation)
-    F = sae.config.n_features
-    B = 1
-    t_flat_orig = positions.t().contiguous().view(-1).to(torch.float64)
-    phi_orig = gt.duchon_basis_1d(t_flat_orig, sae.centers, m=2,
-                                   periodic=sae.config.periodic).view(F, B, -1)
-    g_orig = torch.einsum("fbk,fkr->fbr", phi_orig, sae.B_locked).to(r_L.dtype)
-    contrib_orig = torch.einsum("fbr,fdr->bfd", g_orig * mask_binary.t().unsqueeze(-1), sae.directions)
-    recon_orig = contrib_orig.sum(dim=1) + sae.b_dec.unsqueeze(0)
-
-    # MODIFIED positions: set atom's t to t_new
-    positions_mod = positions.clone()
-    positions_mod[0, atom] = float(t_new)
-    t_flat_mod = positions_mod.t().contiguous().view(-1).to(torch.float64)
-    phi_mod = gt.duchon_basis_1d(t_flat_mod, sae.centers, m=2,
-                                  periodic=sae.config.periodic).view(F, B, -1)
-    g_mod = torch.einsum("fbk,fkr->fbr", phi_mod, sae.B_locked).to(r_L.dtype)
-    contrib_mod = torch.einsum("fbr,fdr->bfd", g_mod * mask_binary.t().unsqueeze(-1), sae.directions)
-    recon_mod = contrib_mod.sum(dim=1) + sae.b_dec.unsqueeze(0)
-
-    return recon_orig.squeeze(0), recon_mod.squeeze(0), float(positions[0, atom])
+    recon_mod = recon_orig - contrib_orig_k + contrib_new_k
+    return recon_orig.to(r_L.dtype), recon_mod.to(r_L.dtype), pos_orig
 
 
 def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
@@ -185,7 +161,7 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
     D = model.config.hidden_size
 
     sae, _ = load_curve_sae(Path(cfg.sae_checkpoint), D, device)
-    print(f"[steer] loaded SAE F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
+    print(f"[steer] loaded SAE F={sae.cfg.n_atoms} top_k={sae.cfg.sparsity.target_k}", flush=True)
 
     # Pick atom by VARIANCE OF t_k across prompts, restricted to atoms
     # whose amp is moderate (firing but not clipped at the encoder ceiling).
@@ -194,7 +170,7 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
     # encoding atom. The signal we want is an atom whose POSITION varies
     # with the input — that's the steering knob.
     if cfg.target_atom < 0:
-        F = sae.config.n_features
+        F = sae.cfg.n_atoms
         n_prompts = len(cfg.prompts)
         t_mat = torch.zeros(n_prompts, F, device=device)
         amp_mat = torch.zeros(n_prompts, F, device=device)
@@ -207,8 +183,8 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
                 inputs = tok(prompt, return_tensors="pt").to(device)
                 model(**inputs)
                 r = cap["h"][0, -1, :]
-                out = sae(r.unsqueeze(0))
-                t_mat[i] = out.positions[0]
+                out = sae(r.unsqueeze(0).to(dtype=sae.cfg.dtype))
+                t_mat[i] = out.positions[0, :, 0]
                 amp_mat[i] = out.amplitudes[0]
         hh.remove()
         # Score = std(t) across prompts, but only for atoms that fire
@@ -272,11 +248,8 @@ def run_steering(cfg: SteerConfig, device: torch.device) -> dict:
 
             # Diagnostic: amplitude of selected atom on this prompt. If 0,
             # the patch is a no-op and KL will be 0.
-            sae_in = r_L_base.unsqueeze(0).to(device)
-            x_centered = sae_in - sae.b_dec
-            y_proj = torch.einsum("bd,fdr->bfr", x_centered, sae.directions)
-            _z_raw, _ms, mb = sae.encoder(x_centered, y_proj)
-            atom_amp = float(mb[0, atom].abs().item())
+            _diag = sae(r_L_base.unsqueeze(0).to(device=device, dtype=sae.cfg.dtype))
+            atom_amp = float(_diag.amplitudes[0, atom].abs().item())
             print(f"  [diag] prompt='{prompt[:25]}...' atom={atom} amp={atom_amp:.4f}",
                   flush=True)
 

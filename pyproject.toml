@@ -33,8 +33,9 @@ dependencies = [
     # 2.12 to be extra safe.
     "torch>=2.2,<2.12",
     "numpy>=1.26",
+    "scipy>=1.17",
     "tqdm>=4.66",
-    "gamfit>=0.1.105",
+    "gamfit>=0.1.141",
     "matplotlib>=3.8",
     "scikit-learn>=1.4",
 ]

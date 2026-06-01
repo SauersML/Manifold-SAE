@@ -134,19 +134,8 @@ def harvest(model_name: str, layer: int, prompts: list[str], device) -> torch.Te
 
 
 def load_curve_sae(path: Path, D: int, device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    from manifold_sae.sae import load_sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 class VanillaSAE(nn.Module):
@@ -204,9 +193,9 @@ def run_task(task: str, cycle_len: int, prompts, idx, sae_c, sae_v, device, cfg:
 
     # Curve: |ρ_circ| between t_k (mapped to 2π·t_k) and angle
     with torch.no_grad():
-        out_c = sae_c(X_n.to(device))
+        out_c = sae_c(X_n.to(device=device, dtype=sae_c.cfg.dtype))
         out_v, gate_v = sae_v(X_n.to(device))
-    pos = out_c.positions.cpu().numpy()
+    pos = out_c.positions[..., 0].cpu().numpy()
     amp = out_c.amplitudes.cpu().numpy()
     F = pos.shape[1]
     fire = (amp > 1e-6).sum(axis=0)
@@ -267,7 +256,7 @@ def main() -> int:
 
     sae_c = load_curve_sae(Path(cfg.curve_checkpoint), D, device)
     sae_v = load_vanilla_sae(Path(cfg.vanilla_checkpoint), D, device)
-    print(f"[setup] curve F={sae_c.config.n_features}, vanilla F={sae_v.F}", flush=True)
+    print(f"[setup] curve F={sae_c.cfg.n_atoms}, vanilla F={sae_v.F}", flush=True)
 
     reports = {}
     for task, (cycle_len, gen) in {

@@ -108,32 +108,18 @@ def harvest_residuals(model_name: str, layer: int, n_tokens: int, device: torch.
 
 
 def load_curve_sae(checkpoint_path: Path, D: int, device: torch.device) -> nn.Module:
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import load_sae
 
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D,
-        n_features=sig["F"],
-        n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"],
-        intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear",
-        continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    return load_sae(checkpoint_path, input_dim=D, device=device)
 
 
 def make_dashboard(sae: nn.Module, X: torch.Tensor, tokens: list[str],
                    top_k_per_atom: int, output_path: Path, device: torch.device) -> dict:
     """For each alive atom, find top-firing tokens sorted by position."""
     with torch.no_grad():
-        out = sae(X.to(device))
-    pos = out.positions.cpu().numpy()                     # (N, F)
+        out = sae(X.to(device=device, dtype=sae.cfg.dtype))
+    # positions: (N, F, d); use the first intrinsic coordinate as the scalar t_k.
+    pos = out.positions[..., 0].cpu().numpy()             # (N, F)
     amp = out.amplitudes.cpu().numpy()                    # (N, F)
     F = pos.shape[1]
 
@@ -214,7 +200,7 @@ def main() -> int:
     X_n = (X - mu) / sigma
 
     sae = load_curve_sae(Path(args.checkpoint), D=X.shape[1], device=device)
-    print(f"[dash] loaded SAE: F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
+    print(f"[dash] loaded SAE: F={sae.cfg.n_atoms} top_k={sae.cfg.sparsity.target_k}", flush=True)
     summary = make_dashboard(sae, X_n, tokens, args.top_k_per_atom, Path(args.output), device)
     print(f"[dash] wrote {args.output}: {summary}", flush=True)
     return 0

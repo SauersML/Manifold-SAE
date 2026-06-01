@@ -101,74 +101,23 @@ Curve SAE wins on reconstruction at matched F across all scales by
 +19 to +27 percentage points. Hungarian-matched Chamfer (shape recovery)
 is also 30-35% lower for the curve SAE on every scenario.
 
-### Real LM activations — concept-encoding transfer
+### Real LM activations — see `docs/findings.md`
 
-`experiments/llm_probe.py` with train/test split: pick each architecture's
-best atom for a concept on 80% of prompts, evaluate that same atom on the
-held-out 20%. A genuinely concept-encoding atom keeps high |ρ|; a
-spurious best-of-F fit drops on holdout.
+The honest, post-fix assessment of Manifold-SAE on real LM residuals
+lives in `docs/findings.md`. The short version: after fixing a
+late-discovered per-dim normalization bug and measuring the intrinsic
+dimensionality of real concept manifolds (correlation dim 2.4–3.4 for
+most concept×layer pairs), the architecture's core 1D assumption does
+*not* hold at scale. With proper normalization, Manifold-SAE wins only
+at the smallest model (Qwen-0.5B, small F) and loses to vanilla TopK
+SAE at every model with D ≥ 1536. See `docs/findings.md` for the full
+post-fix EV / alive-atom tables, the intrinsic-dimension measurement,
+and the 2D-atom ablation.
 
-| concept × layer (Qwen-0.5B) | vanilla holdout \|ρ\| | curve holdout \|ρ\| | curve advantage |
-| --- | --- | --- | --- |
-| magnitude_L20 | 0.38 | **0.81** | 2.1× |
-| magnitude_L8  | 0.34 | **0.70** | 2.1× |
-| magnitude_L16 | 0.16 | **0.22** | 1.4× |
-| magnitude_L4  | 0.04 | **0.11** | 2.8× |
-
-Curve atoms transfer concept-encoding 2× better than vanilla on
-held-out data at the layers where Qwen actually encodes magnitude
-continuously. At saturated layers both architectures look identical
-on matched-F MSE, but only curve atoms generalize to new prompts.
-
-### Concept localization (`experiments/llm_probe.py` Phase 2)
-
-For each (concept × layer) pair where Phase 1 detected 1D-manifold
-structure, count atoms whose Spearman with concept rank exceeds 0.5:
-
-| concept × layer | vanilla atoms ≥ 0.5 | curve atoms ≥ 0.5 |
-| --- | --- | --- |
-| magnitude_L12 | 126 / 128 | **52 / 128** |
-| polarity_L8   | 126 / 128 | **49 / 128** |
-| time_L20      | 126 / 128 | **43 / 128** |
-| temperature_L8| 126 / 128 | **49 / 128** |
-| brightness_L8 | 124 / 128 | **48 / 128** |
-
-Vanilla atoms are *pluripotent*: 97-98% pick up at least faint signal
-for every continuous concept tested. Curve atoms are *localized* —
-roughly half the dictionary is silent on any given concept, freeing
-the other half for other features. This matches Bhalla et al. (2026)'s
-"compact capture" regime: a small set of features acts as a coordinate
-system for each manifold, instead of every direction carrying weak
-alignment with every concept.
-
-### Layer 18 of Qwen-0.5B — atom utilization
-
-Layer 12 saturates at EV ≥ 0.989 for both architectures (the layer has
-~4 effective directions, so matched-F MSE can't discriminate). Layer 18
-is richer:
-
-| F | vanilla EV | curve EV | vanilla alive | curve alive |
-| --- | --- | --- | --- | --- |
-| 16  | 0.965 | 0.950 | 6  | **12** |
-| 64  | 0.966 | 0.932 | 12 | **24** |
-| 128 | 0.967 | 0.936 | 12 | **14** |
-
-Curve SAE distributes structure across 2× more atoms at small F (24 vs
-12 alive at F=64). The architecture uses its dictionary capacity more
-fully where vanilla collapses to fewer features.
-
-### Hyperparameter insight — lower basis dim unlocks more atoms
-
-At Qwen-0.5B layer 12, F=128, TopK=2:
-
-| n_basis K | curve alive atoms | vanilla alive atoms |
-| --- | --- | --- |
-| 10 (default) | 5  | 4 |
-| 4            | **16** | 4 |
-
-Dropping `n_basis` from 10 → 4 pulls curve alive from 5 → 16 with no
-EV loss. Lower per-atom expressive capacity → more atoms productively
-utilized. Vanilla is unchanged (it has no `n_basis`).
+An earlier round of real-LM results (holdout concept-encoding transfer,
+concept-localization counts, L18 atom-utilization, the `n_basis` sweep)
+was measured on a contaminated/rank-1 preprocessing path and has been
+retracted; do not cite those numbers.
 
 ### Connection to Goodfire's neural-geometry series
 
@@ -182,9 +131,10 @@ of standard SAE features.
 **Manifold-SAE is an architecture that targets the compact-capture
 regime directly.** Each curve atom IS a compact-capture unit: one
 atom spans one 1D manifold via its `g_k(t)` curve, parameterized
-natively by the encoder's `t_k`. The compactness numbers above (curve
-43-52 atoms vs vanilla 124-126 atoms per concept) are direct evidence
-the architecture lands in compact-capture by construction.
+natively by the encoder's `t_k`. On pure-synthetic 1D-manifold data the
+architecture does land in compact-capture; whether that transfers to
+real LM residuals is addressed (negatively, at scale) in
+`docs/findings.md`.
 
 ## Repository layout
 
@@ -227,7 +177,7 @@ uv pip install -e ".[llm]"     # transformers / datasets / accelerate / safetens
 uv pip install -e ".[dev]"     # pytest, ruff
 ```
 
-`gamfit >= 0.1.81` is required (autograd-aware `grad_penalty`, auto-derived knots/penalty).
+`gamfit >= 0.1.141` is required (multi-dim Duchon + additive REML API, autograd-aware backward, auto-derived knots/penalty).
 
 ## Running things
 
@@ -271,16 +221,14 @@ cudarc's `culib()` is a process-wide `OnceLock<Library>` — all
 symbols resolve through one handle regardless of how many files are
 mapped.
 
-Upstream fix is in gam main (`SauersML/gam`, commits `ff0f5380` +
-`233672b6` + Rust-side warn-only): downgrade to warn-once. Awaiting
-new gamfit wheel on PyPI.
+The Rust-side fix (downgrade to warn-once) shipped upstream in gam main
+(`SauersML/gam`, commits `ff0f5380` + `233672b6`) and is in the installed
+gamfit 0.1.141.
 
 **Workaround in this repo**:
 `manifold_sae/_cluster_bridge.py::bypass_gamfit_cuda_check()`
 monkey-patches the Python-side assert to a no-op. All LLM
-experiment drivers call this at import time. The Rust runtime's
-warn-only behavior is already shipped upstream and ships in
-gamfit 0.1.102+ once published.
+experiment drivers call this at import time.
 
 ### gamfit REML stays on CPU at small K
 

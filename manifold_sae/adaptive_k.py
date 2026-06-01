@@ -1,26 +1,34 @@
-"""AdaptiveK SAE — per-input dynamic top-K (arxiv 2508.17320).
+"""AdaptiveK SAE — per-input dynamic top-K (arxiv 2508.17320), gamfit-native.
 
-The model predicts a continuous K_pred(x) per input via a learned gate head.
-That K is rounded (with straight-through gradient) to an integer in
-[k_min, k_max], and only the top-K_pred features (by encoder pre-activation
-magnitude) are kept for reconstruction.
+BREAKING REWRITE. The hand-rolled K-head, the ``_apply_topk`` STE, and the
+``IBPAssignmentPenalty`` sparsity path are all GONE. The model is now a thin
+SAE shell (encoder ``Linear`` → :class:`gamfit.torch.AdaptiveTopK` gate →
+decoder ``Linear``) built directly on the gamfit primitive.
 
-Sparsity is supervised in expectation: λ · E[K_pred] replaces a fixed top-K
-in the loss. This lets the model spend more atoms on hard rows and fewer on
-easy rows — matching or beating fixed-TopK at the same MEAN sparsity.
+What changed vs the old internals
+----------------------------------
+* The K-head now consumes the **full** encoder pre-activation ``z`` (F dims),
+  not 3 pooled stats. This is :class:`AdaptiveTopK`'s own learned head.
+* Top-K selection uses :class:`AdaptiveTopK`'s analytic sigmoid-relaxed
+  soft-top-K STE (hard mask forward, smooth backward). No ``k_ste``/``k_round``
+  scaling hack.
+* Sparsity is ``λ · E[K_pred]`` with a **learnable** ``log_weight`` exposed by
+  the primitive (REML/LAML-selectable via :meth:`AdaptiveTopK.reml_descriptor`).
+  The fixed ``sparsity_weight`` only seeds ``init_weight``; after construction
+  the primitive owns λ as a trainable parameter.
 
-Design notes
-------------
-* Encoder: tied to a single linear (W_e, b_e). Decoder: W_d, b_d.
-* K-head: shared linear from the encoder pre-activation (mean/maxpool over
-  features) to a scalar logit → softplus + offset → continuous K_pred.
-  We use the encoder's own statistics so the head co-adapts.
-* Top-K_pred selection: rank features by ReLU(z); the top-⌈K_pred⌉ get their
-  ReLU(z) value, the rest are zero. Gradient on K_pred flows through a
-  straight-through bias term added to the kept activations (so reducing K
-  has a smooth-ish cost during training).
-* For row r with K_r = ⌈k_min + (k_max−k_min)·σ(k_logit_r)⌉ — sigmoid keeps
-  K bounded; the loss term λ·K_pred (continuous) pushes mean K down.
+v1-vs-v2 distinction
+--------------------
+The sparsity *mechanism* is now identical for both (``AdaptiveTopK.penalty()``).
+We keep the variants meaningful by **head architecture + K regime**:
+
+* **v1 (this file):** ``head='linear'`` — a single ``Linear(F, 1)`` K-head, the
+  simplest predictor; a wide ``[k_min, k_max]`` exploration regime.
+* **v2 (:mod:`adaptive_k_v2`):** ``head='mlp'`` — a two-layer ``Linear→GELU→
+  Linear`` K-head with hidden units, concentrated around a ``k_target`` regime
+  (tight ``[k_min, k_max]`` bracket) for sharper per-row K control.
+
+Both are documented; neither re-implements sparsity by hand.
 """
 from __future__ import annotations
 
@@ -29,9 +37,38 @@ import math
 
 import torch
 from torch import nn
-import torch.nn.functional as F
 
-from gamfit.torch import IBPAssignmentPenalty  # gamfit >= 0.1.123
+from gamfit.torch import AdaptiveTopK  # gamfit (post-refactor wheel)
+
+
+class HardTopKGate(AdaptiveTopK):
+    """:class:`gamfit.torch.AdaptiveTopK` with a corrected hard top-K forward.
+
+    Works around a gamfit 0.1.134 bug: ``_AdaptiveTopKSTE.forward`` builds
+    ``z_active = z + (z*hard_mask - z*soft_mask).detach()`` — i.e. the STE base
+    is the raw ``z`` instead of ``z*soft_mask`` — so the forward *value* is
+    ``z*(1 + hard - soft)`` and never zeroes the non-top-K entries; the codes
+    stay fully dense (all F atoms active). We keep everything the primitive
+    contributes — the learned K-head, the differentiable order-statistic ``tau``,
+    :meth:`penalty` (``λ·E[K_pred]``) and :meth:`reml_descriptor` — and only
+    re-impose the hard mask on the forward value. Gradient still flows through
+    the primitive's soft-mask path (clean straight-through: hard forward, soft
+    backward), exactly as the primitive's docstring intends.
+    """
+
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:  # type: ignore[override]
+        z_soft_active, k_pred = super().forward(z)
+        width = z.shape[-1]
+        k_int = k_pred.detach().round().clamp_(1, width).to(torch.long)
+        abs_z = z.detach().abs()
+        hard = torch.zeros_like(z)
+        for row in range(z.shape[0]):
+            idx = torch.topk(abs_z[row], k=int(k_int[row].item())).indices
+            hard[row, idx] = 1.0
+        z_hard = z * hard
+        # forward value == z_hard (sparse); backward grad via the soft path.
+        z_active = z_soft_active + (z_hard - z_soft_active).detach()
+        return z_active, k_pred
 
 
 @dataclass
@@ -41,10 +78,30 @@ class AdaptiveKSAEConfig:
     k_min: int = 8
     k_max: int = 128
     sparsity_weight: float = 1e-3
+    temperature: float = 0.1
 
 
 class AdaptiveKSAE(nn.Module):
-    """Per-row dynamic top-K SAE."""
+    """Per-row dynamic top-K SAE built on :class:`gamfit.torch.AdaptiveTopK`.
+
+    Architecture: encoder ``Linear`` → ``AdaptiveTopK`` gate (linear K-head) →
+    decoder ``Linear``. Sparsity is ``λ · E[K_pred]`` with ``λ`` a learnable
+    parameter inside the gate.
+
+    Parameters
+    ----------
+    input_dim : int
+        Input activation width ``D``.
+    F : int
+        Number of dictionary atoms.
+    k_min, k_max : int
+        Inclusive per-row K bounds. ``1 <= k_min <= k_max <= F``.
+    sparsity_weight : float
+        Seeds the gate's ``init_weight`` (initial ``λ = exp(log_weight)``).
+        After construction the gate owns ``λ`` as a trainable parameter.
+    temperature : float
+        Soft-top-K backward temperature for the gate STE.
+    """
 
     def __init__(
         self,
@@ -53,127 +110,79 @@ class AdaptiveKSAE(nn.Module):
         k_min: int = 8,
         k_max: int = 128,
         sparsity_weight: float = 1e-3,
+        temperature: float = 0.1,
     ) -> None:
         super().__init__()
-        assert 1 <= k_min < k_max <= F, (k_min, k_max, F)
+        assert 1 <= k_min <= k_max <= F, (k_min, k_max, F)
         self.input_dim = int(input_dim)
         self.n_features = int(F)
         self.k_min = int(k_min)
         self.k_max = int(k_max)
         self.sparsity_weight = float(sparsity_weight)
 
+        # Keep these exact parameter names: integration.py / leaderboard_v2.py
+        # read W_e / W_d / b_d directly off the state_dict.
         self.W_e = nn.Parameter(torch.randn(input_dim, F) * (1.0 / math.sqrt(input_dim)))
         self.b_e = nn.Parameter(torch.zeros(F))
         self.W_d = nn.Parameter(torch.randn(F, input_dim) * (1.0 / math.sqrt(F)))
         self.b_d = nn.Parameter(torch.zeros(input_dim))
 
-        # K-head: input is feature-pooled stats (mean(|z|), max(|z|), std(z))
-        # → scalar K logit per row.
-        self.k_head = nn.Sequential(
-            nn.Linear(3, 32),
-            nn.GELU(),
-            nn.Linear(32, 1),
+        # gamfit primitive owns the K-head + STE + learnable-λ sparsity.
+        # v1 == linear head (simplest predictor), wide K regime.
+        self.gate = HardTopKGate(
+            F=F,
+            k_min=k_min,
+            k_max=k_max,
+            head="linear",
+            temperature=float(temperature),
+            init_weight=max(float(sparsity_weight), 1e-8),
         )
-        # Initialize bias so K_pred starts near k_max (so the model first
-        # learns to reconstruct, then the λ pressure trims K down).
-        with torch.no_grad():
-            self.k_head[-1].bias.fill_(2.0)  # sigmoid(2) ≈ 0.88
-
-        # gamfit IBP-assignment prior over the encoder pre-activation logits:
-        # finite Indian-Buffet-Process penalty with expected K = k_max·alpha.
-        # Acts as a richer Bayesian-nonparametric stand-in for the hand-rolled
-        # population-mean K penalty (which has a degenerate fixed point at
-        # k_min; see auto_exp_74 for why v2 added clipped-hinge to work around
-        # that). The IBP prior pulls per-row K toward `alpha` atoms without
-        # collapsing to zero.
-        self.ibp_prior = IBPAssignmentPenalty(
-            k_max=F, alpha=float(k_min) / float(F), tau=1.0,
-        )
-
-    # ------------------------------------------------------------------
-    # K prediction
-    # ------------------------------------------------------------------
-
-    def predict_k(self, z: torch.Tensor) -> torch.Tensor:
-        """Continuous K_pred per row, in [k_min, k_max]."""
-        z_abs = z.abs()
-        stats = torch.stack(
-            [z_abs.mean(dim=-1), z_abs.amax(dim=-1), z.std(dim=-1)], dim=-1
-        )
-        logit = self.k_head(stats).squeeze(-1)
-        k_norm = torch.sigmoid(logit)  # (B,)
-        k_pred = self.k_min + (self.k_max - self.k_min) * k_norm
-        return k_pred
 
     # ------------------------------------------------------------------
     # Forward
     # ------------------------------------------------------------------
 
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return ``(z_active, k_pred_eff)`` from the gated encoder."""
         z = (x - self.b_d) @ self.W_e + self.b_e
-        k_pred = self.predict_k(z)
-        return z, k_pred
+        z_active, k_pred_eff = self.gate(z)
+        return z_active, k_pred_eff
 
-    def _apply_topk(self, z: torch.Tensor, k_pred: torch.Tensor) -> torch.Tensor:
-        """Per-row top-⌈k_pred⌉. Straight-through on K through a small bias."""
-        B, F = z.shape
-        z_pos = F_relu(z)  # nonneg activations
-        # Sort once descending; cheaper than per-row topk for the K-varying mask.
-        sorted_vals, sorted_idx = z_pos.sort(dim=-1, descending=True)
-
-        # Hard integer K per row (clamped, rounded). STE: gradient flows via k_pred.
-        k_round = k_pred.detach().round().clamp(self.k_min, self.k_max)
-        k_ste = k_round + (k_pred - k_pred.detach())  # straight-through
-
-        # Mask: position i kept iff i < k_round.
-        positions = torch.arange(F, device=z.device).unsqueeze(0)  # (1, F)
-        keep_mask = (positions < k_round.unsqueeze(-1)).to(z.dtype)  # (B, F)
-
-        # Apply mask in sorted space, scatter back.
-        kept_sorted = sorted_vals * keep_mask
-        z_sparse = torch.zeros_like(z)
-        z_sparse.scatter_(1, sorted_idx, kept_sorted)
-
-        # Differentiable contribution from k_ste: scale by (k_ste / k_round) so
-        # gradient on k_pred reaches the loss without changing forward values.
-        scale = (k_ste / k_round.clamp(min=1.0)).unsqueeze(-1)
-        z_sparse = z_sparse * scale
-        return z_sparse
+    def decode(self, z_active: torch.Tensor) -> torch.Tensor:
+        return z_active @ self.W_d + self.b_d
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        z, k_pred = self.encode(x)
-        z_sparse = self._apply_topk(z, k_pred)
-        recon = z_sparse @ self.W_d + self.b_d
-        return recon, z_sparse, k_pred
+        """Return ``(recon, z_active, k_pred_eff)``.
+
+        ``k_pred_eff`` is the gate's per-row effective K (``≈`` soft-mask mass),
+        shape ``(B,)`` — same shape as the old ``k_pred`` so callers that index
+        ``out[2]`` per row keep working.
+        """
+        z_active, k_pred_eff = self.encode(x)
+        recon = self.decode(z_active)
+        return recon, z_active, k_pred_eff
 
     # ------------------------------------------------------------------
     # Loss
     # ------------------------------------------------------------------
 
     def loss(self, x: torch.Tensor) -> dict:
-        recon, z_sparse, k_pred = self.forward(x)
+        recon, z_active, k_pred_eff = self.forward(x)
         mse = (recon - x).pow(2).mean()
-        # gamfit IBPAssignmentPenalty over the pre-activation logits — a
-        # Bayesian-nonparametric prior over per-row K that subsumes the v1
-        # population-mean penalty. Divide by N·F so the descriptor's sum
-        # reduces to a mean and `sparsity_weight` keeps its scale.
-        z_logits = (x - self.b_d) @ self.W_e + self.b_e
-        ibp_val = self.ibp_prior(z_logits)
-        sparsity = ibp_val / float(z_logits.numel())
+        # Sparsity is λ·E[K_pred] from the primitive. λ is learnable inside the
+        # gate, so the outer sparsity_weight only seeded it. We still expose a
+        # `sparsity_weight` multiplier so trainers can anneal an extra scale on
+        # top of the learnable λ (set to 1.0 to defer entirely to the gate).
+        sparsity = self.gate.penalty()
         total = mse + self.sparsity_weight * sparsity
-        n_active = (z_sparse.abs() > 0).float().sum(-1).mean()
+        n_active = (z_active.abs() > 0).float().sum(-1).mean()
         return {
             "loss": total,
             "recon": mse,
             "sparsity": sparsity,
-            "mean_k_pred": k_pred.mean().detach(),
+            "mean_k_pred": k_pred_eff.mean().detach(),
             "mean_k_actual": n_active.detach(),
             "recon_out": recon,
-            "z": z_sparse,
-            "k_pred": k_pred,
+            "z": z_active,
+            "k_pred": k_pred_eff,
         }
-
-
-# Module-level relu alias (avoid name shadowing of F=n_features arg).
-def F_relu(x: torch.Tensor) -> torch.Tensor:
-    return torch.relu(x)

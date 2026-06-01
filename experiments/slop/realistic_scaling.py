@@ -207,8 +207,9 @@ def train_loop(model, X, n_steps, batch_size, lr, label, device, is_curve, sae_c
         opt.zero_grad(set_to_none=True)
         if is_curve:
             from manifold_sae.losses import total_loss
-            out = model(batch)
-            losses = total_loss(out, batch, sae_cfg)
+            cbatch = batch.to(dtype=model.cfg.dtype)
+            out = model(cbatch)
+            losses = total_loss(out, cbatch, model)
             loss = losses["total"]; mse = losses["mse"]
         else:
             recon, z = model(batch)
@@ -224,17 +225,17 @@ def train_loop(model, X, n_steps, batch_size, lr, label, device, is_curve, sae_c
 
 
 def extract_curve_atoms(sae, gt_anchors: int, device) -> np.ndarray:
-    """For the curve SAE, sample each atom's curve at gt_anchors uniform
-    positions over [0, 1]. Uses the locked snapshot if present, else fits
-    fresh via gamfit on a calibration batch. Returns (F, gt_anchors, D).
+    """Sample each atom's curve at gt_anchors positions; return (F, gt_anchors, D).
+
+    Cutover: the gamfit-native decoder block lives in ambient R^D, so the
+    primitive's `extract_feature_curves(grid_size)` already returns ambient
+    curves per atom — no separate `directions` lift.
     """
-    import gamfit.torch as gt_torch
-    if not bool(sae.has_snapshot):
-        raise RuntimeError("call sae.update_snapshot(reference_batch) before extract_curve_atoms")
-    t_grid_f64 = torch.linspace(0.0, 1.0, gt_anchors, dtype=torch.float64, device=device)
-    phi = gt_torch.duchon_basis_1d(t_grid_f64, sae.centers, m=2, periodic=sae.config.periodic)  # (T, K)
-    g = torch.einsum("tk,fkr->ftr", phi, sae.B_locked)                                          # (F, T, R)
-    amb = torch.einsum("ftr,fdr->ftd", g, sae.directions.to(torch.float64))                     # (F, T, D)
+    if not bool(sae.is_locked):
+        raise RuntimeError("call sae.lock_snapshot() before extract_curve_atoms")
+    curve_dict = sae.extract_feature_curves(grid_size=gt_anchors)
+    F = int(sae.cfg.n_atoms)
+    amb = torch.stack([curve_dict[i] for i in range(F)], dim=0)  # (F, T, D)
     return amb.detach().cpu().numpy()
 
 
@@ -288,15 +289,16 @@ def run_scenario(s: Scenario, seed: int = 0, output_dir: str = "runs/REALISTIC")
     t_v = train_loop(van, X_n, s.n_steps, s.batch_size, s.lr, "van", device, is_curve=False)
 
     print("\n[curve] training", flush=True)
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE, ManifoldSAEConfig, DecoderConfig, SparsityConfig,
+    )
+    manifold = "circle" if s.intrinsic_rank <= 1 else "product"
+    rank = 1 if s.intrinsic_rank <= 1 else s.intrinsic_rank
     sae_cfg = ManifoldSAEConfig(
-        input_dim=X.shape[1], n_features=s.sae_features, n_basis=s.n_basis,
-        top_k=s.top_k, intrinsic_rank=s.intrinsic_rank,
-        sparsity_weight=s.sparsity_weight,
-        ortho_weight=s.ortho_weight,
-        reml_weight=s.reml_weight,
-        encoder_type="linear",
-        continuous_amp=s.continuous_amp,
+        input_dim=X.shape[1], n_atoms=s.sae_features, n_basis_per_atom=s.n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=s.top_k),
+        decoder=DecoderConfig(ortho_weight=s.ortho_weight),
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     n_c = sum(p.numel() for p in curve.parameters())
@@ -307,19 +309,19 @@ def run_scenario(s: Scenario, seed: int = 0, output_dir: str = "runs/REALISTIC")
     with torch.no_grad():
         eb = X_n[: min(4096, X_n.shape[0])].to(device)
         recon_v, z_v = van(eb)
-        out_c = curve(eb)
+        out_c = curve(eb.to(dtype=curve.cfg.dtype))
         mse_v = float(torch.mean((recon_v - eb) ** 2).item())
-        mse_c = float(torch.mean((out_c.reconstruction - eb) ** 2).item())
+        mse_c = float(torch.mean((out_c.x_hat.to(torch.float32) - eb) ** 2).item())
         alive_v = ((z_v > 0).any(dim=0)).sum().item()
         alive_c = ((out_c.amplitudes > 1e-3).any(dim=0)).sum().item()
     print(f"\n[eval] vanilla MSE={mse_v:.4f}  expl={1-mse_v/var:.3f}  alive={alive_v}/{s.sae_features}", flush=True)
     print(f"[eval] curve   MSE={mse_c:.4f}  expl={1-mse_c/var:.3f}  alive={alive_c}/{s.sae_features}", flush=True)
 
-    # Lock-and-cache: snapshot B and λ from one big REML fit on a held-out
-    # reference batch. After this the curve SAE is feedforward.
-    snapshot_batch = X_n[: min(8192, X_n.shape[0])].to(device)
-    curve.update_snapshot(snapshot_batch)
-    curve.inference_mode = True
+    # Lock-and-cache: closed-form REML solve on a held-out reference batch, then
+    # freeze for inference.
+    snapshot_batch = X_n[: min(8192, X_n.shape[0])].to(device=device, dtype=curve.cfg.dtype)
+    curve.fit(snapshot_batch)
+    curve.lock_snapshot()
 
     # For curve SAE: sample each atom at uniform t-grid to get (F, anchors, D).
     learned_curve_atoms = extract_curve_atoms(curve, s.n_curve_anchors, device)

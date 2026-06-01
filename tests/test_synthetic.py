@@ -40,11 +40,13 @@ def test_synthetic_recovery_directional() -> None:
 
     config = sae_mod.ManifoldSAEConfig(
         input_dim=16,
-        n_features=5,  # 3 planted + 2 slack
-        n_basis=14,
-        top_k=2,
-        # Tuned for fast synthetic recovery: drop sparsity so features don't die.
-        sparsity_weight=0.0,
+        n_atoms=5,  # 3 planted + 2 slack
+        n_basis_per_atom=14,
+        intrinsic_rank=1,
+        atom_manifold="circle",
+        # Permissive sparsity so features don't die at this tiny budget.
+        sparsity=sae_mod.SparsityConfig(kind="softmax_topk", target_k=2),
+        dtype=torch.get_default_dtype(),
     )
     sae = sae_mod.ManifoldSAE(config)
     optimizer = train_mod.build_optimizer(sae, lr=5e-3)
@@ -58,7 +60,7 @@ def test_synthetic_recovery_directional() -> None:
     # matches learned curves against ground truth via chamfer.
     sae.eval()
     with torch.no_grad():
-        recon = sae(dataset.x).reconstruction
+        recon = sae(dataset.x).x_hat
     mse = float(((recon - dataset.x) ** 2).mean().item())
     naive_mse = float((dataset.x ** 2).mean().item())
     relative = mse / naive_mse

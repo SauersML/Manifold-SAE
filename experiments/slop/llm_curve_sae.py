@@ -133,19 +133,21 @@ def main(cfg: Config = Config()) -> int:
     acts_n = acts_c / max(scale, 1e-6)
     print(f"[setup] residual D={acts_n.shape[1]}, scale={scale:.4f}")
 
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE, ManifoldSAEConfig, DecoderConfig, SparsityConfig,
+    )
     from manifold_sae.losses import total_loss
 
+    manifold = "circle" if cfg.intrinsic_rank <= 1 else "product"
+    rank = 1 if cfg.intrinsic_rank <= 1 else cfg.intrinsic_rank
     sae_cfg = ManifoldSAEConfig(
         input_dim=acts_n.shape[1],
-        n_features=cfg.sae_features,
-        n_basis=cfg.n_basis,
-        top_k=cfg.top_k,
-        intrinsic_rank=cfg.intrinsic_rank,
-        sparsity_weight=cfg.sparsity_weight,
-        ortho_weight=cfg.ortho_weight,
-        reml_weight=cfg.reml_weight,
-        encoder_type="linear",
+        n_atoms=cfg.sae_features,
+        intrinsic_rank=rank,
+        atom_manifold=manifold,
+        n_basis_per_atom=cfg.n_basis,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.ortho_weight),
     )
     print(f"[setup] SAE config: F={cfg.sae_features} R={cfg.intrinsic_rank} K={cfg.n_basis} topk={cfg.top_k}")
     sae = ManifoldSAE(sae_cfg).to(device)
@@ -167,10 +169,10 @@ def main(cfg: Config = Config()) -> int:
         except StopIteration:
             it = iter(loader)
             (batch,) = next(it)
-        batch = batch.to(device)
+        batch = batch.to(device=device, dtype=sae.cfg.dtype)
         optim.zero_grad(set_to_none=True)
         out = sae(batch)
-        losses = total_loss(out, batch, sae_cfg)
+        losses = total_loss(out, batch, sae)
         losses["total"].backward()
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         optim.step()
@@ -187,10 +189,12 @@ def main(cfg: Config = Config()) -> int:
     print(f"[train] {train_seconds:.1f}s")
 
     sae.eval()
+    sae.fit(acts_n[: min(8192, acts_n.shape[0])].to(device=device, dtype=sae.cfg.dtype))
+    sae.lock_snapshot()
     with torch.no_grad():
-        eval_batch = acts_n[: min(4096, acts_n.shape[0])].to(device)
+        eval_batch = acts_n[: min(4096, acts_n.shape[0])].to(device=device, dtype=sae.cfg.dtype)
         out = sae(eval_batch)
-        mse_eval = float(torch.mean((out.reconstruction - eval_batch) ** 2).item())
+        mse_eval = float(torch.mean((out.x_hat - eval_batch) ** 2).item())
         var_eval = float(eval_batch.var().item())
         explained = 1.0 - mse_eval / max(var_eval, 1e-12)
         fire_freq = (out.amplitudes > 0.5).float().mean(dim=0).cpu().numpy()  # (F,)
@@ -203,13 +207,10 @@ def main(cfg: Config = Config()) -> int:
         # for whether the feature genuinely encodes a continuous family).
         top_idx = np.argsort(-fire_freq)[:8]
         curve_extents = []
+        from manifold_sae.sae import lift_atom_curve
         for k in top_idx:
-            import gamfit.torch as gt
             t = torch.linspace(0.05, 0.95, 32, dtype=torch.float64, device=device)
-            phi = gt.duchon_basis_1d(t, sae.centers, m=2, periodic=False)
-            B_k = sae.coeff[k].to(torch.float64)
-            W_k = sae.directions[k].to(torch.float64)
-            curve = phi @ B_k @ W_k.T  # (T, D)
+            curve = lift_atom_curve(sae, int(k), t)  # (T, D), ambient
             extent = float(curve.std(dim=0).norm().item())
             curve_extents.append({"feature": int(k), "fire_freq": float(fire_freq[k]), "curve_extent": extent})
         print(f"[eval] top-active feature curve extents:")

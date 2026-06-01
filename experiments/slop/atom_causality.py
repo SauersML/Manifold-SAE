@@ -84,19 +84,8 @@ def _find_blocks(model) -> nn.ModuleList:
 
 
 def load_curve_sae(path: Path, D: int, device: torch.device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    from manifold_sae.sae import load_sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 # ---------------------------------------------------------------------------
@@ -158,26 +147,21 @@ def ablate_atom(sae, model, blocks, layer: int, tok, prompts: list[str],
                 model(**inputs)
                 hh.remove()
                 r_L = cap["h"][0, -1, :].clone()
-                sae_out = sae(r_L.unsqueeze(0))
+                sae_out = sae(r_L.unsqueeze(0).to(dtype=sae.cfg.dtype))
                 # Decompose contribution per atom.
                 amp = sae_out.amplitudes[0]                          # (F,)
                 # 3) Compute the original SAE reconstruction at this residual.
-                recon_orig = sae_out.reconstruction[0]
-                # 4) Build the ABLATED reconstruction: same forward but with
-                #    atom ablate_atom_k's amplitude set to 0.
+                recon_orig = sae_out.x_hat[0]
+                # 4) Build the ABLATED reconstruction: subtract atom k's exact
+                #    ambient contribution. Cutover: the decoder block lives in
+                #    ambient R^D, so atom k's contribution at this token is
+                #    z_k * (curves[k] @ decoder_blocks[k]) — read straight off
+                #    the output bundle (no `directions`, no separate basis call).
                 if ablate_atom_k is not None and amp[ablate_atom_k] > 1e-6:
-                    amp_ablated = amp.clone()
-                    amp_ablated[ablate_atom_k] = 0.0
-                    # Manually re-construct: recon_ablated = recon_orig - atom_k's contribution.
-                    # For a curve SAE, atom k's contribution at this token is:
-                    #   amp_k * (phi(t_k) @ B_k) @ W_k^T
-                    # Inference path computes this; we need the per-atom piece.
-                    import gamfit.torch as gt
-                    t_k = sae_out.positions[0, ablate_atom_k:ablate_atom_k+1].to(torch.float64)
-                    phi_k = gt.duchon_basis_1d(t_k, sae.centers, m=2, periodic=False)
-                    g_k = phi_k @ sae.B_locked[ablate_atom_k]         # (1, R)
-                    dir_k = sae.directions[ablate_atom_k]             # (D, R)
-                    contrib_k = amp[ablate_atom_k] * (g_k.to(dir_k.dtype) @ dir_k.t()).squeeze(0)
+                    z_k = sae_out.z[0, ablate_atom_k]
+                    curve_k = sae_out.curves[0, ablate_atom_k]        # (K,)
+                    block_k = sae.decoder_blocks[ablate_atom_k]       # (K, D)
+                    contrib_k = z_k * (curve_k @ block_k)             # (D,)
                     delta = -contrib_k                                # subtract
                     r_L_ablated = r_L + delta.to(r_L.dtype)
                 else:
@@ -214,7 +198,7 @@ def benchmark_ablation(sae, model, blocks, layer, tok, device, cfg: Config) -> d
     # Find the atom with highest amplitude across our magnitude prompts —
     # serves as our proxy for "magnitude-encoding atom" without needing
     # a probe JSON.
-    amp_sums = np.zeros(sae.config.n_features)
+    amp_sums = np.zeros(sae.cfg.n_atoms)
     with torch.no_grad():
         cap = {}
         hh = blocks[layer].register_forward_hook(
@@ -225,13 +209,13 @@ def benchmark_ablation(sae, model, blocks, layer, tok, device, cfg: Config) -> d
                 inputs = tok(p, return_tensors="pt").to(device)
                 model(**inputs)
                 r = cap["h"][0, -1, :]
-                out = sae(r.unsqueeze(0))
+                out = sae(r.unsqueeze(0).to(dtype=sae.cfg.dtype))
                 amp_sums += out.amplitudes[0].cpu().numpy()
         finally:
             hh.remove()
     target_atom = int(np.argmax(amp_sums))
     # Random control: an atom with similar firing rate but a random pick.
-    candidates = [k for k in range(sae.config.n_features) if amp_sums[k] > 0.1 * amp_sums[target_atom]]
+    candidates = [k for k in range(sae.cfg.n_atoms) if amp_sums[k] > 0.1 * amp_sums[target_atom]]
     rng = np.random.default_rng(cfg.seed)
     control_atom = int(rng.choice([k for k in candidates if k != target_atom]
                                     or [target_atom]))
@@ -266,16 +250,21 @@ def cross_sae_alignment(sae_a, sae_b) -> dict:
     """
     from scipy.optimize import linear_sum_assignment
 
-    Wa = sae_a.directions.detach().cpu().numpy()           # (F, D, R)
-    Wb = sae_b.directions.detach().cpu().numpy()
-    F = Wa.shape[0]
-    if Wb.shape[0] != F:
-        return {"error": "F must match between the two SAEs"}
+    # Cutover: no `directions`. The atom's primary ambient direction is the top
+    # right-singular vector of its decoder block (K x D).
+    def _primary_dirs(sae) -> np.ndarray:
+        blocks = sae.decoder_blocks.detach().cpu().numpy()  # (F, K, D)
+        out = np.zeros((blocks.shape[0], blocks.shape[2]), dtype=np.float64)
+        for k in range(blocks.shape[0]):
+            _, _, vt = np.linalg.svd(blocks[k].astype(np.float64), full_matrices=False)
+            out[k] = vt[0]
+        return out
 
-    # Use the FIRST direction column as the atom's primary direction
-    # (most-energy projection).
-    Wa_p = Wa[:, :, 0]                                       # (F, D)
-    Wb_p = Wb[:, :, 0]
+    Wa_p = _primary_dirs(sae_a)                              # (F, D)
+    Wb_p = _primary_dirs(sae_b)
+    F = Wa_p.shape[0]
+    if Wb_p.shape[0] != F:
+        return {"error": "F must match between the two SAEs"}
     # Normalize for cosine similarity.
     Wa_n = Wa_p / (np.linalg.norm(Wa_p, axis=1, keepdims=True) + 1e-12)
     Wb_n = Wb_p / (np.linalg.norm(Wb_p, axis=1, keepdims=True) + 1e-12)
@@ -300,26 +289,30 @@ def train_seeded_sae(cfg: Config, X: torch.Tensor, ref_sae_config, device) -> "M
     """Train a fresh Manifold-SAE from a different random seed on the
     same data the reference SAE was trained on.
     """
+    import dataclasses
     from manifold_sae.losses import total_loss
     from manifold_sae.sae import ManifoldSAE
     torch.manual_seed(cfg.seed + 1)        # different seed from reference
-    sae = ManifoldSAE(ref_sae_config).to(device)
+    # The closed-form REML solve in sae.fit requires float64; rebuild the
+    # reference config at double precision for this seeded retrain.
+    seed_config = dataclasses.replace(ref_sae_config, dtype=torch.float64)
+    sae = ManifoldSAE(seed_config).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=1e-3)
-    X = X.to(device)
+    X = X.to(device=device, dtype=torch.float64)
     for step in range(cfg.cross_sae_steps):
         idx = torch.randint(0, X.shape[0], (256,))
         batch = X[idx]
         opt.zero_grad()
         out = sae(batch)
-        loss = total_loss(out, batch, ref_sae_config)["total"]
+        loss = total_loss(out, batch, sae)["total"]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         opt.step()
         if step % 500 == 0:
-            print(f"  [seed-B step {step}] mse={torch.nn.functional.mse_loss(out.reconstruction, batch).item():.4e}", flush=True)
+            print(f"  [seed-B step {step}] mse={torch.nn.functional.mse_loss(out.x_hat, batch).item():.4e}", flush=True)
     sae.eval()
-    sae.update_snapshot(X[: min(2048, X.shape[0])])
-    sae.inference_mode = True
+    sae.fit(X[: min(2048, X.shape[0])])
+    sae.lock_snapshot()
     return sae
 
 
@@ -349,7 +342,7 @@ def main() -> int:
     D = model.config.hidden_size
 
     sae = load_curve_sae(Path(cfg.checkpoint), D, device)
-    print(f"[setup] loaded SAE_A F={sae.config.n_features} top_k={sae.config.top_k}", flush=True)
+    print(f"[setup] loaded SAE_A F={sae.cfg.n_atoms} top_k={sae.cfg.sparsity.target_k}", flush=True)
 
     print("\n=== Benchmark A: counterfactual atom ablation ===", flush=True)
     ablation = benchmark_ablation(sae, model, blocks, cfg.layer, tok, device, cfg)
@@ -383,7 +376,7 @@ def main() -> int:
     mu = X.mean(0, keepdim=True); sigma = X.std(0).clamp(min=1e-6)  # per-dim std (was scalar — see _normalize.py)
     X_n = (X - mu) / sigma
     print(f"  harvested {X.shape}, training seed-B SAE…", flush=True)
-    sae_b = train_seeded_sae(cfg, X_n, sae.config, device)
+    sae_b = train_seeded_sae(cfg, X_n, sae.cfg, device)
     align = cross_sae_alignment(sae, sae_b)
     print(f"  mean matched-pair |cos|: {align['mean_matched_similarity']:.3f}", flush=True)
     print(f"  median: {align['median_matched_similarity']:.3f}", flush=True)

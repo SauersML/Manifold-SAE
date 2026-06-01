@@ -1,4 +1,11 @@
-# gam / gamfit patches needed for full multi-dim Duchon support
+# gam / gamfit patches for full multi-dim Duchon support
+
+> **Shipped — historical.** The multi-dim Duchon + additive-REML API
+> described below (`duchon_basis`, `duchon_function_norm_penalty`,
+> `gaussian_reml_fit_additive`, etc.) has since been implemented and
+> released in gamfit 0.1.141, which `pyproject.toml` now pins. This doc
+> is kept as the design/patch record of how that API was introduced; it
+> no longer describes outstanding work.
 
 These patches expose the multi-dim Duchon machinery that already exists
 in the Rust crate (`src/terms/basis.rs::build_duchon_basis`,

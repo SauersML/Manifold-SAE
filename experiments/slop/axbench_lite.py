@@ -95,19 +95,8 @@ def _find_blocks(model) -> nn.ModuleList:
 
 
 def load_curve_sae(path: Path, D: int, device: torch.device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    from manifold_sae.sae import load_sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 def magnitude_bucket(token_str: str) -> int:
@@ -160,30 +149,34 @@ def evaluate_steering_method(model, blocks, tok, sae, sae_layer, prompts,
             if method == "noop":
                 r_L_new = r_L
             elif method == "atom_t":
-                # Manifold-SAE atom-position steering: modify atom's t.
-                import gamfit.torch as gt
+                # Manifold-SAE atom-position steering: move atom's position to
+                # magnitude_param. Cutover: the decoder block is ambient, so the
+                # delta is z_k * (curve(t_new) - curve(t_orig)), with curves read
+                # off the primitive's grid (nearest grid point to each t).
                 with torch.no_grad():
-                    sae_out = sae(r_L.unsqueeze(0))
-                positions = sae_out.positions[0]
+                    sae_out = sae(r_L.unsqueeze(0).to(dtype=sae.cfg.dtype))
                 amp = sae_out.amplitudes[0]
-                # If amp is zero, the atom is silent — skip; recon won't change.
                 if amp[atom] < 1e-6:
                     r_L_new = r_L
                 else:
-                    t_orig = positions[atom].to(torch.float64)
-                    t_new = torch.tensor([float(magnitude_param)], dtype=torch.float64, device=device)
-                    centers = sae.centers.to(device)
-                    phi_orig = gt.duchon_basis_1d(t_orig.unsqueeze(0), centers, m=2, periodic=False)
-                    phi_new = gt.duchon_basis_1d(t_new, centers, m=2, periodic=False)
-                    B_k = sae.B_locked[atom].to(device)
-                    dir_k = sae.directions[atom].to(device)
-                    g_orig = (phi_orig @ B_k).to(dir_k.dtype) @ dir_k.t()
-                    g_new = (phi_new @ B_k).to(dir_k.dtype) @ dir_k.t()
-                    delta = amp[atom] * (g_new - g_orig).squeeze(0)
+                    GRID = 256
+                    z_k = sae_out.z[0, atom]
+                    curve_k = sae_out.curves[0, atom]
+                    block_k = sae.decoder_blocks[atom]
+                    g_orig = z_k * (curve_k @ block_k)
+                    grid = torch.linspace(0.0, 1.0, GRID, dtype=sae.cfg.dtype, device=device)
+                    curve_grid = sae.extract_feature_curves(grid_size=GRID)[atom].to(device)
+                    j = int(torch.argmin((grid - float(magnitude_param)).abs()).item())
+                    g_new = z_k * curve_grid[j]
+                    delta = (g_new - g_orig)
                     r_L_new = r_L + delta.to(r_L.dtype)
             elif method == "direction":
-                # Standard direction-style steering: add α · W_k to residual.
-                dir_k = sae.directions[atom, :, 0].to(device).to(r_L.dtype)  # primary direction
+                # Standard direction-style steering: add α · (atom's primary
+                # ambient direction). Cutover: primary direction = top right-
+                # singular vector of the atom's decoder block (K x D).
+                block_k = sae.decoder_blocks[atom].detach().cpu().numpy().astype(np.float64)
+                _, _, vt = np.linalg.svd(block_k, full_matrices=False)
+                dir_k = torch.as_tensor(vt[0], dtype=r_L.dtype, device=device)
                 dir_k = dir_k / (dir_k.norm() + 1e-9)
                 r_L_new = r_L + float(magnitude_param) * dir_k
             else:
@@ -235,7 +228,7 @@ def main() -> int:
     D = model.config.hidden_size
 
     sae = load_curve_sae(Path(cfg.checkpoint), D, device)
-    print(f"[axbench] loaded SAE F={sae.config.n_features}", flush=True)
+    print(f"[axbench] loaded SAE F={sae.cfg.n_atoms}", flush=True)
 
     task = CONCEPT_TASKS[cfg.concept_task]
     source_prompts = [t.format(N=N) for N in task["source_values"] for t in task["templates"]]
@@ -245,13 +238,13 @@ def main() -> int:
     hh = blocks[cfg.layer].register_forward_hook(
         lambda m, i, o: cap.__setitem__("h", (o[0] if isinstance(o, tuple) else o).detach())
     )
-    amp_sums = torch.zeros(sae.config.n_features, device=device)
+    amp_sums = torch.zeros(sae.cfg.n_atoms, device=device)
     with torch.no_grad():
         for p in source_prompts:
             inputs = tok(p, return_tensors="pt").to(device)
             model(**inputs)
-            sae_out = sae(cap["h"][0, -1, :].unsqueeze(0))
-            amp_sums += sae_out.amplitudes[0]
+            sae_out = sae(cap["h"][0, -1, :].unsqueeze(0).to(dtype=sae.cfg.dtype))
+            amp_sums += sae_out.amplitudes[0].to(amp_sums.dtype)
     hh.remove()
     target_atom = int(amp_sums.argmax().item())
     print(f"[axbench] target atom = {target_atom} (mean amp on source prompts: {amp_sums[target_atom]/len(source_prompts):.3f})", flush=True)

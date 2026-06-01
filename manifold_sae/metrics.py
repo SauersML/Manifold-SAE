@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from scipy.linalg import subspace_angles
 from scipy.optimize import linear_sum_assignment
+from scipy.stats import spearmanr
 
 from .data_synthetic import chamfer_distance, SyntheticDataset
 from .sae import ManifoldSAE
@@ -28,13 +30,14 @@ from .sae import ManifoldSAE
 
 def _spearman(a: np.ndarray, b: np.ndarray) -> float:
     """Spearman rank correlation. Returns |ρ| so sign-flips count as success."""
-    if len(a) < 3:
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    if len(a) < 3 or a.std() < 1e-12 or b.std() < 1e-12:
         return 0.0
-    ra = np.argsort(np.argsort(a))
-    rb = np.argsort(np.argsort(b))
-    if ra.std() < 1e-12 or rb.std() < 1e-12:
+    rho = spearmanr(a, b).correlation
+    if not np.isfinite(rho):
         return 0.0
-    return float(abs(np.corrcoef(ra, rb)[0, 1]))
+    return float(abs(rho))
 
 
 def _subspace_cosine(W_sae: np.ndarray, P_gt: np.ndarray) -> float:
@@ -43,10 +46,7 @@ def _subspace_cosine(W_sae: np.ndarray, P_gt: np.ndarray) -> float:
     ``W_sae`` is (D, R_sae), ``P_gt`` is (D, R_gt) representing the planted
     projection matrix's columns. Returns cos(min principal angle) ∈ [0, 1].
     """
-    q_s, _ = np.linalg.qr(W_sae)
-    q_g, _ = np.linalg.qr(P_gt)
-    svs = np.linalg.svd(q_g.T @ q_s, compute_uv=False)
-    return float(svs.max())
+    return float(np.cos(subspace_angles(W_sae, P_gt).min()))
 
 
 @torch.no_grad()
@@ -64,10 +64,25 @@ def hungarian_matched_recovery(
     Returns dict with per-feature matched metrics and the cost matrix used.
     """
     device = next(sae.parameters()).device
-    out = sae(dataset.x.to(device))
-    sae_pos = out.positions.cpu().numpy()                # (N, F_sae)
+    out = sae(dataset.x.to(device=device, dtype=sae.cfg.dtype))
+    # positions is now (N, F_sae, d); take the first manifold coordinate.
+    sae_pos = out.positions[..., 0].cpu().numpy()        # (N, F_sae)
     sae_amp = out.amplitudes.cpu().numpy()               # (N, F_sae) binary
-    sae_W = sae.directions.detach().cpu().numpy()        # (F_sae, D, R)
+    # The old per-atom ambient ``directions`` field (F, D, R) is gone. The
+    # gamfit decoder block ``decoder_blocks[k]`` is (K, D) and already lives
+    # in ambient R^D; the atom's ambient subspace is spanned by the top-R
+    # right-singular vectors of that block. We build (F_sae, D, R) to match
+    # the downstream ``_subspace_cosine`` contract.
+    blocks = sae.decoder_blocks.detach().cpu().numpy()   # (F_sae, K, D)
+    R = int(sae.cfg.intrinsic_rank)
+    F_sae_blocks = blocks.shape[0]
+    D = blocks.shape[2]
+    sae_W = np.zeros((F_sae_blocks, D, R), dtype=np.float64)
+    for k in range(F_sae_blocks):
+        # right-singular vectors Vt: (min(K,D), D); rows span the ambient image
+        _, _, Vt = np.linalg.svd(blocks[k], full_matrices=False)
+        r = min(R, Vt.shape[0])
+        sae_W[k, :, :r] = Vt[:r].T                        # (D, r)
 
     gt_active = dataset.ground_truth["active"].numpy().astype(bool)  # (N, F_gt)
     gt_ts = dataset.ground_truth["ts"].numpy()                       # (N, F_gt)

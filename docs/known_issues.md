@@ -88,19 +88,17 @@ convention used in `manifold_sae/sae.py`).
 Status: **OPEN** (only matters at edge cases; default works in
 practice).
 
-## Hardcoded float64 for gamfit
+## float64 for gamfit's REML solve
 
-gamfit's REML primitive requires float64. The current SAE forward
-does dtype casts around the gamfit call:
-
-```python
-t_packed = positions.t().contiguous().view(-1).to(torch.float64)
-y_packed = y_proj.permute(1, 0, 2).contiguous().view(F * B, R).to(torch.float64)
-```
-
-Adds ~4 MB allocation + copy per forward at F=2048, B=128, R=2. Small
-but real overhead on GPU. Status: **OPEN**, awaiting gamfit float32
-support.
+gamfit's REML primitive runs in float64. As of gamfit 0.1.141 the dtype is
+pinned on `ManifoldSAEConfig` (default `float64`) and the primitive *rejects*
+mismatched input dtype rather than silently promoting. The old hand-rolled
+`sae.py` forward that packed `positions`/`y_proj` to float64 around the gamfit
+call is gone — `manifold_sae/sae.py` is now a thin re-export of
+`gamfit.torch.ManifoldSAE`. Callers holding float32 data should cast to the
+model's config dtype before forward; the integration layer
+(`integration.py::_call_loss`) does this automatically. Status: **OPEN**,
+awaiting gamfit float32 support for the inner solve.
 
 ## Resolved
 

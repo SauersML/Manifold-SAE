@@ -25,43 +25,7 @@ from typing import List, Sequence
 import torch
 from torch import nn
 
-from gamfit.torch import SkipAffineSmooth  # gamfit >= 0.1.123
-
-
-def _build_skip_affine(
-    in_dim: int,
-    out_dim: int,
-    n_atoms: int,
-    rank_skip: int,
-    jumprelu_threshold: float,
-    dtype: torch.dtype | None = None,
-) -> SkipAffineSmooth:
-    """Build a SkipAffineSmooth, working around the gamfit 0.1.123 tied-init
-    crash when ``in_dim != out_dim`` (encoder is (in,F) but decoder is (F,out);
-    `W_dec.copy_(W_enc.t())` fails). For square cases we use the primitive
-    as-shipped; for rectangular cases we use square dummy dims for the
-    constructor (which only affects the discarded init) and overwrite the
-    parameter tensors with correctly-shaped Kaiming-init weights.
-    """
-    dt = dtype if dtype is not None else torch.get_default_dtype()
-    if in_dim == out_dim:
-        return SkipAffineSmooth(
-            in_dim=in_dim, out_dim=out_dim, n_atoms=n_atoms,
-            rank_skip=rank_skip, jumprelu_threshold=jumprelu_threshold, dtype=dt,
-        )
-    # Construct under matched dims, then reshape decoder/bypass to (F, out_dim).
-    sm = SkipAffineSmooth(
-        in_dim=in_dim, out_dim=in_dim, n_atoms=n_atoms,
-        rank_skip=min(rank_skip, in_dim), jumprelu_threshold=jumprelu_threshold, dtype=dt,
-    )
-    sm.out_dim = out_dim
-    sm.W_dec = nn.Parameter(torch.empty(n_atoms, out_dim, dtype=dt))
-    nn.init.kaiming_uniform_(sm.W_dec, a=5**0.5)
-    sm.b_out = nn.Parameter(torch.zeros(out_dim, dtype=dt))
-    if rank_skip > 0:
-        sm.skip_U = nn.Parameter(torch.empty(out_dim, min(rank_skip, in_dim, out_dim), dtype=dt))
-        nn.init.kaiming_uniform_(sm.skip_U, a=5**0.5)
-    return sm
+from gamfit.torch import SkipAffineSmooth  # gamfit >= 0.1.134
 
 
 @dataclass
@@ -71,12 +35,6 @@ class CRMConfig:
     transcoder_mid: int = 1024
     transcoder_rank_skip: int = 32
     jumprelu_threshold: float = 0.05
-    # Back-compat: pre-0.1.123 CRM exposed `sae_top_k` / `transcoder_top_k`.
-    # These are ignored under the gamfit SkipAffineSmooth backend (sparsity is
-    # JumpReLU-gated, not hard-K) but accepted so existing call-sites keep
-    # working. Drop in a future cleanup pass.
-    sae_top_k: int | None = None
-    transcoder_top_k: int | None = None
 
 
 class CompleteReplacementModel(nn.Module):
@@ -109,9 +67,10 @@ class CompleteReplacementModel(nn.Module):
             ]
         )
         # Inter-layer transcoders: rank_skip>0 → paired-residual bypass.
+        # SkipAffineSmooth handles in_dim != out_dim directly.
         self.transcoders = nn.ModuleList(
             [
-                _build_skip_affine(
+                SkipAffineSmooth(
                     in_dim=config.layer_dims[l],
                     out_dim=config.layer_dims[l + 1],
                     n_atoms=config.transcoder_mid,
@@ -121,6 +80,7 @@ class CompleteReplacementModel(nn.Module):
                         config.layer_dims[l + 1],
                     ),
                     jumprelu_threshold=config.jumprelu_threshold,
+                    dtype=dt,
                 )
                 for l in range(self.L - 1)
             ]

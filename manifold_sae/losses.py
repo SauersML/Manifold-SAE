@@ -1,79 +1,113 @@
-"""Loss components for Manifold-SAE training.
+"""Loss components for Manifold-SAE training (gamfit-native schema).
 
-Under Path B (gamfit-managed B and λ, REML each batch), the smoothness
-selection is internal to gamfit. The training loss is:
+The training objective under the gamfit-native :class:`gamfit.torch.ManifoldSAE`
+is reconstruction plus the module's own Rust-backed regularizers:
 
-    MSE(recon, x)                — full SAE reconstruction in ambient
-  + sparsity_weight · |amps|     — standard SAE sparsity
-  + ortho_weight · ortho_loss    — identification: W_k ≠ W_j across features
-  − reml_weight · reml_score     — REML log-likelihood (smoothness via gamfit)
-  + light coverage prior         — identification: positions span [0, 1]
-  + light monotonicity prior     — parameterization tiebreaker
+    MSE(x_hat, x)                          — SAE reconstruction in ambient R^D
+  + mean(z)                                — activation sparsity surrogate
+  + sae.decoder_ortho_penalty()            — per-atom decoder block orthogonality
+  + sae.decoder_monotonicity_penalty()     — per-atom curve monotonicity prior
+  + light coverage prior                   — firing positions span the manifold
 
-What's NOT here anymore:
-  - quadratic smoothness penalty (lived inside REML now)
-  - curve_norm gauge penalty   (REML's likelihood pins the amplitude scale
-                                through the per-feature ``by`` weighting)
-  - cumulant identifiability    (REML + sparsity is enough on the toy)
+What changed in the cutover:
+  - There is no explicit ``-reml_score`` loss term. REML now drives the
+    closed-form ``sae.fit()`` solve, not a backprop loss (the old term had a
+    degenerate maximum at all-zero amplitudes).
+  - Smoothness λ selection is internal to gamfit (``sae.fit`` / ``lambdas``).
+  - ``ortho_loss`` / ``monotonicity_loss`` are no longer fields of the output;
+    they are *methods on the module* and are queried here when the module is
+    passed in.
+
+Signature note: ``total_loss(output, target, sae)`` REQUIRES the SAE *module*
+as its third argument so it can call ``decoder_ortho_penalty()`` /
+``decoder_monotonicity_penalty()``. Passing anything that is not a
+:class:`ManifoldSAE` raises ``TypeError`` — there is no degraded
+config-only path.
 """
 
 from __future__ import annotations
 
 import torch
 
-from .sae import ManifoldSAEConfig, ManifoldSAEOutput
+from .sae import ManifoldSAE, ManifoldSAEOutput
 
 
-def _position_coverage_loss(positions: torch.Tensor, mask: torch.Tensor, n_bins: int = 10) -> torch.Tensor:
-    """Identification prior: firing positions should spread over [0, 1].
+def _position_coverage_loss(
+    positions: torch.Tensor, mask: torch.Tensor, n_bins: int = 10
+) -> torch.Tensor:
+    """Identification prior: firing positions should spread over the manifold.
 
-    KL from uniform on soft-binned firing-position histogram.
+    ``positions`` is ``(N, F, d)`` under the new schema; we use the angular /
+    first intrinsic coordinate. ``mask`` is ``(N, F)``. KL from uniform on a
+    soft-binned firing-position histogram, averaged over atoms.
     """
-    B, F = positions.shape
-    centers = torch.linspace(0.0, 1.0, n_bins, device=positions.device, dtype=positions.dtype)
+    if positions.dim() == 3:
+        coord = positions[..., 0]
+    else:
+        coord = positions
+    lo = coord.detach().min()
+    hi = coord.detach().max()
+    span = (hi - lo).clamp(min=1e-6)
+    coord = (coord - lo) / span
+    centers = torch.linspace(0.0, 1.0, n_bins, device=coord.device, dtype=coord.dtype)
     width = 1.0 / max(n_bins - 1, 1)
-    diff = positions.unsqueeze(-1) - centers.view(1, 1, -1)
+    diff = coord.unsqueeze(-1) - centers.view(1, 1, -1)
     bin_weights = torch.exp(-0.5 * (diff / (width + 1e-8)) ** 2)
     mw = mask.unsqueeze(-1) * bin_weights
     p = mw.sum(dim=0)
     p = p / p.sum(dim=-1, keepdim=True).clamp(min=1e-12)
     uniform = 1.0 / n_bins
-    kl = (p * (torch.log(p.clamp(min=1e-12)) - torch.log(torch.tensor(uniform, device=p.device, dtype=p.dtype)))).sum(dim=-1)
+    kl = (
+        p
+        * (
+            torch.log(p.clamp(min=1e-12))
+            - torch.log(torch.tensor(uniform, device=p.device, dtype=p.dtype))
+        )
+    ).sum(dim=-1)
     return kl.mean()
 
 
 def total_loss(
     output: ManifoldSAEOutput,
     target: torch.Tensor,
-    config: ManifoldSAEConfig,
+    sae: ManifoldSAE,
+    *,
+    sparsity_weight: float = 1e-3,
+    coverage_weight: float = 1e-2,
+    ortho_weight: float = 1e-2,
+    monotonicity_weight: float = 1e-2,
 ) -> dict[str, torch.Tensor]:
-    mse = torch.mean((output.reconstruction - target) ** 2)
-    sparsity = output.mask_soft.mean()
-    coverage = _position_coverage_loss(output.positions, output.mask_soft)
-    # NOTE: gamfit already runs REML *internally* to select λ_k per feature
-    # given current positions, y_proj, and amplitudes. The fit's B_k and
-    # λ_k are then used to build the reconstruction. So smoothness selection
-    # happens inside gamfit; the MSE on the SAE reconstruction drives the
-    # encoder + W via backprop through the gamfit autograd path.
-    #
-    # We do NOT add `-reml_score` to the loss as an explicit term: that
-    # term has a degenerate maximum at "all amplitudes zero" (gamfit's
-    # reml_score for zero-weight features is unbounded above because there's
-    # no residual to fit and no penalty paid), which collapses the model.
-    # Keep reml_score in the output struct for diagnostics only.
+    """Reconstruction + Rust-backed regularizers on the gamfit-native output.
+
+    ``sae`` MUST be the :class:`ManifoldSAE` module so the decoder penalties
+    can be evaluated off it. Passing anything else raises ``TypeError``.
+    """
+    if not isinstance(sae, ManifoldSAE):
+        raise TypeError(
+            "total_loss requires the ManifoldSAE module as its third argument "
+            f"(to read decoder penalties), got {type(sae).__name__}"
+        )
+    mse = torch.mean((output.x_hat - target) ** 2)
+    # Activation-magnitude sparsity surrogate (z = assignments * amplitudes).
+    sparsity = output.z.abs().mean()
+    coverage = _position_coverage_loss(output.positions, output.amplitudes)
+
+    ortho = sae.decoder_ortho_penalty()
+    monotonicity = sae.decoder_monotonicity_penalty()
+
     total = (
         mse
-        + config.sparsity_weight * sparsity
-        + config.ortho_weight * output.ortho_loss
-        + 1e-2 * coverage
-        + 1e-2 * output.monotonicity_loss
+        + sparsity_weight * sparsity
+        + ortho_weight * ortho
+        + coverage_weight * coverage
+        + monotonicity_weight * monotonicity
     )
     return {
         "mse": mse,
         "sparsity": sparsity,
-        "ortho": output.ortho_loss,
-        "reml": output.reml_score.mean(),
+        "ortho": ortho,
+        "reml": output.reml_score.reshape(-1).mean(),
         "coverage": coverage,
-        "monotonicity": output.monotonicity_loss,
+        "monotonicity": monotonicity,
         "total": total,
     }

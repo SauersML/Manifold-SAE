@@ -1,11 +1,12 @@
-# Publishing flow — gamfit 0.1.105 → cluster
+# Publishing flow — gamfit → cluster
 
 ## Current state
 
-* gam main is at 0.1.105 with the multi-dim Duchon + additive REML API.
-* PyPI is still at 0.1.98 (old API).
-* Cluster's uv.lock pins `gamfit==0.1.98`.
-* manifold_sae main uses the new API and will fail at runtime against gamfit 0.1.98.
+* gamfit 0.1.141 (multi-dim Duchon + additive REML API) is published on PyPI
+  and installed in the local venv.
+* manifold_sae main uses this API; `pyproject.toml` pins `gamfit>=0.1.141`.
+* The steps below are the general flow for cutting and shipping a new gamfit
+  wheel to the cluster; substitute the next version number as needed.
 
 ## Steps to fully publish
 
@@ -35,17 +36,15 @@ cd /Users/user/gam
 (In practice CI/cibuildwheel is normally what does this — check existing
 GitHub Actions in `.github/workflows/`.)
 
-### 3. Update Manifold-SAE to require gamfit 0.1.105
+### 3. Update Manifold-SAE to require the new gamfit
 
 ```
 cd /Users/user/Manifold-SAE
-# bump in pyproject.toml
-sed -i.bak 's/gamfit>=0.1.67/gamfit>=0.1.105/' pyproject.toml
-rm pyproject.toml.bak
-# regenerate uv.lock
+# bump the gamfit floor in pyproject.toml (currently gamfit>=0.1.141)
+# then regenerate uv.lock
 uv lock --upgrade-package gamfit
 git add pyproject.toml uv.lock
-git commit -m "Require gamfit>=0.1.105 (multi-dim Duchon + additive REML)"
+git commit -m "Require gamfit>=<new-version>"
 git push
 ```
 

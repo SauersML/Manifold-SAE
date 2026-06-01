@@ -1,8 +1,10 @@
-"""Train AdaptiveKv2 SAE with both target-K loss variants; pick winner.
+"""Train AdaptiveKv2 SAE (MLP K-head, target-K regime) on cogito-L40.
 
-Compares loss_kind ∈ {"clipped", "squared"} at matched k_target=32, k_max=80,
-λ=1e-2, 15 epochs on cogito-L40 (held-out colors). Goal: R² ≥ 0.880 at
-mean-K ≈ 32, beating TopK-32 baseline (R²=0.874).
+k_target=32, k_max=80, λ=1e-2, 15 epochs on cogito-L40 (held-out colors).
+Goal: R² ≥ 0.880 at mean-K ≈ 32, beating the TopK-32 baseline (R²=0.874).
+
+v2's distinction from v1 is architectural — an MLP K-head and a tight
+``[k_min, k_max]`` bracket seeded at ``k_target`` — not a loss-flag.
 """
 from __future__ import annotations
 
@@ -51,7 +53,6 @@ def _batches(X_np, bs):
 
 
 def train_one(
-    loss_kind: str,
     X_train: np.ndarray,
     X_val: np.ndarray,
     D: int,
@@ -63,7 +64,7 @@ def train_one(
     k_max: int = 80,
     sparsity_weight: float = 1e-2,
 ) -> dict:
-    print(f"[train:{loss_kind}] starting", flush=True)
+    print("[train:v2] starting", flush=True)
     X_val_t = torch.from_numpy(X_val).to(DEVICE)
     val_var = X_val_t.var().item()
     model = AdaptiveKv2SAE(
@@ -73,7 +74,6 @@ def train_one(
         k_min=4,
         k_max=k_max,
         sparsity_weight=sparsity_weight,
-        loss_kind=loss_kind,
     ).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     history = []
@@ -104,7 +104,7 @@ def train_one(
             k_std = float(np.mean(kstds))
         r2 = 1.0 - mean_recon / val_var
         print(
-            f"[{loss_kind} ep {ep:02d}] recon={ep_loss/max(n_b,1):.4f} "
+            f"[v2 ep {ep:02d}] recon={ep_loss/max(n_b,1):.4f} "
             f"r2={r2:.4f} mean_k={mean_k:.1f} k_std={k_std:.2f} "
             f"t={time.time()-t0:.1f}s",
             flush=True,
@@ -127,7 +127,7 @@ def train_one(
         dead_rate = 1.0 - n_active / model.n_features
 
     summary = {
-        "loss_kind": loss_kind,
+        "variant": "v2",
         "history": history,
         "final_val_r2": history[-1]["val_r2"],
         "final_mean_k": history[-1]["mean_k"],
@@ -140,37 +140,27 @@ def train_one(
         "n_active": n_active,
         "dead_rate": dead_rate,
     }
-    torch.save(model.state_dict(), OUT / f"model_{loss_kind}.pt")
-    (OUT / f"summary_{loss_kind}.json").write_text(json.dumps(summary, indent=2))
+    torch.save(model.state_dict(), OUT / "model_v2.pt")
+    (OUT / "summary_v2.json").write_text(json.dumps(summary, indent=2))
     return summary
 
 
 def main():
     X_train, X_val, D = load_data()
     print(f"[data] train={X_train.shape} val={X_val.shape} D={D}", flush=True)
-    results = {}
-    for kind in ("clipped", "squared"):
-        results[kind] = train_one(kind, X_train, X_val, D)
+    result = train_one(X_train, X_val, D)
 
-    # Pick winner: highest R² subject to mean_k ≤ 32 + slack.
-    def score(r):
-        # Prefer R² but penalize being far above target K.
-        over = max(0.0, r["final_mean_k"] - 32.0)
-        return r["final_val_r2"] - 0.001 * over
-
-    winner = max(results.values(), key=score)
     summary = {
-        "results": results,
-        "winner": winner["loss_kind"],
-        "winner_r2": winner["final_val_r2"],
-        "winner_mean_k": winner["final_mean_k"],
-        "goal_met": (winner["final_val_r2"] >= 0.880 and winner["final_mean_k"] <= 32 + 2),
+        "results": {"v2": result},
+        "winner": "v2",
+        "winner_r2": result["final_val_r2"],
+        "winner_mean_k": result["final_mean_k"],
+        "goal_met": (result["final_val_r2"] >= 0.880 and result["final_mean_k"] <= 32 + 2),
     }
     (OUT / "comparison.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(
         {k: v for k, v in summary.items() if k != "results"} | {
-            "clipped": {k: v for k, v in results["clipped"].items() if k != "history"},
-            "squared": {k: v for k, v in results["squared"].items() if k != "history"},
+            "v2": {k: v for k, v in result.items() if k != "history"},
         },
         indent=2,
     ))

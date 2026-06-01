@@ -50,7 +50,7 @@ Open `colab_run.txt`, paste contents into one Colab cell with a T4 runtime selec
 
 The cell:
 1. clones the repo fresh from GitHub `main`
-2. installs `gamfit>=0.1.81`, `transformers>=4.50`, `datasets`, `scipy`
+2. installs `gamfit>=0.1.141`, `transformers>=4.50`, `datasets`, `scipy`
 3. prints gamfit + transformers versions for debugging
 4. runs `python -m experiments.llm_real`
 

@@ -9,27 +9,34 @@ from __future__ import annotations
 
 __version__ = "0.0.1"
 
-# Lazy submodule imports — sae.py requires the new gamfit (≥0.1.99) Duchon
-# class, which is not present in the cluster's currently-pinned gamfit
-# 0.1.98. We don't want a `_cluster_bridge` import (used by every LLM
-# experiment driver) to fail because of an unrelated module's broken
-# dependency. Resolve sae/encoder lazily on first attribute access.
+# Lazy submodule imports — sae.py is a thin wrapper over gamfit's
+# ``gamfit.torch.ManifoldSAE`` (requires gamfit >= 0.1.134, which ships the
+# curve-atom SAE / AdaptiveTopK / InterchangeSwapDecoder / PoincareAtoms
+# primitives). We resolve sae/encoder lazily so a `_cluster_bridge` import
+# (used by every LLM experiment driver) doesn't fail because of an unrelated
+# module's heavy dependency.
 
-__all__ = [
-    "ManifoldEncoder",
+# Re-exported straight from gamfit via .sae, plus Manifold-SAE-side helpers.
+_SAE_EXPORTS = {
     "ManifoldSAE",
     "ManifoldSAEConfig",
     "ManifoldSAEOutput",
+    "DecoderConfig",
+    "RemlConfig",
+    "SparsityConfig",
     "extract_feature_curves",
-]
+    "lift_atom_curve",
+    "load_sae",
+}
+
+__all__ = ["ManifoldEncoder", *sorted(_SAE_EXPORTS)]
 
 
 def __getattr__(name):
     if name == "ManifoldEncoder":
         from .encoder import ManifoldEncoder
         return ManifoldEncoder
-    if name in {"ManifoldSAE", "ManifoldSAEConfig", "ManifoldSAEOutput",
-                "extract_feature_curves"}:
+    if name in _SAE_EXPORTS:
         from . import sae as _sae
         return getattr(_sae, name)
     raise AttributeError(f"module 'manifold_sae' has no attribute {name!r}")

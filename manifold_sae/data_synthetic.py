@@ -142,6 +142,40 @@ def _random_orthogonal_projection(
     return q.T  # (d_intrinsic, d_ambient)
 
 
+def _mutually_orthogonal_projections(
+    d_projs: list[int], d_ambient: int, rng: np.random.Generator
+) -> list[np.ndarray]:
+    """Return one row-orthonormal projection per feature, MUTUALLY orthogonal.
+
+    Independent random subspaces (``_random_orthogonal_projection`` called per
+    feature) are each internally orthonormal but overlap with one another — two
+    random d-planes in R^D share a nonzero principal angle. Here we instead carve
+    *disjoint* blocks out of a single ambient orthonormal frame: feature i's rows
+    span a subspace that is exactly orthogonal to feature j's for all i != j.
+
+    This is the clean ground truth for the orthogonal-manifolds experiment: the
+    planted curves live in non-interacting blocks of R^D, so any cross-block
+    energy in a recovered atom is unambiguous leakage rather than ground-truth
+    geometry.
+    """
+    total = int(sum(d_projs))
+    if total > d_ambient:
+        raise ValueError(
+            f"sum(d_projs)={total} exceeds d_ambient={d_ambient}; cannot embed "
+            "mutually orthogonal subspaces. Raise d_ambient or use fewer/"
+            "lower-dimensional manifolds."
+        )
+    g = rng.standard_normal(size=(d_ambient, total))
+    q, _ = np.linalg.qr(g)  # (d_ambient, total), orthonormal columns
+    out: list[np.ndarray] = []
+    col = 0
+    for d in d_projs:
+        block = q[:, col : col + d]  # (d_ambient, d)
+        out.append(block.T.copy())  # (d, d_ambient), row-orthonormal
+        col += d
+    return out
+
+
 @dataclass
 class FeatureCurve:
     """A planted ground-truth curve in ambient space.
@@ -206,6 +240,8 @@ class SyntheticDataset(Dataset):
         noise: float = 0.05,
         seed: int = 0,
         t_grid_size: int = 256,
+        orthogonal_subspaces: bool = False,
+        curve_indices: list[int] | None = None,
     ) -> None:
         if d_ambient < 4:
             raise ValueError(f"d_ambient={d_ambient} too small; need >=4")
@@ -223,13 +259,32 @@ class SyntheticDataset(Dataset):
         self.noise = noise
         self.seed = seed
         self.t_grid_size = t_grid_size
+        self.orthogonal_subspaces = orthogonal_subspaces
 
         rng = np.random.default_rng(seed)
 
-        # Build per-feature ground-truth curves, cycling through curve types.
-        self.features: list[FeatureCurve] = []
+        # Which curve type each planted feature uses. Default cycles through
+        # CURVE_TYPES (monotone-friendly first); pass `curve_indices` to plant a
+        # chosen set of *distinct* manifold types ("various manifolds").
+        if curve_indices is None:
+            type_idx = [k % len(CURVE_TYPES) for k in range(n_features)]
+        else:
+            if len(curve_indices) != n_features:
+                raise ValueError(
+                    f"curve_indices has {len(curve_indices)} entries but "
+                    f"n_features={n_features}"
+                )
+            type_idx = [i % len(CURVE_TYPES) for i in curve_indices]
+
+        # Build per-feature intrinsic curve fns + their projection ranks first,
+        # so orthogonal mode can carve one shared ambient frame into disjoint
+        # blocks (mutual orthogonality across features, not just within).
+        intrinsic_fns: list[Callable[[np.ndarray], np.ndarray]] = []
+        names: list[str] = []
+        periodics: list[bool] = []
+        d_projs: list[int] = []
         for k in range(n_features):
-            name, fn, d_intrinsic, periodic = CURVE_TYPES[k % len(CURVE_TYPES)]
+            name, fn, d_intrinsic, periodic = CURVE_TYPES[type_idx[k]]
             # Bump d_intrinsic to ensure projection rank; for a 1D line use a 2D
             # padding so the projection isn't degenerate.
             d_proj = max(d_intrinsic, 2)
@@ -241,15 +296,27 @@ class SyntheticDataset(Dataset):
                 intrinsic_fn = fn_padded
             else:
                 intrinsic_fn = fn
-            proj = _random_orthogonal_projection(d_proj, d_ambient, rng)
-            self.features.append(
-                FeatureCurve(
-                    name=name,
-                    periodic=periodic,
-                    intrinsic_fn=intrinsic_fn,
-                    projection=proj,
-                )
+            intrinsic_fns.append(intrinsic_fn)
+            names.append(name)
+            periodics.append(periodic)
+            d_projs.append(d_proj)
+
+        if orthogonal_subspaces:
+            projs = _mutually_orthogonal_projections(d_projs, d_ambient, rng)
+        else:
+            projs = [
+                _random_orthogonal_projection(d, d_ambient, rng) for d in d_projs
+            ]
+
+        self.features: list[FeatureCurve] = [
+            FeatureCurve(
+                name=names[k],
+                periodic=periodics[k],
+                intrinsic_fn=intrinsic_fns[k],
+                projection=projs[k],
             )
+            for k in range(n_features)
+        ]
 
         # Precompute a dense reference point cloud per feature on a fixed t-grid.
         t_grid = np.linspace(0.0, 1.0, t_grid_size, endpoint=False)
@@ -298,6 +365,11 @@ class SyntheticDataset(Dataset):
             "active": self._active,
             "ts": self._ts,
             "amps": self._amps,
+            # Per-feature planted ambient subspace, (d_proj, d_ambient)
+            # row-orthonormal. In orthogonal_subspaces mode these are mutually
+            # orthogonal across features; used for principal-angle + leakage eval.
+            "subspace_bases": [feat.projection for feat in self.features],
+            "orthogonal_subspaces": orthogonal_subspaces,
         }
 
     # ------------------------------------------------------------------

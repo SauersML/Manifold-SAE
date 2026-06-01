@@ -1,39 +1,36 @@
-# Integration audit — patches applied
+# Integration notes — gamfit-native state (gamfit 0.1.141)
 
-Only minimal one-line patches were applied to keep modules importable; no
-refactors. Per audit rules.
+This repo is fully cut over to the gamfit primitives. There are no import
+guards, version fallbacks, or stubs. The notes below record the current truth
+(verified against the installed `gamfit==0.1.141`).
 
-## 1. `manifold_sae/transcoder.py` — guard `SkipAffineSmooth` import
+## `manifold_sae/transcoder.py` — direct `SkipAffineSmooth` import
 
-**Before** (line 33):
 ```python
 from gamfit.torch import SkipAffineSmooth
 ```
 
-**After**:
-```python
-try:
-    from gamfit.torch import SkipAffineSmooth  # type: ignore
-except ImportError:  # gamfit<0.1.99 lacks SkipAffineSmooth — keep module importable
-    SkipAffineSmooth = None  # type: ignore
-```
+The import is unconditional. `SkipAffineSmooth` ships in `gamfit.torch`; there
+is no `try/except ImportError` guard and no `None` fallback. Likewise the
+integration layer imports it directly (`_build_transcoder`) — there is no
+`_LinearTranscoderStub` and no stub-substitution path anywhere.
 
-**Reason**: the installed `gamfit==0.1.98` in this venv does not yet
-expose `SkipAffineSmooth`. The hard import broke `manifold_sae.transcoder`
-import-time, which in turn broke any downstream module that did
-`from manifold_sae import transcoder`.
+## `manifold_sae/sae.py` — thin re-export of `gamfit.torch.ManifoldSAE`
 
-The fallback `None` lets the module load; the integration layer
-substitutes a `_LinearTranscoderStub` when the symbol is unavailable.
+`sae.py` no longer contains a hand-rolled SAE; it re-exports the gamfit
+primitive and its config/output dataclasses and adds only Manifold-SAE-side
+glue (`load_sae`, `extract_feature_curves`, `lift_atom_curve`).
 
-## Pre-existing bugs surfaced but NOT patched
+* **Resolved: F=8 / per-atom λ.** The old `result.lambdas.reshape(())` crash
+  belonged to the deleted hand-rolled solve. gamfit's `ManifoldSAEOutput.lambdas`
+  is a per-atom vector of shape `(n_atoms,)` (one λ per atom), and forward + fit
+  both run at F=8. ManifoldSAE is exercised at the shared F=8 setting in the
+  integration smoke test — no xfail, no F>=16 override.
 
-- **`manifold_sae/sae.py:357`** — `result.lambdas.reshape(())` raises when
-  gamfit's joint additive REML returns one λ per atom (size > 1). The
-  integration smoke test marks `ManifoldSAE` as `xfail` and leaves the
-  bug for the sae.py owner to fix.
+## dtype handling at the boundary
 
-No other modules required patches — all of `adaptive_k`, `crm`,
-`crosscoder`, `equivariant`, `sheaf`, `wasserstein_sae`, `scale`,
-`circuit_trace`, `kernels/*`, `eval/*`, and `autointerp/*` import and
-run cleanly.
+gamfit's `ManifoldSAE` is pinned to its config dtype (float64 by default for
+the REML solve) and *raises* on a mismatched input dtype instead of silently
+promoting. The integration driver (`integration.py::_call_loss`) casts the
+input to the model's expected dtype before calling forward, so callers can pass
+float32 data and the manifold variant still runs.

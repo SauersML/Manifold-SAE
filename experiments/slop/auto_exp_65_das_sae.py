@@ -153,15 +153,17 @@ def train_one(name, lambda_intv, X_t, hue_t, v_hue, tr_idx, val_idx, device, rng
         tgt = build_target_swap(x_a, x_b, ha, hb, v_hue)
         scores = sae.per_feature_swap_score(x_a, x_b, tgt).cpu().numpy()
         n_above = int((scores > THRESHOLD).sum())
-        # Evaluate group-swap R² (use learned mask for DAS, threshold-pass set for vanilla).
+        # Evaluate group-swap R² with a BOOLEAN atom mask (the gamfit
+        # swap_decode contract): learned gated-on set for DAS, swap-score
+        # threshold-pass set for vanilla. This is the operationalization that
+        # worked in the prior auto_exp_65 (group-mask swap, not single feature).
         if lambda_intv > 0:
-            mask = sae.hue_mask()
+            mask = sae.hue_bool_mask(THRESHOLD)
         else:
-            mask_np = (scores > THRESHOLD).astype(np.float32)
-            mask = torch.from_numpy(mask_np).to(device)
+            mask = torch.from_numpy(scores > THRESHOLD).to(device)
         za = sae(x_a).z; zb = sae(x_b).z
-        z_swap = sae.swap(zb, za, mask=mask)
-        x_swap_hat = sae.decode(z_swap)
+        # Fused swap + gated decode: splice a's hue atoms into b's latent.
+        x_swap_hat = sae.swap_decode(za, zb, atom_mask=mask)
         group_intv_r2 = r2(x_swap_hat, tgt)
         final_val_r2 = r2(sae(X_t[val_idx]).x_hat, X_t[val_idx])
 

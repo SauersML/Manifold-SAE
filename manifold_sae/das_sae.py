@@ -1,4 +1,4 @@
-"""DAS-SAE: Distributed Alignment Search Sparse Autoencoder.
+"""DAS-SAE: Distributed Alignment Search Sparse Autoencoder (gamfit-native).
 
 Operationalizes "feature i causally encodes concept C" as a SWAP TEST rather
 than a correlation. Inspired by Geiger et al. DAS / Boundless-DAS
@@ -12,43 +12,64 @@ should align with the HSV (hue) axis such that swapping THOSE feature
 activations between two colors A and B produces the activation that the LLM
 would emit for the "hue of A on the name of B" hypothetical color.
 
-Architecture:
-  - Standard L1/TopK SAE: x → z = relu(W_e (x - b_dec) + b_enc); x̂ = W_d z + b_dec
-  - Learned per-feature hue gate: hue_mask = sigmoid(gate_logits)   ∈ (0, 1)^F
-  - swap(z_a, z_b, m) = z_a * (1 - m) + z_b * m
+BREAKING REDESIGN (gamfit-native)
+---------------------------------
+The decoder + interchange-swap machinery is now the gamfit primitive
+:class:`gamfit.torch.InterchangeSwapDecoder`. Two semantic changes flow from
+this and are *embraced as the new design*, not shimmed:
 
-Training objective:
-  L = ||x - x̂||²
-    + λ_intv · ||W_d · swap(z_a, z_b, hue_mask) + b_dec  −  target_swap||²
-    + λ_gate · (||hue_mask||_1)          # encourage a SMALL set of hue features
-    + λ_l1   · ||z||_1                   # standard SAE sparsity
+1. GATED DECODE. The old ``decode()`` was a plain linear ``z @ W_dec.T``; the
+   gate was used only as a swap mask. The primitive gates at decode time::
+
+       x_hat[i, d] = sum_f gate[f] * z[i, f] * W_dec[d, f] + bias[d]
+
+   So the per-feature scalar ``gate`` IS the learned hue gate now — it
+   directly scales each atom's contribution to reconstruction. There is no
+   longer a separate ``gate_logits``/``sigmoid`` head. ``hue_mask()`` returns
+   ``decoder.gate`` (clamped to [0, 1] for the swap-mask threshold and the
+   sparsity/entropy diagnostics).
+
+2. BOOLEAN SWAP MASK. ``InterchangeSwapDecoder.swap_decode(z_a, z_b,
+   atom_mask)`` takes a BOOLEAN ``(F,)`` mask and fuses swap + gated decode in
+   one Rust call. Where ``atom_mask[f]`` is True the column of ``z_a`` is used,
+   else ``z_b``. The continuous-mask convex blend of the old design is gone.
+   The group-swap test thresholds per-feature scores to bool; the per-feature
+   test loops one-hot bool masks.
+
+Training objective::
+
+    L = ||x_a - x̂_a||² + ||x_b - x̂_b||²            (gated recon, both halves)
+      + λ_intv · ||swap_decode(z_b, z_a, hue_bool) − target_swap||²
+      + λ_gate · ||gate||_1                          (small hue subset)
+      + λ_gate_entropy · binary_entropy(gate)        (push gate → {0, 1})
+      + λ_l1   · ||z||_1                             (standard SAE sparsity)
 
 target_swap is built in the data layer using the HSV-supervised subspace
-(auto_exp_38): x_target = x_b + (hue_a - hue_b) * v_hue, where v_hue is the
-ambient-space direction for the hue axis.
+(auto_exp_38): x_target = x_b + (hue_a - hue_b) * v_hue / ||v_hue||².
 
-API:
-  DASSAE(D, F=512, abstraction='hsv_name')
-    .forward(x)                       -> SAEOutput(z, x_hat)
-    .swap(z_a, z_b, mask=None)        -> z_swapped (defaults to learned hue_mask)
-    .decode(z)                        -> x_hat
-    .hue_mask()                       -> sigmoid(gate_logits)
-    .compute_loss(x_a, x_b, target_swap, lambdas) -> dict of losses
-
-Identification primitive: a feature i passes the HUE-SWAP TEST at threshold τ
-if decoding swap(z_a, z_b, e_i)  reproduces target_swap with R² ≥ τ on a held
-out set, where e_i is the one-hot mask for feature i. The number of features
-that pass at τ=0.7 is the "identified hue feature count".
+Public surface (stable contract):
+  DASSAE(config)
+    .forward(x)                      -> DASSAEOutput(z, x_hat, pre_act)
+    .encode(x)                       -> (z, pre_act)
+    .decode(z)                       -> GATED x_hat
+    .swap_decode(z_a, z_b, mask)     -> fused swap + gated decode (BOOL mask)
+    .hue_mask()                      -> decoder.gate clamped to [0, 1]
+    .gate()                          -> raw decoder.gate (F,)
+    .hue_bool_mask(threshold=0.5)    -> bool (F,) mask of gated-on atoms
+    .compute_loss(...)               -> dict of losses
+    .per_feature_swap_score(...)     -> (F,) one-hot bool swap-R² diagnostic
+  build_target_swap(...), fit_hue_direction(...)
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 import torch
 from torch import nn
 
 from gamfit.torch import JumpReLUPenalty  # gamfit >= 0.1.123 (replaces hand L1)
+from gamfit.torch import InterchangeSwapDecoder  # gamfit-native gated swap decoder
 
 
 @dataclass
@@ -58,7 +79,8 @@ class DASSAEConfig:
     abstraction: Literal["hsv_name"] = "hsv_name"
     top_k: int | None = None          # if set, use TopK; else L1 (relu)
     tied_weights: bool = False
-    init_gate_logit: float = -2.0     # sigmoid(-2) ≈ 0.12 — start sparse-ish
+    init_gate: float = 0.12           # initial value of decoder.gate
+    init_scale: float = 0.02          # decoder W_dec init std (primitive default)
     normalize_decoder: bool = True
     jumprelu_threshold: float = 0.0   # >0 ⇒ swap hand-rolled L1 for gamfit JumpReLU
 
@@ -66,19 +88,24 @@ class DASSAEConfig:
 @dataclass
 class DASSAEOutput:
     z: torch.Tensor                   # (B, F) sparse latent
-    x_hat: torch.Tensor               # (B, D) reconstruction
+    x_hat: torch.Tensor               # (B, D) GATED reconstruction
     pre_act: torch.Tensor             # (B, F) pre-activation logits
 
 
 class DASSAE(nn.Module):
-    """SAE + interchange-intervention head.
+    """SAE encoder + gamfit ``InterchangeSwapDecoder`` head.
 
     Adam-owned parameters:
-      W_enc : (F, D)    — encoder
-      b_enc : (F,)      — encoder bias
-      W_dec : (D, F)    — decoder
-      b_dec : (D,)      — pre-encoder + post-decoder offset
-      gate_logits : (F,) — pre-sigmoid hue gate; sigmoid → hue_mask in (0,1)
+      W_enc : (F, D)         — encoder (omitted if ``tied_weights``)
+      b_enc : (F,)           — encoder bias
+      b_dec : (D,)           — pre-encoder offset (subtracted before encode)
+      decoder.W_dec : (D, F) — gamfit primitive decoder weights
+      decoder.gate  : (F,)   — gamfit per-feature scalar gate == hue gate
+      decoder.bias  : (D,)   — gamfit decoder bias (post-decode offset)
+
+    The decoder GATES: ``x_hat[i,d] = sum_f gate[f] z[i,f] W_dec[d,f] + bias[d]``.
+    The gate is the learned hue gate directly (no sigmoid head). Interchange
+    swap uses the primitive's fused boolean-mask ``swap_decode``.
     """
 
     def __init__(self, config: DASSAEConfig) -> None:
@@ -87,25 +114,31 @@ class DASSAE(nn.Module):
         D = int(config.input_dim)
         F = int(config.n_features)
 
-        # Decoder initialized to random unit columns; encoder = decoder.T (tied
-        # init) — standard SAE recipe.
-        W = torch.randn(D, F) * (1.0 / (D ** 0.5))
-        W = W / W.norm(dim=0, keepdim=True).clamp(min=1e-8)
-        self.W_dec = nn.Parameter(W)
+        # gamfit-native gated swap decoder owns W_dec (D, F), gate (F,), bias (D,).
+        self.decoder = InterchangeSwapDecoder(
+            D=D,
+            F=F,
+            swap_mode="scalar_mask",
+            bias=True,
+            init_scale=float(config.init_scale),
+        )
+        # Unit-norm decoder columns + tied encoder init (standard SAE recipe).
+        with torch.no_grad():
+            w = self.decoder.W_dec
+            w.div_(w.norm(dim=0, keepdim=True).clamp(min=1e-8))
+            # Gate initialised to a small value so the network starts with a
+            # weak, sparse-ish hue subset and grows it only when the
+            # interchange loss demands.
+            self.decoder.gate.fill_(float(config.init_gate))
+
         if config.tied_weights:
             # Encoder tied to W_dec.T at all times — only one set of params.
             self.register_parameter("W_enc", None)
         else:
-            self.W_enc = nn.Parameter(W.t().clone())
+            self.W_enc = nn.Parameter(self.decoder.W_dec.detach().t().clone())
         self.b_enc = nn.Parameter(torch.zeros(F))
+        # Pre-encoder offset. Decoder post-offset lives in ``decoder.bias``.
         self.b_dec = nn.Parameter(torch.zeros(D))
-
-        # Learned per-feature hue gate. Initialized at sigmoid(init_gate_logit)
-        # so the network starts with a small soft hue subset and grows it only
-        # when interchange-loss demands.
-        self.gate_logits = nn.Parameter(
-            torch.full((F,), float(config.init_gate_logit))
-        )
 
         # Optional gamfit JumpReLU prior on the SAE latent (smoothed-L0).
         if getattr(config, "jumprelu_threshold", 0.0) > 0.0:
@@ -119,12 +152,27 @@ class DASSAE(nn.Module):
 
     # ----- accessors -----------------------------------------------------
     def encoder_weight(self) -> torch.Tensor:
-        if self.config.tied_weights or self.W_enc is None:
-            return self.W_dec.t()
+        if self.config.tied_weights or getattr(self, "W_enc", None) is None:
+            return self.decoder.W_dec.t()
         return self.W_enc
 
+    def gate(self) -> torch.Tensor:
+        """Raw per-feature decoder gate (F,)."""
+        return self.decoder.gate
+
     def hue_mask(self) -> torch.Tensor:
-        return torch.sigmoid(self.gate_logits)
+        """The learned hue gate, clamped to [0, 1].
+
+        With the gated-decode redesign the gate IS the hue gate, so this is a
+        clamped view of ``decoder.gate`` (no sigmoid). Used for the sparsity /
+        entropy diagnostics; the bool swap mask is derived from it via
+        :meth:`hue_bool_mask`.
+        """
+        return self.decoder.gate.clamp(0.0, 1.0)
+
+    def hue_bool_mask(self, threshold: float = 0.5) -> torch.Tensor:
+        """Boolean (F,) swap mask: atoms whose gate exceeds ``threshold``."""
+        return self.decoder.gate > float(threshold)
 
     # ----- forward / swap -----------------------------------------------
     def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -141,30 +189,42 @@ class DASSAE(nn.Module):
         return z, pre
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return z @ self.W_dec.t() + self.b_dec
+        """GATED decode via the gamfit primitive.
+
+        ``x_hat[i,d] = sum_f gate[f] z[i,f] W_dec[d,f] + decoder.bias[d]``.
+        Note this is gated — it is NOT the old plain ``z @ W_dec.T + b_dec``.
+        ``b_dec`` (the pre-encoder offset) is intentionally not re-added here;
+        the decoder's own ``bias`` carries the post-decode offset.
+        """
+        return self.decoder(z)
 
     def forward(self, x: torch.Tensor) -> DASSAEOutput:
         z, pre = self.encode(x)
         x_hat = self.decode(z)
         return DASSAEOutput(z=z, x_hat=x_hat, pre_act=pre)
 
-    def swap(
+    def swap_decode(
         self,
         z_a: torch.Tensor,
         z_b: torch.Tensor,
-        mask: torch.Tensor | None = None,
+        atom_mask: torch.Tensor | None = None,
+        threshold: float = 0.5,
     ) -> torch.Tensor:
-        """Interchange-intervention: replace masked features of z_a with z_b's.
+        """Fused interchange-swap + gated decode via the gamfit primitive.
 
-        mask ∈ [0, 1]^F.   z = z_a * (1 - mask) + z_b * mask.
-        mask=0 (no-swap) ⇒ standard SAE forward.
-        mask=1 (full swap) ⇒ z_b.
-        Default: learned hue_mask().
+        For atoms with ``atom_mask[f]`` True, use ``z_a[:, f]``; else
+        ``z_b[:, f]``. Then GATED-decode the composed latent. ``atom_mask``
+        must be a BOOLEAN ``(F,)`` tensor. If ``None``, defaults to the
+        learned hue mask thresholded at ``threshold``.
+
+        Returns a tensor with autograd wired through ``z_a``, ``z_b``,
+        ``W_dec``, ``gate`` and ``bias`` (the bool mask carries no gradient).
         """
-        if mask is None:
-            mask = self.hue_mask()
-        # mask broadcasts over batch.
-        return z_a * (1.0 - mask) + z_b * mask
+        if atom_mask is None:
+            atom_mask = self.hue_bool_mask(threshold)
+        if atom_mask.dtype != torch.bool:
+            atom_mask = atom_mask.to(torch.bool)
+        return self.decoder.swap_decode(z_a, z_b, atom_mask=atom_mask)
 
     # ----- loss ---------------------------------------------------------
     def compute_loss(
@@ -176,12 +236,18 @@ class DASSAE(nn.Module):
         lambda_gate: float = 1e-3,
         lambda_l1: float = 1e-3,
         lambda_gate_entropy: float = 0.0,
+        swap_threshold: float = 0.5,
     ) -> dict[str, torch.Tensor]:
-        """Reconstruction (on both halves of the pair) + interchange loss.
+        """Gated reconstruction (both halves) + fused interchange loss.
 
-        target_swap : (B, D) — cogito-L40 activation for
-                      "hue(a) injected into b" hypothetical color, constructed
-                      by the data layer from the auto_exp_38 HSV subspace.
+        target_swap : (B, D) — cogito-L40 activation for "hue(a) injected into
+                      b" hypothetical color, constructed by the data layer from
+                      the auto_exp_38 HSV subspace.
+
+        The interchange term now uses the FUSED boolean-mask ``swap_decode``:
+        the hue gate is thresholded to a bool mask, then ``z_a``'s gated hue
+        atoms are spliced into ``z_b`` and decoded in a single Rust call.
+        Sparsity / binarization pressure acts directly on ``decoder.gate``.
         """
         out_a = self.forward(x_a)
         out_b = self.forward(x_b)
@@ -191,19 +257,24 @@ class DASSAE(nn.Module):
             + (out_b.x_hat - x_b).pow(2).mean()
         )
 
-        # Interchange: take b's latent, splice a's hue-features into it,
-        # decode, compare to target_swap (which is the LLM's "what would
-        # cogito-L40 emit if b had a's hue" reference).
-        mask = self.hue_mask()
-        z_swapped = self.swap(out_b.z, out_a.z, mask=mask)
-        x_swap_hat = self.decode(z_swapped)
+        # Interchange: take b's latent, splice a's hue-features into it, gated-
+        # decode, compare to target_swap (the LLM's "what would cogito-L40 emit
+        # if b had a's hue" reference). atom_mask True ⇒ use z_a (the source of
+        # the hue). Fused swap + gated decode in one Rust call.
+        hue_bool = self.hue_bool_mask(swap_threshold)
+        x_swap_hat = self.swap_decode(out_a.z, out_b.z, atom_mask=hue_bool)
         intv_loss = (x_swap_hat - target_swap).pow(2).mean()
 
-        # Encourage a small, sharp hue subset.
-        gate_l1 = mask.sum()
-        # Binarization pressure: pull each mask toward 0 or 1.
-        gate_entropy = -(mask * (mask + 1e-8).log()
-                         + (1 - mask) * (1 - mask + 1e-8).log()).mean()
+        # Gate sparsity / binarization act on the raw decoder gate now.
+        gate = self.decoder.gate
+        gate_clamped = gate.clamp(0.0, 1.0)
+        # Encourage a small, sharp hue subset (L1 on the gate magnitude).
+        gate_l1 = gate.abs().sum()
+        # Binarization pressure: pull each gate toward 0 or 1.
+        gate_entropy = -(
+            gate_clamped * (gate_clamped + 1e-8).log()
+            + (1 - gate_clamped) * (1 - gate_clamped + 1e-8).log()
+        ).mean()
 
         if self.jumprelu is not None:
             # gamfit smoothed-L0 prior (sum over (B,F)); normalize to mean
@@ -227,7 +298,7 @@ class DASSAE(nn.Module):
             "gate_l1": gate_l1.detach(),
             "l1": l1_loss.detach(),
             "gate_entropy": gate_entropy.detach(),
-            "n_hue_features_soft": (mask > 0.5).float().sum().detach(),
+            "n_hue_features_soft": (gate > 0.5).float().sum().detach(),
         }
 
     # ----- post-hoc swap-test diagnostic --------------------------------
@@ -238,28 +309,28 @@ class DASSAE(nn.Module):
         x_b: torch.Tensor,
         target_swap: torch.Tensor,
     ) -> torch.Tensor:
-        """For each feature i, R² of decode(swap(z_a, z_b, e_i)) vs target_swap.
+        """For each feature i, R² of swap_decode(z_a, z_b, e_i) vs target_swap.
 
-        Returns shape (F,). A feature scoring > 0.7 is "identified" as
-        causally encoding the hue concept under this abstraction.
+        Returns shape (F,). A feature scoring > 0.7 is "identified" as causally
+        encoding the hue concept under this abstraction. Uses the primitive's
+        fused boolean one-hot swap_decode per feature (gated decode included),
+        so the baseline is the no-swap gated decode of z_b.
         """
         out_a = self.forward(x_a)
         out_b = self.forward(x_b)
         F = out_a.z.shape[-1]
-        # Baseline: no swap = decode(z_b). Variance of (target - baseline)
-        # is the "naive" residual; if a single feature swap brings the
-        # residual down by ≥ 0.7×, that feature carries the hue causally.
-        baseline = self.decode(out_b.z)
+        device = x_a.device
+        # Baseline: no swap ⇒ all-False mask ⇒ gated decode(z_b).
+        all_false = torch.zeros(F, dtype=torch.bool, device=device)
+        baseline = self.swap_decode(out_a.z, out_b.z, atom_mask=all_false)
         var_naive = (target_swap - baseline).pow(2).mean(dim=-1)  # (B,)
 
-        scores = torch.zeros(F, device=x_a.device)
+        scores = torch.zeros(F, device=device)
         for i in range(F):
-            ei = torch.zeros(F, device=x_a.device)
-            ei[i] = 1.0
-            z_swap = out_b.z * (1.0 - ei) + out_a.z * ei
-            x_hat = self.decode(z_swap)
+            ei = torch.zeros(F, dtype=torch.bool, device=device)
+            ei[i] = True
+            x_hat = self.swap_decode(out_a.z, out_b.z, atom_mask=ei)
             resid = (target_swap - x_hat).pow(2).mean(dim=-1)
-            # Per-batch R²: 1 - resid / var_naive, then averaged.
             r2 = 1.0 - resid / var_naive.clamp(min=1e-12)
             scores[i] = r2.mean()
         return scores
@@ -270,8 +341,9 @@ class DASSAE(nn.Module):
         if not self.config.normalize_decoder:
             return
         with torch.no_grad():
-            n = self.W_dec.norm(dim=0, keepdim=True).clamp(min=1e-8)
-            self.W_dec.data.div_(n)
+            w = self.decoder.W_dec
+            n = w.norm(dim=0, keepdim=True).clamp(min=1e-8)
+            w.div_(n)
 
 
 # ---------------------------------------------------------------------------

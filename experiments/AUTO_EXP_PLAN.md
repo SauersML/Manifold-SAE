@@ -1,41 +1,40 @@
 # AUTO_EXP_PLAN — composition-engine coverage map
 
-## Installed vs source
+## Installed gamfit
 
-- **Installed gamfit** (`/Users/user/Manifold-SAE/.venv`): `0.1.112`
-- **gam source** (`/Users/user/gam`): post-`0.1.120` (has all composition primitives)
+- **Installed gamfit** (`/Users/user/Manifold-SAE/.venv`): `0.1.141`
 
-Probe (installed): `HAVE = [Sphere]`,
-`MISS = [TotalVariationPenalty, OrthogonalityPenalty, ARDPenalty,
-IsometryPenalty, SparsityPenalty, IBPAssignmentPenalty,
-SoftmaxAssignmentSparsityPenalty, LatentCoord, select_topology,
-sae_manifold_fit, GumbelTemperatureSchedule, Circle, Torus, Cylinder,
-EuclideanPatch, glm_reml_fit_latent]` — every new primitive is currently
-**fallback-only**. Production fits use hand-rolled emulators; every
-experiment records `prediction_slot` for a v0.1.121 re-run.
+The composition primitives (`LatentCoord`, `TopologyAutoSelector`,
+`IBPAssignmentPenalty`, `ARDPenalty`, `OrthogonalityPenalty`,
+`TotalVariationPenalty`, `GumbelTemperatureSchedule`, `Circle` / `Torus`
+/ `Cylinder` / `Sphere` / `EuclideanPatch`, `glm_reml_fit_latent`, etc.)
+are first-class Rust primitives in this release; the experiments were
+migrated off the hand-rolled numpy fallbacks (see the gamfit-0.1.123
+migration commits). The coverage map below records which corners of each
+primitive an existing experiment exercises vs. which are still untested.
 
 ## Primitive → existing-experiment coverage
 
 | Primitive | Existing experiment(s) | Status |
 |---|---|---|
-| LatentCoord (Euclidean d) | auto_exp_17, 21, 23 | covered (fallback) |
-| LatentCoord (manifold=Circle) | auto_exp_21, 23 | covered (fallback) |
-| LatentCoord (manifold=Sphere/Torus/Cylinder) | none | **MISSING** |
-| Fisher-Rao W (per-row IRLS weight) | auto_exp_21, 23 | covered (fallback) |
-| ARDPenalty | auto_exp_21, 23 | covered (fallback) |
-| OrthogonalityPenalty | auto_exp_23 | covered (fallback) |
-| IsometryPenalty | none | **MISSING** |
-| SparsityPenalty (smoothed L1) | auto_exp_24 | covered (fallback) |
-| TotalVariationPenalty (forward_1d) | auto_exp_24 | covered (fallback) |
-| TotalVariationPenalty (graph_edges) | none | **MISSING** |
-| IBPAssignmentPenalty / sae_manifold_fit | auto_exp_18, 20, 22 | covered (fallback) |
-| SoftmaxAssignmentSparsityPenalty | none | **MISSING** |
-| GumbelTemperatureSchedule | auto_exp_22 | covered (fallback) |
-| select_topology() one-shot | auto_exp_19 | covered (fallback) |
-| select_topology(score="laml") / "bic" | none | **MISSING** |
-| select_topology + custom BasisSpec list | none | **MISSING** |
-| `penalties=` kwarg with ≥3 stacked penalties | none | **MISSING** |
-| NegBin / Tweedie / Gamma `family=` on glm_reml_fit_latent | none | **MISSING** |
+| LatentCoord (Euclidean d) | auto_exp_17, 21, 23 | covered |
+| LatentCoord (manifold=Circle) | auto_exp_21, 23 | covered |
+| LatentCoord (manifold=Sphere/Torus/Cylinder) | none | untested |
+| Fisher-Rao W (per-row IRLS weight) | auto_exp_21, 23 | covered |
+| ARDPenalty | auto_exp_21, 23 | covered |
+| OrthogonalityPenalty | auto_exp_23 | covered |
+| IsometryPenalty | none | untested |
+| SparsityPenalty (smoothed L1) | auto_exp_24 | covered |
+| TotalVariationPenalty (forward_1d) | auto_exp_24 | covered |
+| TotalVariationPenalty (graph_edges) | none | untested |
+| IBPAssignmentPenalty / sae_manifold_fit | auto_exp_18, 20, 22 | covered |
+| SoftmaxAssignmentSparsityPenalty | none | untested |
+| GumbelTemperatureSchedule | auto_exp_22 | covered |
+| select_topology() one-shot | auto_exp_19 | covered |
+| select_topology(score="laml") / "bic" | none | untested |
+| select_topology + custom BasisSpec list | none | untested |
+| `penalties=` kwarg with ≥3 stacked penalties | none | untested |
+| NegBin / Tweedie / Gamma `family=` on glm_reml_fit_latent | none | untested |
 
 ## Prioritized new experiments
 

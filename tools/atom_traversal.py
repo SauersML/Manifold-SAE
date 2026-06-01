@@ -51,35 +51,21 @@ def _find_blocks(model) -> nn.ModuleList:
 
 
 def load_curve_sae(path: Path, D: int, device: torch.device):
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    sig = ckpt.get("sig", {})
-    cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=sig["F"], n_basis=sig.get("n_basis", 10),
-        top_k=sig["top_k"], intrinsic_rank=sig.get("intrinsic_rank", 2),
-        encoder_type="linear", continuous_amp=True,
-    )
-    sae = ManifoldSAE(cfg).to(device)
-    sae.load_state_dict(ckpt["sae"])
-    sae.eval()
-    sae.inference_mode = bool(sae.has_snapshot.item())
-    return sae
+    from manifold_sae.sae import load_sae
+    return load_sae(path, input_dim=D, device=device)
 
 
 def curve_directions_along_t(sae, atom_k: int, n_samples: int, device: torch.device) -> torch.Tensor:
-    """Sample atom k's curve at `n_samples` uniform t values; return the
-    corresponding ambient directions `g_k(t)` as a `(n_samples, D)` tensor.
-    Assumes the SAE has a snapshot (B_locked populated).
+    """Sample atom k's curve at `n_samples` t values; return the corresponding
+    ambient directions `g_k(t)` as a `(n_samples, D)` tensor.
+
+    Cutover: the gamfit-native decoder block already lives in ambient R^D, so
+    there is no separate `directions` (`W_k`) lift. We read the per-atom ambient
+    curve straight off the primitive via `lift_atom_curve`.
     """
-    import gamfit.torch as gt
+    from manifold_sae.sae import lift_atom_curve
     t_grid = torch.linspace(0.05, 0.95, n_samples, dtype=torch.float64, device=device)
-    phi = gt.duchon_basis_1d(t_grid, sae.centers.to(device), m=2, periodic=False)  # (n, K)
-    B_k = sae.B_locked[atom_k].to(device)                                          # (K, R)
-    g_intrinsic = phi @ B_k                                                         # (n, R)
-    W_k = sae.directions[atom_k].to(device)                                         # (D, R)
-    # Lift to ambient via the atom's directions (D × R)
-    g_ambient = g_intrinsic @ W_k.t().to(torch.float64)                            # (n, D)
-    return g_ambient
+    return lift_atom_curve(sae, atom_k, t_grid).to(device)
 
 
 def nearest_tokens_to_direction(directions: torch.Tensor, embed_table: torch.Tensor,
@@ -104,7 +90,7 @@ def nearest_tokens_to_direction(directions: torch.Tensor, embed_table: torch.Ten
 def per_atom_alive_count(sae, X_corpus: torch.Tensor, device: torch.device) -> np.ndarray:
     """Run SAE on a corpus, return per-atom firing count."""
     with torch.no_grad():
-        out = sae(X_corpus.to(device))
+        out = sae(X_corpus.to(device=device, dtype=sae.cfg.dtype))
     amp = out.amplitudes.cpu().numpy()
     return (amp > 1e-6).sum(axis=0)
 
@@ -190,8 +176,8 @@ def main() -> int:
 
     D = embed_table.shape[1]
     sae = load_curve_sae(Path(args.checkpoint), D, device)
-    F = sae.config.n_features
-    print(f"[catalog] loaded SAE F={F} top_k={sae.config.top_k}", flush=True)
+    F = sae.cfg.n_atoms
+    print(f"[catalog] loaded SAE F={F} top_k={sae.cfg.sparsity.target_k}", flush=True)
 
     # Compute firing rates on a small wikitext sample to rank atoms.
     from datasets import load_dataset

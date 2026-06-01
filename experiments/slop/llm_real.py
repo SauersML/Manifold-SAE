@@ -233,8 +233,9 @@ def train_sae(sae, X, cfg: Config, label: str, ckpt_path: Path, is_curve: bool =
         opt.zero_grad(set_to_none=True)
         if is_curve:
             from manifold_sae.losses import total_loss
-            out = sae(batch)
-            losses = total_loss(out, batch, sae_cfg)
+            cbatch = batch.to(dtype=sae.cfg.dtype)
+            out = sae(cbatch)
+            losses = total_loss(out, cbatch, sae)
             loss = losses["total"]
             mse = losses["mse"]
         else:
@@ -311,12 +312,16 @@ def main(cfg: Config | None = None) -> int:
     t_v = train_sae(vanilla, X_n, cfg, "vanilla", out_dir / "vanilla_ckpt.pt", is_curve=False)
 
     print("\n[curve] training (gamfit REML each batch, GPU)", flush=True)
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE, ManifoldSAEConfig, DecoderConfig, SparsityConfig,
+    )
+    manifold = "circle" if cfg.sae_intrinsic_rank <= 1 else "product"
+    rank = 1 if cfg.sae_intrinsic_rank <= 1 else cfg.sae_intrinsic_rank
     sae_cfg = ManifoldSAEConfig(
-        input_dim=D, n_features=cfg.n_features, n_basis=cfg.sae_n_basis,
-        top_k=cfg.top_k, intrinsic_rank=cfg.sae_intrinsic_rank,
-        sparsity_weight=cfg.sae_sparsity_weight, ortho_weight=cfg.sae_ortho_weight,
-        encoder_type="linear", continuous_amp=True,
+        input_dim=D, n_atoms=cfg.n_features, n_basis_per_atom=cfg.sae_n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.sae_ortho_weight),
     )
     curve = ManifoldSAE(sae_cfg).to(device)
     t_c = train_sae(curve, X_n, cfg, "curve", out_dir / "curve_ckpt.pt", is_curve=True, sae_cfg=sae_cfg)
@@ -339,9 +344,9 @@ def main(cfg: Config | None = None) -> int:
     alive_mask = torch.zeros(cfg.n_features, dtype=torch.bool, device=device)
     with torch.no_grad():
         for start in range(0, eval_n, cfg.batch_size_curve):
-            chunk = eval_batch[start : start + cfg.batch_size_curve]
+            chunk = eval_batch[start : start + cfg.batch_size_curve].to(dtype=curve.cfg.dtype)
             out_c = curve(chunk)
-            sq_sum += float(((out_c.reconstruction - chunk) ** 2).sum())
+            sq_sum += float(((out_c.x_hat - chunk) ** 2).sum())
             n_tok += chunk.numel()
             alive_mask |= (out_c.amplitudes > 1e-3).any(0)
     mse_c = sq_sum / max(n_tok, 1)
@@ -353,17 +358,17 @@ def main(cfg: Config | None = None) -> int:
     # tokens as the snapshot reference set (a held-out sample of representative
     # data is what gamfit's REML needs).
     print("\n[snapshot] lock-and-cache the curve SAE", flush=True)
-    snapshot_batch = X_n[: cfg.batch_size_curve]
-    curve.update_snapshot(snapshot_batch)
-    curve.inference_mode = True
+    snapshot_batch = X_n[: cfg.batch_size_curve].to(dtype=curve.cfg.dtype)
+    curve.fit(snapshot_batch)
+    curve.lock_snapshot()
 
     sq_sum_inf = 0.0
     n_tok_inf = 0
     with torch.no_grad():
         for start in range(0, eval_n, cfg.batch_size_curve):
-            chunk = eval_batch[start : start + cfg.batch_size_curve]
+            chunk = eval_batch[start : start + cfg.batch_size_curve].to(dtype=curve.cfg.dtype)
             out_inf = curve(chunk)
-            sq_sum_inf += float(((out_inf.reconstruction - chunk) ** 2).sum())
+            sq_sum_inf += float(((out_inf.x_hat - chunk) ** 2).sum())
             n_tok_inf += chunk.numel()
     mse_inf = sq_sum_inf / max(n_tok_inf, 1)
     print(f"locked snapshot recon MSE={mse_inf:.4f}", flush=True)

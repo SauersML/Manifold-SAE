@@ -281,21 +281,24 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
     )
     loader = _build_loader(dataset, cfg.batch_size, cfg.seed)
 
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE,
+        ManifoldSAEConfig,
+        DecoderConfig,
+        SparsityConfig,
+    )
     from manifold_sae.train import build_optimizer, train
     from manifold_sae.diagnostics import dead_feature_mask, position_variance
 
     n_sae_features = cfg.n_features + cfg.slack_features
     sae_config = ManifoldSAEConfig(
         input_dim=cfg.d_ambient,
-        n_features=n_sae_features,
-        n_basis=cfg.n_basis,
-        sparsity_weight=cfg.sparsity_weight,
-        top_k=cfg.top_k,
+        n_atoms=n_sae_features,
         intrinsic_rank=cfg.intrinsic_rank,
-        ortho_weight=cfg.ortho_weight,
-        reml_weight=cfg.reml_weight,
-        continuous_amp=cfg.continuous_amp,
+        atom_manifold="product",
+        n_basis_per_atom=cfg.n_basis,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.ortho_weight),
     )
     sae = ManifoldSAE(sae_config)
 
@@ -344,11 +347,11 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
 
     sae.eval()
     with torch.no_grad():
-        eval_batch = dataset.x[: min(1024, len(dataset))].to(device)
+        eval_batch = dataset.x[: min(1024, len(dataset))].to(device=device, dtype=sae.cfg.dtype)
         out = sae(eval_batch)
-        pos_var = position_variance(out).cpu().numpy().tolist()
+        pos_var = position_variance(out).reshape(-1).cpu().numpy().tolist()
         dead = dead_feature_mask(out).cpu().numpy().tolist()
-        mse = float(torch.mean((out.reconstruction - eval_batch) ** 2).item())
+        mse = float(torch.mean((out.x_hat - eval_batch) ** 2).item())
     sae.train()
 
     feature_names = [f.name for f in dataset.features]

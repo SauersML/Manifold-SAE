@@ -100,29 +100,32 @@ def harvest_and_norm(cfg: Config, device) -> torch.Tensor:
 
 def train_curve(cfg: Config, X: torch.Tensor, device, top_k: int):
     from manifold_sae.losses import total_loss
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig, SparsityConfig
+    manifold = "circle" if cfg.sae_R <= 1 else "product"
+    rank = 1 if cfg.sae_R <= 1 else cfg.sae_R
     sae_cfg = ManifoldSAEConfig(
-        input_dim=X.shape[1], n_features=cfg.sae_F, n_basis=cfg.sae_n_basis,
-        top_k=top_k, intrinsic_rank=cfg.sae_R,
-        encoder_type="linear", continuous_amp=True,
+        input_dim=X.shape[1], n_atoms=cfg.sae_F, n_basis_per_atom=cfg.sae_n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=top_k),
+        dtype=torch.float64,
     )
     sae = ManifoldSAE(sae_cfg).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
-    X = X.to(device)
+    X = X.to(device=device, dtype=sae_cfg.dtype)
     for step in range(cfg.n_steps_curve):
         idx = torch.randint(0, X.shape[0], (cfg.batch_size_curve,))
         batch = X[idx]
         opt.zero_grad()
         out = sae(batch)
-        loss = total_loss(out, batch, sae_cfg)["total"]
+        loss = total_loss(out, batch, sae)["total"]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         opt.step()
         if step % 400 == 0:
-            print(f"      [crv top_k={top_k} step {step:4d}] mse={F_nn.mse_loss(out.reconstruction,batch).item():.4e}", flush=True)
+            print(f"      [crv top_k={top_k} step {step:4d}] mse={F_nn.mse_loss(out.x_hat,batch).item():.4e}", flush=True)
     sae.eval()
-    sae.update_snapshot(X[:2048])
-    sae.inference_mode = True
+    sae.fit(X[:2048])
+    sae.lock_snapshot()
     return sae
 
 
@@ -161,9 +164,9 @@ def vanilla_eval(model_d, X: torch.Tensor):
 
 def curve_eval(sae, X: torch.Tensor):
     with torch.no_grad():
-        out = sae(X)
+        out = sae(X.to(dtype=sae.cfg.dtype))
     alive = int(((out.amplitudes > 1e-6).sum(dim=0) > 30).sum().item())
-    return out.reconstruction, alive
+    return out.x_hat.to(torch.float32), alive
 
 
 def main() -> int:

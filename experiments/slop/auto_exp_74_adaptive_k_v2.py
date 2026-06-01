@@ -1,7 +1,7 @@
-"""auto_exp_74: AdaptiveKv2 (target-K loss) vs TopK-32 vs AdaptiveK v1.
+"""auto_exp_74: AdaptiveKv2 (MLP K-head, target-K regime) vs TopK-32 vs v1.
 
-Runs both v2 loss variants (clipped, squared) and plots R² vs mean-K against
-the TopK-32 baseline (R²=0.874 at K=32) and the v1 AdaptiveK best
+Runs the v2 model (MLP K-head + tight k_target bracket) and plots R² vs mean-K
+against the TopK-32 baseline (R²=0.874 at K=32) and the v1 AdaptiveK best
 (R²=0.839 at K≈8.2). Writes JSON + PNG to runs/.
 """
 from __future__ import annotations
@@ -25,17 +25,12 @@ def main():
     # Reference points.
     base_topk = {"label": "TopK-32 baseline", "mean_k": 32.0, "r2": 0.874}
     base_v1 = {"label": "AdaptiveK v1", "mean_k": 8.2, "r2": 0.839}
-    v2_clip = {
-        "label": "AdaptiveKv2 (clipped)",
-        "mean_k": results["clipped"]["final_mean_k"],
-        "r2": results["clipped"]["final_val_r2"],
+    v2 = {
+        "label": "AdaptiveKv2 (MLP head)",
+        "mean_k": results["v2"]["final_mean_k"],
+        "r2": results["v2"]["final_val_r2"],
     }
-    v2_sq = {
-        "label": "AdaptiveKv2 (squared)",
-        "mean_k": results["squared"]["final_mean_k"],
-        "r2": results["squared"]["final_val_r2"],
-    }
-    points = [base_topk, base_v1, v2_clip, v2_sq]
+    points = [base_topk, base_v1, v2]
 
     # Plot.
     try:
@@ -44,7 +39,7 @@ def main():
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
         colors = {"TopK-32 baseline": "C0", "AdaptiveK v1": "C1",
-                  "AdaptiveKv2 (clipped)": "C2", "AdaptiveKv2 (squared)": "C3"}
+                  "AdaptiveKv2 (MLP head)": "C2"}
         for p in points:
             ax.scatter(p["mean_k"], p["r2"], s=130, c=colors[p["label"]],
                        label=p["label"], edgecolors="black", zorder=3)

@@ -11,8 +11,8 @@ from manifold_sae.crm import CompleteReplacementModel, CRMConfig
 
 
 def test_chain_shapes():
-    cfg = CRMConfig(layer_dims=[16, 24, 20], n_features_per_sae=32, sae_top_k=4,
-                    transcoder_mid=64, transcoder_top_k=8)
+    cfg = CRMConfig(layer_dims=[16, 24, 20], n_features_per_sae=32,
+                    transcoder_mid=64)
     model = CompleteReplacementModel(cfg)
     xs = [torch.randn(5, d) for d in [16, 24, 20]]
     out = model.forward(xs)
@@ -23,8 +23,8 @@ def test_chain_shapes():
 
 
 def test_loss_and_backward():
-    cfg = CRMConfig(layer_dims=[8, 12, 10], n_features_per_sae=16, sae_top_k=4,
-                    transcoder_mid=32, transcoder_top_k=6)
+    cfg = CRMConfig(layer_dims=[8, 12, 10], n_features_per_sae=16,
+                    transcoder_mid=32)
     model = CompleteReplacementModel(cfg)
     xs = [torch.randn(4, d) for d in [8, 12, 10]]
     out = model.loss(xs)
@@ -35,8 +35,8 @@ def test_loss_and_backward():
 
 def test_per_stage_r2_runs():
     torch.manual_seed(0)
-    cfg = CRMConfig(layer_dims=[8, 8, 8], n_features_per_sae=16, sae_top_k=4,
-                    transcoder_mid=32, transcoder_top_k=6)
+    cfg = CRMConfig(layer_dims=[8, 8, 8], n_features_per_sae=16,
+                    transcoder_mid=32)
     model = CompleteReplacementModel(cfg)
     xs = [torch.randn(20, 8) for _ in range(3)]
     r2 = model.per_stage_r2(xs)

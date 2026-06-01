@@ -110,7 +110,7 @@ def train_one(
         input_dim=D,
         n_features=F,
         top_k=None,                   # L1-only regime
-        init_gate_logit=-2.0,
+        init_gate=0.12,               # initial decoder.gate (was sigmoid(-2)≈0.12)
         normalize_decoder=True,
     )
     sae = DASSAE(cfg).to(device)

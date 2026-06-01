@@ -28,16 +28,25 @@ from torch import nn
 
 
 def _build_manifold(D: int, F: int, **kw) -> nn.Module:
-    from .sae import ManifoldSAE, ManifoldSAEConfig
+    from .sae import (
+        DecoderConfig,
+        ManifoldSAE,
+        ManifoldSAEConfig,
+        SparsityConfig,
+    )
 
     cfg = ManifoldSAEConfig(
         input_dim=D,
-        n_features=F,
-        n_basis=int(kw.get("n_basis", 8)),
-        top_k=int(kw.get("top_k", max(1, F // 4))),
-        intrinsic_rank=int(kw.get("intrinsic_rank", 2)),
-        sparsity_weight=float(kw.get("sparsity_weight", 1e-3)),
-        ortho_weight=float(kw.get("ortho_weight", 1e-2)),
+        n_atoms=F,
+        n_basis_per_atom=int(kw.get("n_basis", 8)),
+        intrinsic_rank=int(kw.get("intrinsic_rank", 1)),
+        atom_manifold=str(kw.get("atom_manifold", "circle")),
+        sparsity=SparsityConfig(
+            kind=str(kw.get("sparsity_kind", "softmax_topk")),
+            target_k=int(kw.get("top_k", max(1, F // 4))),
+        ),
+        decoder=DecoderConfig(ortho_weight=float(kw.get("ortho_weight", 1e-2))),
+        dtype=kw.get("dtype", torch.float64),
     )
     return ManifoldSAE(cfg)
 
@@ -62,9 +71,7 @@ def _build_crm(D: int, F: int, **kw) -> nn.Module:
         CRMConfig(
             layer_dims=[D] * L,
             n_features_per_sae=F,
-            sae_top_k=int(kw.get("top_k", max(1, F // 4))),
             transcoder_mid=int(kw.get("transcoder_mid", 2 * F)),
-            transcoder_top_k=int(kw.get("transcoder_top_k", F // 2)),
         )
     )
 
@@ -150,36 +157,15 @@ class _SheafPair(nn.Module):
 
 
 def _build_transcoder(D: int, F: int, **kw) -> nn.Module:
-    """Linear-skip transcoder wrapper. Falls back to a plain Linear when
-    SkipAffineSmooth is unavailable in the installed gamfit."""
+    """Linear-skip transcoder built on ``gamfit.torch.SkipAffineSmooth``."""
     from .transcoder import SkipAffineSmooth
 
-    if SkipAffineSmooth is None:
-        return _LinearTranscoderStub(D, F)
     return SkipAffineSmooth(
         in_dim=D, out_dim=D, n_atoms=F,
         rank_skip=min(F, D),
         jumprelu_threshold=0.03, learnable_threshold=True,
         smoothing_eps=1e-3,
     )
-
-
-class _LinearTranscoderStub(nn.Module):
-    """One-layer linear stand-in when SkipAffineSmooth isn't installed."""
-
-    def __init__(self, D: int, F: int) -> None:
-        super().__init__()
-        self.enc = nn.Linear(D, F)
-        self.dec = nn.Linear(F, D)
-
-    def forward(self, x: torch.Tensor):
-        z = torch.relu(self.enc(x))
-        return self.dec(z), z
-
-    def loss(self, x: torch.Tensor) -> dict:
-        y, z = self.forward(x)
-        mse = ((y - x) ** 2).mean()
-        return {"loss": mse + 1e-3 * z.abs().mean(), "mse": mse.detach(), "recon": y}
 
 
 # ---------------------------------------------------------------------------
@@ -204,8 +190,26 @@ SAEModelRegistry: Dict[str, Callable[..., nn.Module]] = {
 # ---------------------------------------------------------------------------
 
 
+def _model_dtype(model: nn.Module) -> torch.dtype | None:
+    """Dtype the model's forward expects for its input.
+
+    ManifoldSAE (gamfit) is configured for a fixed dtype (float64 by default for
+    the REML solve) and rejects mismatched input rather than silently promoting.
+    Cast the input to match. For variants that don't pin a dtype this returns the
+    first parameter's dtype (a no-op cast when X already matches)."""
+    cfg = getattr(model, "cfg", None)
+    if cfg is not None and getattr(cfg, "dtype", None) is not None:
+        return cfg.dtype
+    for p in model.parameters():
+        return p.dtype
+    return None
+
+
 def _call_loss(model: nn.Module, x: torch.Tensor, name: str) -> dict:
     """Adapt each variant's forward/loss to a common ``{loss, recon}`` dict."""
+    dt = _model_dtype(model)
+    if dt is not None and x.dtype != dt:
+        x = x.to(dt)
     # Multi-input variants need x replicated across layers.
     if name in ("crm", "crosscoder"):
         n_layers = getattr(model, "n_layers", 2) if name == "crosscoder" else model.L
@@ -244,7 +248,9 @@ def _call_loss(model: nn.Module, x: torch.Tensor, name: str) -> dict:
     elif isinstance(out, tuple):
         recon = out[0]
     else:
-        recon = getattr(out, "reconstruction", None)
+        recon = getattr(out, "x_hat", None)
+        if recon is None:
+            recon = getattr(out, "reconstruction", None)
     if recon is None:
         raise RuntimeError(f"{name}: cannot find reconstruction in forward output")
     mse = ((recon - x) ** 2).mean()

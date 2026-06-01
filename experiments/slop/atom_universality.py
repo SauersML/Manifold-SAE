@@ -95,27 +95,31 @@ def plant_curves(cfg: Config, data_seed: int = 0) -> dict:
 
 def train_curve(cfg: Config, X: torch.Tensor, device, seed: int):
     from manifold_sae.losses import total_loss
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig, SparsityConfig
     torch.manual_seed(seed)
+    manifold = "circle" if cfg.sae_R <= 1 else "product"
+    rank = 1 if cfg.sae_R <= 1 else cfg.sae_R
     sae_cfg = ManifoldSAEConfig(
-        input_dim=cfg.d_ambient, n_features=cfg.sae_F, n_basis=cfg.sae_n_basis,
-        top_k=cfg.sae_top_k, intrinsic_rank=cfg.sae_R,
-        encoder_type="linear", continuous_amp=True,
+        input_dim=cfg.d_ambient, n_atoms=cfg.sae_F, n_basis_per_atom=cfg.sae_n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.sae_top_k),
+        dtype=torch.float64,
     )
     sae = ManifoldSAE(sae_cfg).to(device)
     opt = torch.optim.Adam(sae.parameters(), lr=cfg.lr)
-    X = X.to(device)
+    X = X.to(device=device, dtype=sae_cfg.dtype)
     for step in range(cfg.n_steps):
         idx = torch.randint(0, X.shape[0], (cfg.batch_size,))
         batch = X[idx]
         opt.zero_grad()
         out = sae(batch)
-        loss = total_loss(out, batch, sae_cfg)["total"]
+        loss = total_loss(out, batch, sae)["total"]
         loss.backward()
         torch.nn.utils.clip_grad_norm_(sae.parameters(), 1.0)
         opt.step()
     sae.eval()
-    sae.update_snapshot(X[:2048])
+    sae.fit(X[:2048])
+    sae.lock_snapshot()
     return sae
 
 
@@ -144,23 +148,21 @@ def train_vanilla(cfg: Config, X: torch.Tensor, device, seed: int):
 
 
 def curve_atom_directions(sae) -> torch.Tensor:
-    """For each atom, take the mean curve direction over a 1D grid in t,
-    projected to the ambient space (curve_amp · g_k(t) · W_k summed over t).
+    """For each atom, take the mean ambient curve direction over the manifold
+    grid in t.
+
+    The new gamfit decoder blocks already live in ambient ``R^D``, so the
+    per-atom curve ``g_k(t)`` (shape ``(T, D)``) is obtained directly from
+    ``extract_feature_curves``. We average over the grid to get a single
+    representative ambient direction per atom, then normalize.
 
     Returns (F, D) tensor of ambient directions per atom (normalized).
     """
-    import gamfit.torch as gt
-    F = sae.config.n_features
-    K = sae.config.n_basis
-    R = sae.config.intrinsic_rank
-    t_grid = torch.linspace(0.05, 0.95, 64, dtype=torch.float64, device=sae.B_locked.device)
-    phi = gt.duchon_basis_1d(t_grid, sae.centers, m=2, periodic=sae.config.periodic)  # (T, K)
-    # g_k(t) shape (T, R) for each atom k
-    g = torch.einsum("tk,fkr->ftr", phi, sae.B_locked).to(torch.float32)
-    # mean over t: representative R-direction per atom
-    g_mean = g.mean(dim=1)                                          # (F, R)
-    # lift to ambient via per-atom W: (F, D)
-    dirs = torch.einsum("fr,fdr->fd", g_mean, sae.directions)
+    F = sae.cfg.n_atoms
+    curve_dict = sae.extract_feature_curves(grid_size=64)           # {k -> (T, D)}
+    ordered = [curve_dict[i] for i in range(F)]
+    curves = torch.stack(ordered, dim=0).to(torch.float32)          # (F, T, D)
+    dirs = curves.mean(dim=1)                                       # (F, D)
     dirs = dirs / dirs.norm(dim=1, keepdim=True).clamp(min=1e-8)
     return dirs
 

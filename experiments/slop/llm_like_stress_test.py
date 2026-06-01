@@ -221,15 +221,20 @@ def main(cfg: Config = Config()) -> int:
 
     # Curve SAE
     print("[curve] training persistent-curve SAE")
-    from manifold_sae.sae import ManifoldSAE, ManifoldSAEConfig
+    from manifold_sae.sae import (
+        ManifoldSAE,
+        ManifoldSAEConfig,
+        SparsityConfig,
+        DecoderConfig,
+    )
     from manifold_sae.losses import total_loss
+    manifold = "circle" if cfg.intrinsic_rank <= 1 else "product"
+    rank = 1 if cfg.intrinsic_rank <= 1 else cfg.intrinsic_rank
     sae_cfg = ManifoldSAEConfig(
-        input_dim=X.shape[1], n_features=cfg.sae_features, n_basis=cfg.n_basis,
-        top_k=cfg.top_k, intrinsic_rank=cfg.intrinsic_rank,
-        sparsity_weight=cfg.sparsity_weight,
-        ortho_weight=cfg.ortho_weight,
-        reml_weight=cfg.reml_weight,
-        encoder_type="linear",
+        input_dim=X.shape[1], n_atoms=cfg.sae_features, n_basis_per_atom=cfg.n_basis,
+        intrinsic_rank=rank, atom_manifold=manifold,
+        sparsity=SparsityConfig(kind="softmax_topk", target_k=cfg.top_k),
+        decoder=DecoderConfig(ortho_weight=cfg.ortho_weight),
     )
     curve_sae = ManifoldSAE(sae_cfg).to(device)
     n_p = sum(p.numel() for p in curve_sae.parameters())
@@ -248,7 +253,7 @@ def main(cfg: Config = Config()) -> int:
         batch = batch.to(device)
         opt.zero_grad(set_to_none=True)
         out = curve_sae(batch)
-        losses = total_loss(out, batch, sae_cfg)
+        losses = total_loss(out, batch, curve_sae)
         losses["total"].backward()
         torch.nn.utils.clip_grad_norm_(curve_sae.parameters(), 1.0)
         opt.step()
@@ -262,7 +267,7 @@ def main(cfg: Config = Config()) -> int:
     with torch.no_grad():
         eb = X_n[: min(4096, X_n.shape[0])].to(device)
         out = curve_sae(eb)
-        mse_c = float(torch.mean((out.reconstruction - eb) ** 2).item())
+        mse_c = float(torch.mean((out.x_hat - eb) ** 2).item())
         alive_c = ((out.amplitudes > 0.5).any(dim=0)).sum().item()
     print(f"[curve] MSE={mse_c:.4e} explained={1 - mse_c/var_v:.3f} alive={alive_c}/{cfg.sae_features}")
 

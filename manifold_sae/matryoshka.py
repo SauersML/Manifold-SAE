@@ -1,22 +1,19 @@
-"""Matryoshka SAE — nested-prefix multi-resolution SAE (gamfit 0.1.123 wrapper).
+"""Matryoshka SAE — nested-prefix multi-resolution SAE (gamfit 0.1.141).
 
 Shared encoder over ``F`` atoms; per-shell decoder views slice
-``W_dec[:s, :]`` for s ∈ shells. Loss = Σ_l (MSE_l + l1·‖z[:s_l]‖₁) —
-the analytic kernel ``gamfit.AnalyticPenaltyKind.NESTED_PREFIX``.
+``W_dec[:s, :]`` for s ∈ shells. Loss = Σ_l (MSE_l + l1·‖z[:s_l]‖₁).
 
-gamfit 0.1.123 migration status
--------------------------------
-``AnalyticPenaltyKind.NESTED_PREFIX`` enum + manifest entry
-(``{"kind": "nested_prefix", "rust": "NestedPrefix:NestedPrefixPenalty",
-"python": "NestedPrefixPenalty"}``) ship in 0.1.123. We tag the kind on
-the module for REML introspection.
-
-**Gap filed for gamfit**: the manifest names a Python wrapper
-``NestedPrefixPenalty`` but it is NOT actually exported from ``gamfit``
-(see ``gamfit/_penalties.py:122`` — only the enum value exists). When
-gamfit ships the wrapper, replace the per-shell python loop in
-``matryoshka_loss`` with ``NestedPrefixPenalty(shells=cfg.shells,
-l1_weight=cfg.l1_weight).evaluate(z, recons, x)``.
+gamfit 0.1.141 status
+---------------------
+The per-shell L1 term routes through the gam-native
+``gamfit.torch.SparsityPenalty("l1", l1_weight)`` (== ``l1_weight *
+z[:s].abs().mean()``). The nested-prefix MSE-over-shells structure itself
+has no torch primitive: ``gamfit.AnalyticPenaltyKind.NESTED_PREFIX`` is
+only an enum value (no Python/torch wrapper is exported), so the per-shell
+reconstruction loop stays here.
+TODO(gamfit): expose a torch ``NESTED_PREFIX`` penalty module (e.g.
+``gamfit.torch.NestedPrefixPenalty(shells=..., l1_weight=...)``) and route
+``matryoshka_loss`` through it.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -26,12 +23,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-try:
-    import gamfit
-    _NESTED_PREFIX = gamfit.AnalyticPenaltyKind.NESTED_PREFIX  # REML-side tag
-except Exception:
-    gamfit = None
-    _NESTED_PREFIX = None
+from gamfit.torch import SparsityPenalty
 
 
 @dataclass
@@ -43,10 +35,7 @@ class MatryoshkaSAEConfig:
 
 
 class MatryoshkaSAE(nn.Module):
-    """Shared encoder, per-shell decoder views (slices of ``W_dec[:s, :]``).
-
-    Tagged with ``self.penalty_kind = AnalyticPenaltyKind.NESTED_PREFIX``.
-    """
+    """Shared encoder, per-shell decoder views (slices of ``W_dec[:s, :]``)."""
 
     def __init__(self, cfg: MatryoshkaSAEConfig):
         super().__init__()
@@ -59,7 +48,6 @@ class MatryoshkaSAE(nn.Module):
         self.b_enc = nn.Parameter(torch.zeros(F_))
         self.W_dec = nn.Parameter(torch.randn(F_, D) * (1.0 / F_ ** 0.5))
         self.b_dec = nn.Parameter(torch.zeros(D))
-        self.penalty_kind = _NESTED_PREFIX
 
     def encode(self, x):
         return F.relu((x - self.b_dec) @ self.W_enc + self.b_enc)
@@ -71,15 +59,19 @@ class MatryoshkaSAE(nn.Module):
 
 
 def matryoshka_loss(out, x, cfg, shell_weights=None):
-    """Mirrors ``AnalyticPenaltyKind.NESTED_PREFIX`` (Σ_l MSE_l + l1·L1_l)."""
+    """Nested-prefix loss Σ_l shell_w_l · (MSE_l + l1·‖z[:s_l]‖₁).
+
+    The per-shell L1 uses ``gamfit.torch.SparsityPenalty("l1", l1_weight)``.
+    """
     z = out["z"]
     shells = list(cfg.shells)
     if shell_weights is None:
         shell_weights = [1.0] * len(shells)
+    sparsity = SparsityPenalty("l1", cfg.l1_weight)
     total = x.new_zeros(()); log = {}
     for w, s in zip(shell_weights, shells):
         mse_s = F.mse_loss(out["recon_per_shell"][s], x)
-        l1_s = cfg.l1_weight * z[:, :s].abs().mean()
+        l1_s = sparsity(z[:, :s])
         total = total + w * (mse_s + l1_s)
         log[f"mse_s{s}"] = mse_s.detach(); log[f"l1_s{s}"] = l1_s.detach()
     log["loss"] = total.detach()

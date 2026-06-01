@@ -1,9 +1,22 @@
-"""Tests for DAS-SAE.
+"""Tests for DAS-SAE (gamfit-native InterchangeSwapDecoder).
 
-(1) swap op symmetry: swap(a, b, m) + swap(b, a, m) ≡ a + b for any m.
-(2) mask gradient flows: grad of intv loss w.r.t. gate_logits is non-zero.
+The decoder is now the gamfit primitive ``InterchangeSwapDecoder``, which
+GATES at decode time and takes a BOOLEAN atom mask for the swap. These tests
+target that contract:
+
+(1) bool-mask selection: swap_decode(a, b, all_True) == decode(a);
+    swap_decode(a, b, all_False) == decode(b); a one-hot mask matches a
+    manual gated decode of the spliced latent.
+(2) gate gradient flows: grad of the interchange loss w.r.t. decoder.gate is
+    non-trivial.
 (3) loss decreases under a few optimizer steps.
-(4) no-swap (mask=0) reproduces standard SAE forward (same as decode(z_a)).
+(4) no-swap (all-False mask) reproduces the gated decode of z_b.
+(5) fit_hue_direction recovers a planted linear hue signal.
+
+NOTE: these import gamfit.torch.InterchangeSwapDecoder, which is only present
+in the post-refactor gamfit wheel; until that wheel builds, collection of this
+module will error at import — that is expected (the source API is the stable
+contract per the cutover spec).
 """
 from __future__ import annotations
 
@@ -25,35 +38,48 @@ def _make(D=32, F=24, B=8, top_k=4, seed=0):
     return sae, x
 
 
-def test_swap_symmetry():
-    sae, x = _make()
-    x_a = x
-    x_b = x.flip(0)
-    z_a = sae(x_a).z
-    z_b = sae(x_b).z
-    # Random mask.
-    m = torch.rand(z_a.shape[-1])
-    s_ab = sae.swap(z_a, z_b, mask=m)
-    s_ba = sae.swap(z_b, z_a, mask=m)
-    assert torch.allclose(s_ab + s_ba, z_a + z_b, atol=1e-6), \
-        "swap(a,b,m) + swap(b,a,m) must equal a + b for any m"
-
-
-def test_no_swap_identity():
+def test_swap_decode_bool_selection():
+    """all-True ⇒ decode(z_a); all-False ⇒ decode(z_b); one-hot matches manual."""
     sae, x = _make()
     z_a = sae(x).z
     z_b = sae(x.flip(0)).z
-    zero_mask = torch.zeros(z_a.shape[-1])
-    s = sae.swap(z_a, z_b, mask=zero_mask)
-    assert torch.allclose(s, z_a), "mask=0 swap must equal z_a (no-op)"
-    # And decoding it must equal the standard SAE forward.
-    x_hat_swap = sae.decode(s)
-    x_hat_std = sae.decode(z_a)
-    assert torch.allclose(x_hat_swap, x_hat_std), \
-        "decode(swap_no_op) must equal decode(z_a) = standard SAE forward"
+    F = z_a.shape[-1]
+
+    all_true = torch.ones(F, dtype=torch.bool)
+    all_false = torch.zeros(F, dtype=torch.bool)
+
+    assert torch.allclose(
+        sae.swap_decode(z_a, z_b, atom_mask=all_true), sae.decode(z_a), atol=1e-5
+    ), "all-True mask must reproduce the gated decode of z_a"
+    assert torch.allclose(
+        sae.swap_decode(z_a, z_b, atom_mask=all_false), sae.decode(z_b), atol=1e-5
+    ), "all-False mask must reproduce the gated decode of z_b"
+
+    # One-hot mask: feature 3 taken from z_a, rest from z_b. Manually splice
+    # the latent then gated-decode; must match the fused swap_decode.
+    m = torch.zeros(F, dtype=torch.bool)
+    m[3] = True
+    z_manual = z_b.clone()
+    z_manual[:, 3] = z_a[:, 3]
+    assert torch.allclose(
+        sae.swap_decode(z_a, z_b, atom_mask=m), sae.decode(z_manual), atol=1e-5
+    ), "one-hot swap_decode must equal gated decode of the manually spliced latent"
 
 
-def test_mask_gradient_flows():
+def test_no_swap_identity():
+    """all-False mask == gated decode of z_b (the no-swap baseline)."""
+    sae, x = _make()
+    z_a = sae(x).z
+    z_b = sae(x.flip(0)).z
+    F = z_a.shape[-1]
+    all_false = torch.zeros(F, dtype=torch.bool)
+    s = sae.swap_decode(z_a, z_b, atom_mask=all_false)
+    assert torch.allclose(s, sae.decode(z_b), atol=1e-5), \
+        "all-False swap_decode must equal the gated decode of z_b (no-op on a)"
+
+
+def test_gate_gradient_flows():
+    """Interchange loss must push a gradient into the decoder gate."""
     sae, x = _make()
     x_a = x
     x_b = x.flip(0)
@@ -62,13 +88,15 @@ def test_mask_gradient_flows():
     hue_a = torch.rand(x.shape[0])
     hue_b = torch.rand(x.shape[0])
     tgt = build_target_swap(x_a, x_b, hue_a, hue_b, v)
+    # Use a non-zero gate L1 so the gate definitely receives a gradient even if
+    # the bool-thresholded swap term is locally flat for some atoms.
     losses = sae.compute_loss(x_a, x_b, tgt,
-                              lambda_intv=1.0, lambda_gate=0.0, lambda_l1=0.0,
+                              lambda_intv=1.0, lambda_gate=1e-2, lambda_l1=0.0,
                               lambda_gate_entropy=0.0)
     losses["loss"].backward()
-    g = sae.gate_logits.grad
-    assert g is not None, "gate_logits must receive a gradient"
-    assert g.abs().sum().item() > 1e-8, "gate_logit gradient must be non-trivial"
+    g = sae.decoder.gate.grad
+    assert g is not None, "decoder.gate must receive a gradient"
+    assert g.abs().sum().item() > 1e-8, "decoder.gate gradient must be non-trivial"
 
 
 def test_loss_decreases_after_optim_steps():

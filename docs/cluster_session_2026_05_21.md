@@ -3,6 +3,16 @@
 First session running Manifold-SAE on an 8×B200 cluster via Heimdall.
 Captures what was tried, what broke, and what we measured.
 
+> **Historical log — read with `docs/findings.md`.** This session
+> predates the per-dim normalization fix. The synthetic 1D-curve
+> results and the engineering/pipeline notes below still stand, but the
+> real-LM conclusions recorded here (the holdout concept-encoding
+> "curve beats vanilla" claim, the compactness counts, and the
+> "architectural claim empirically validated" framing) were measured on
+> a contaminated rank-1 path and were **retracted** after the fix. The
+> current real-LM verdict is the opposite at scale; see
+> `docs/findings.md`. Tables are kept as the as-measured record only.
+
 ## Headline results
 
 ### Synthetic 1D-curve recovery (`experiments/realistic_scaling.py`)

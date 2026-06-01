@@ -150,18 +150,13 @@ def main():
         aux_hsv=aux_hsv_std,
         n_supervised=N_SUP,
         n_free=N_FREE,
-        weight_recon=1.0,
         weight_ivae=60.0,
-        weight_free_prior=1.0e-3,
         weight_mech=5.0e-3,
-        epsilon_mech=1.0e-6,
-        n_centres=8,
         n_iter=250,
-        smooth_refit_every=5,
-        sigma_floor=0.15,
+        lr=1.0e-2,
         seed=59,
     )
-    print(f"[fit] used_rust={fit.used_rust}  final loss={fit.losses[-1]['total']:.3f}")
+    print(f"[fit] final loss={fit.losses[-1]['total']:.3f}  steps={len(fit.losses)}")
 
     # ---- Eval: per-axis correlations and supervised R²
     T_all = fit.T
@@ -236,16 +231,17 @@ def main():
     fig.colorbar(im2, ax=ax, shrink=0.85)
 
     ax = axs[1, 0]
-    losses = fit.losses
-    iters = [r["iter"] for r in losses]
-    ax.plot(iters, [r["total"] for r in losses], label="total")
-    ax.plot(iters, [r["recon"] for r in losses], label="recon")
-    ax.plot(iters, [r["ivae"] for r in losses], label="ivae")
-    ax.plot(iters, [r["mech"] for r in losses], label="mech")
-    ax.set_xlabel("iter"); ax.set_ylabel("loss")
-    ax.set_yscale("log")
-    ax.set_title("training losses")
-    ax.legend(fontsize=8)
+    ax.axis("off")
+    info_lines = [
+        "identifiable_manifold_sae (iVAE + mech-sparsity)",
+        f"final loss   = {fit.losses[-1]['total']:.3f}",
+        f"n_supervised = {fit.n_supervised}",
+        f"n_free       = {fit.n_free}",
+        f"steps        = {len(fit.losses)}",
+    ]
+    ax.text(0.02, 0.98, "\n".join(info_lines), va="top", ha="left",
+            family="monospace", fontsize=9, transform=ax.transAxes)
+    ax.set_title("fit summary")
 
     ax = axs[1, 1]
     labels = AUX_LABELS_HSV + AUX_LABELS_NAME
@@ -266,11 +262,10 @@ def main():
 
     out = {
         "experiment": "auto_exp_59_ivae_companion",
-        "used_rust_ffi": bool(fit.used_rust),
+        "evidence": float(fit.evidence),
+        "fit_warnings": list(fit.warnings),
         "n_supervised": N_SUP,
         "n_free": N_FREE,
-        "n_iter": len(fit.losses),
-        "final_loss": fit.losses[-1],
         "r2_hsv_from_sup": r2_hsv_sup.tolist(),
         "r2_name_from_free": r2_name_free.tolist(),
         "corr_hsv": corr_hsv.tolist(),

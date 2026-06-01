@@ -1,34 +1,27 @@
-"""CylinderSAE — Cylinder-native Manifold-SAE, gamfit 0.1.123 thin wrapper.
+"""CylinderSAE — Cylinder-native Manifold-SAE on gamfit 0.1.141.
 
 Motivation (auto_exp_67 on cogito-L40):
     Cylinder (S^1 × R) WINS topology selection by ΔREML > 140 vs Torus,
     > 1500 vs Euclidean. Each atom is a sheet (θ ∈ S^1, ℓ ∈ R).
 
-History — what was deleted in the 0.1.123 migration
----------------------------------------------------
-The pre-0.1.123 version of this file shipped its OWN per-feature MLP
-encoder (`fc1_w: (F, D, H)` — 210 GB at F=512 D=7168 H=14336 default),
-its own torch B-spline surrogate, AND a per-feature decoder. The
-per-feature MLP was the OOM hazard.
+Bases
+-----
+The atom decoder uses a tensor-product basis φ_θ(θ) ⊗ φ_ℓ(ℓ):
 
-We now route through:
+  * ℓ (open margin): the real, autograd-capable cubic B-spline from
+    ``gamfit.torch.bspline_basis`` with a fixed clamped knot vector (so the
+    column count is deterministic and data-independent). This replaces the
+    former hand-rolled Gaussian partition-of-unity surrogate.
+  * θ (periodic margin): an analytic Fourier basis. gamfit 0.1.141 exposes
+    no autograd-capable Fourier evaluator — ``periodic_spline_curve_basis``
+    is forward-only (no grad through ``t``) and ``bspline_basis(periodic=True)``
+    is a *B-spline*, not Fourier, with a different column count. Both would
+    break end-to-end backprop through the encoder-predicted θ here.
+    TODO(gamfit): add an autograd-capable periodic Fourier basis evaluator
+    (e.g. ``gamfit.torch.fourier_basis(theta, harmonics)``); cut over then.
 
-  * `gamfit.Cylinder(n_knots=(K_theta, K_ell))` — the canonical basis
-    descriptor (TensorBSpline of periodic θ × non-periodic ℓ margins).
-  * a SHARED encoder (one `nn.Linear` → F·3 heads), eliminating the
-    per-feature MLP entirely.
-
-NOTE on gamfit gap: `gamfit.Cylinder` is a basis *descriptor*, not a
-callable basis-matrix evaluator that streams through a torch graph.
-The actual periodic-θ Fourier × Gaussian-ℓ basis is still computed
-in torch below — this is the torch-grad mirror of `gamfit.Cylinder`'s
-REML basis. Filed as gap: gamfit needs a `Cylinder.evaluate(theta, ell)
--> torch.Tensor` for end-to-end backprop.
-
-For end-to-end gamfit REML on this topology, `gamfit.sae_manifold_fit(
-X, atom_topology='cylinder', d_atom=2)` is the one-shot entry point —
-but it currently errors with "Duchon D2 collocation requires 2*(p+s) >
-dimension+2" since it doesn't expose duchon_{p,s} kwargs (also filed).
+The encoder is SHARED (one ``nn.Linear`` → F·4 heads), eliminating the
+old per-feature MLP entirely.
 """
 from __future__ import annotations
 
@@ -38,20 +31,21 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-try:
-    import gamfit
-    _CYLINDER_DESCRIPTOR = gamfit.Cylinder  # for introspection / REML wiring
-except Exception:  # gamfit optional at import time
-    gamfit = None
-    _CYLINDER_DESCRIPTOR = None
+from gamfit.torch import SparsityPenalty
+from gamfit.torch import bspline_basis as _gam_bspline_basis
 
 
 # ---------------------------------------------------------------------------
-# Bases (torch-grad mirror of gamfit.Cylinder's TensorBSpline marginals).
+# Bases.
 # ---------------------------------------------------------------------------
 
 def fourier_basis(theta: torch.Tensor, harmonics: int) -> torch.Tensor:
-    """Fourier features on S^1 (mirrors periodic BSpline marginal)."""
+    """Fourier features on S^1: [1, cos θ, sin θ, …] -> (..., 2H+1).
+
+    No autograd-capable Fourier evaluator exists in gamfit 0.1.141 (see module
+    docstring). TODO(gamfit): replace with ``gamfit.torch.fourier_basis`` once
+    a periodic-Fourier torch primitive ships.
+    """
     out = [torch.ones_like(theta)]
     for h in range(1, harmonics + 1):
         out.append(torch.cos(h * theta))
@@ -60,12 +54,20 @@ def fourier_basis(theta: torch.Tensor, harmonics: int) -> torch.Tensor:
 
 
 def bspline_basis(ell: torch.Tensor, n_basis: int, low: float = -3.0, high: float = 3.0) -> torch.Tensor:
-    """Gaussian partition-of-unity surrogate for cubic B-spline on [low, high]."""
-    centers = torch.linspace(low, high, n_basis, device=ell.device, dtype=ell.dtype)
-    sigma = (high - low) / max(n_basis - 1, 1)
-    diff = ell.unsqueeze(-1) - centers
-    phi = torch.exp(-0.5 * (diff / sigma) ** 2)
-    return phi / phi.sum(dim=-1, keepdim=True).clamp(min=1e-6)
+    """Cubic B-spline on [low, high] via ``gamfit.torch.bspline_basis``.
+
+    Uses a fixed clamped degree-3 knot vector so the basis has exactly
+    ``n_basis`` columns regardless of the data distribution (gamfit's
+    integer-``knots`` path auto-derives data-dependent knots, which would make
+    the decoder column count batch-dependent). Autograd flows back to ``ell``.
+    """
+    deg = 3
+    n_interior = max(n_basis - deg + 1, 2)
+    interior = torch.linspace(low, high, n_interior, device=ell.device, dtype=ell.dtype)
+    knots = torch.cat([interior[:1].repeat(deg), interior, interior[-1:].repeat(deg)])
+    # gamfit.torch.bspline_basis requires 1-D evaluation points; flatten/restore.
+    flat = _gam_bspline_basis(ell.reshape(-1), knots, degree=deg, periodic=False)
+    return flat.reshape(*ell.shape, flat.shape[-1])
 
 
 # ---------------------------------------------------------------------------
@@ -107,12 +109,6 @@ class CylinderSAE(nn.Module):
         self.H, self.K_ell = cfg.fourier_harm, cfg.lightness_basis_k
         self.M = (2 * self.H + 1) * self.K_ell
 
-        # gamfit basis descriptor (REML-side metadata; not used in forward).
-        self.basis_spec = (
-            _CYLINDER_DESCRIPTOR(n_knots=(2 * self.H + 1, self.K_ell), name="cyl")
-            if _CYLINDER_DESCRIPTOR is not None else None
-        )
-
         # SHARED encoder — single Linear → F*3 (cos_θ, sin_θ, ℓ, amp).
         self.norm = nn.LayerNorm(D) if D >= 4 else nn.Identity()
         self.in_proj = nn.Linear(D, cfg.hidden_dim)
@@ -126,6 +122,8 @@ class CylinderSAE(nn.Module):
         self.top_k = int(cfg.top_k)
         self.sparsity_weight = float(cfg.sparsity_weight)
         self.ard_weight = float(cfg.ard_weight)
+        # gam-native L1 sparsity penalty (== sparsity_weight * z.abs().mean()).
+        self._sparsity = SparsityPenalty("l1", self.sparsity_weight)
 
     def encode(self, x: torch.Tensor):
         xc = x - self.b_dec
@@ -166,7 +164,7 @@ class CylinderSAE(nn.Module):
     def loss(self, x: torch.Tensor):
         out = self(x)
         recon = ((out["x_hat"] - x) ** 2).mean()
-        sparsity = self.sparsity_weight * out["amp_soft"].mean()
+        sparsity = self._sparsity(out["amp_soft"])
         ard = self.ard_weight * self.atom_norms().mean()
         total = recon + sparsity + ard
         with torch.no_grad():
