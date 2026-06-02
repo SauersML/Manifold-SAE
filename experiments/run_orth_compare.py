@@ -28,9 +28,9 @@ BASE = dict(
     intrinsic_rank=2,
     top_k=2,
     slack_features=2,
-    n_steps=200,
+    n_steps=800,
     batch_size=128,
-    curriculum_steps=100,
+    curriculum_steps=400,
     lr=2e-3,
     seed=0,
     plot=True,
@@ -61,7 +61,8 @@ def run() -> None:
     print("-" * 48)
     for key, label in [
         ("explained_variance", "explained_var"),
-        ("chamfer_mean", "chamfer_mean (↓)"),
+        ("chamfer_mean", "chamfer_mean (↓,lenient)"),
+        ("curvature_recovery_curved", "curvature_rec (↑)"),
         ("subspace_cos_mean", "subspace_cos (↑)"),
         ("leakage_mean", "leakage_mean (↓)"),
         ("leakage_max", "leakage_max (↓)"),
@@ -85,7 +86,8 @@ def _comparison_plot(results) -> None:
 
     metrics = [
         ("explained_variance", "explained var ↑"),
-        ("chamfer_mean", "chamfer ↓"),
+        ("chamfer_mean", "chamfer ↓\n(lenient)"),
+        ("curvature_recovery_curved", "curvature\nrecovery ↑"),
         ("subspace_cos_mean", "subspace cos ↑"),
         ("leakage_mean", "leakage ↓"),
     ]

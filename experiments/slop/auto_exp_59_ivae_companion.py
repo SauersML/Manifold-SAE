@@ -262,8 +262,7 @@ def main():
 
     out = {
         "experiment": "auto_exp_59_ivae_companion",
-        "evidence": float(fit.evidence),
-        "fit_warnings": list(fit.warnings),
+        "final_loss": float(fit.losses[-1]["total"]),
         "n_supervised": N_SUP,
         "n_free": N_FREE,
         "r2_hsv_from_sup": r2_hsv_sup.tolist(),
