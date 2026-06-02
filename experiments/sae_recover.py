@@ -59,7 +59,7 @@ class ManifoldSAE(torch.nn.Module):
 
 
 def fit_sae(X, K, M=18, n_steps=3000, lr=1e-2, sparsity=1e-2, smooth=1e-4,
-            tau0=1.0, tau1=0.15, seed=0, log_every=0):
+            ortho_w=0.0, tau0=1.0, tau1=0.15, seed=0, log_every=0):
     torch.manual_seed(seed)
     Xt = torch.as_tensor(np.asarray(X), dtype=torch.float64)
     N, D = Xt.shape
@@ -75,7 +75,16 @@ def fit_sae(X, K, M=18, n_steps=3000, lr=1e-2, sparsity=1e-2, smooth=1e-4,
         ent = -(w * (w + 1e-9).log()).sum(1).mean()
         # smoothness: penalize the RBF (curvature) coefficients
         sm = (sae.B[:, :rbf, :] ** 2).mean()
-        loss = mse + sparsity * ent + smooth * sm
+        # identifiability: atoms should occupy DISTINCT ambient subspaces. With
+        # B_k (Mb,D), the ambient overlap between atoms k,j is ||B_k B_j^T||_F^2,
+        # which is 0 iff their row-spaces are orthogonal. Penalizing it breaks
+        # the reconstruction degeneracy (a circle re-expressed as two crossed
+        # lines from different atoms) without assuming any shape.
+        Bk = sae.B.reshape(sae.K, -1, D)
+        Gram = torch.einsum("kmd,jnd->kjmn", Bk, Bk)         # (K,K,Mb,Mb)
+        ov = (Gram ** 2).sum((2, 3))
+        ortho = (ov.sum() - torch.diagonal(ov).sum()) / max(sae.K * (sae.K - 1), 1)
+        loss = mse + sparsity * ent + smooth * sm + ortho_w * ortho
         loss.backward()
         opt.step()
         if log_every and step % log_every == 0:
