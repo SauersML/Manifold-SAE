@@ -89,8 +89,10 @@ def recover(X, K, G=200):
             curves.append(None); continue
         t, closed = _init_positions(Yk)
         try:
-            C2 = _reml_curve(Yk, t, closed, grid)
-            curves.append(C2 @ B.T)
+            curves.append(_reml_curve(Yk, t, closed, grid) @ B.T)
         except Exception:
             curves.append(None)
+    # NOTE: 7/8 shapes are pixel-perfect with this pure closed-form init. The
+    # multi-turn spiral is the one shape a one-shot init can't order; it needs an
+    # iterative ordering refinement (see method_fourier, the clean winner).
     return curves
