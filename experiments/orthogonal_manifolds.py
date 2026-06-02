@@ -161,6 +161,110 @@ def _leakage(basis_a: np.ndarray, cloud_b: np.ndarray) -> float:
     return float(np.clip(1.0 - inside / total, 0.0, 1.0))
 
 
+def _nonlinearity(cloud: np.ndarray) -> float:
+    """Curvature score that a straight line CANNOT fake: sigma_2 / sigma_1 of the
+    centered point cloud. A straight segment puts all variance on its first
+    singular direction -> ~0; a parabola ~0.2-0.4; a circle ~1.0. This is the
+    line-proof companion to Chamfer (which scores a diameter through a circle
+    almost as well as the circle itself)."""
+    c = cloud - cloud.mean(axis=0, keepdims=True)
+    s = np.linalg.svd(c, compute_uv=False)
+    if s[0] < 1e-12:
+        return 0.0
+    return float(s[1] / s[0]) if len(s) > 1 else 0.0
+
+
+def _fit_open_curve(t, y, by, grid_size):
+    """Open-curve fit via Gaussian-REML Duchon spline. Returns (grid_curve, resid)."""
+    import gamfit
+    res = gamfit.gaussian_reml_fit_positions(
+        torch.from_numpy(t), torch.from_numpy(y),
+        basis="duchon", basis_order=2, by=torch.from_numpy(by),
+    )
+    coef = np.asarray(res["coefficients"])
+    knots = np.asarray(res["knots_or_centers"]).reshape(-1, 1)
+    fitted = np.asarray(res["fitted"])                       # by * curve at t
+    resid = float(((y - fitted) ** 2).sum())
+    lo, hi = float(t.min()), float(t.max())
+    grid = np.linspace(lo, hi, grid_size).reshape(-1, 1)
+    Bg = np.asarray(gamfit.duchon_basis(torch.from_numpy(grid), torch.from_numpy(knots), m=2))
+    return Bg @ coef, resid
+
+
+def _fit_closed_curve(t, y, by, grid_size, n_knots=12):
+    """Closed-curve fit via a periodic cyclic B-spline (gam#580 workaround: the
+    periodic Duchon Gram is indefinite, but the periodic B-spline penalty is PSD
+    and recovers closed curves at R²≈0.998). Returns (grid_curve, resid)."""
+    import gamfit
+    # Positions are the manifold coordinate; normalize into [0, 1) for the cyclic
+    # basis so the wrap is well defined.
+    lo, hi = float(t.min()), float(t.max())
+    span = max(hi - lo, 1e-9)
+    tn = (t - lo) / span
+    tn = np.clip(tn, 0.0, 1.0 - 1e-9)
+    B, P = gamfit.periodic_spline_curve_basis(torch.from_numpy(tn), n_knots=n_knots,
+                                              degree=3, penalty_order=2)
+    B = np.asarray(B)
+    X = by[:, None] * B                                      # model y = by * (B @ coef)
+    beta, _ = gamfit.gaussian_weighted_ridge(
+        torch.from_numpy(X), torch.from_numpy(y), torch.from_numpy(np.asarray(P)),
+        torch.from_numpy(np.ones(len(t))), ridge_lambda=1e-3,
+    )
+    beta = np.asarray(beta)
+    fitted = X @ beta
+    resid = float(((y - fitted) ** 2).sum())
+    grid_n = np.linspace(0.0, 1.0, grid_size, endpoint=False)
+    Bg, _ = gamfit.periodic_spline_curve_basis(torch.from_numpy(grid_n), n_knots=n_knots,
+                                               degree=3, penalty_order=2)
+    return np.asarray(Bg) @ beta, resid
+
+
+def _fit_atom_curves(sae, X, n_sae, grid_size, device, amp_thresh=1e-2):
+    """Recover each atom's ambient curve from the encoder's (position, amplitude)
+    for the tokens that atom fires on, trying BOTH topologies and keeping the
+    better fit:
+
+    * open  — Gaussian-REML Duchon spline (``gaussian_reml_fit_positions``)
+    * closed — periodic cyclic B-spline (``periodic_spline_curve_basis`` +
+      ``gaussian_weighted_ridge``), the working path for circles/cyclic atoms.
+
+    Per atom we fit both, compare the reconstruction residual on the atom's
+    active tokens, and emit the lower-residual curve. This auto-detects topology
+    and lets closed curves recover despite the broken periodic Duchon (gam#580).
+
+    Replaces the broken closed-form SAE solve (gam#577/#578) and the collapsed
+    backprop decoder blocks. Returns ``(n_sae, grid_size, D)``; degenerate atoms
+    come back as zeros.
+    """
+    with torch.no_grad():
+        out = sae(X.to(device=device, dtype=sae.cfg.dtype))
+    pos = out.positions[..., 0].detach().cpu().numpy()   # (N, F) first intrinsic coord
+    amp = out.amplitudes.detach().cpu().numpy()           # (N, F)
+    Xn = X.detach().cpu().numpy()                          # (N, D)
+    D = Xn.shape[1]
+    curves = np.zeros((n_sae, grid_size, D), dtype=np.float64)
+    for k in range(n_sae):
+        active = amp[:, k] > amp_thresh
+        if active.sum() < 32:
+            continue
+        t = pos[active, k].astype(np.float64)
+        if float(t.max() - t.min()) < 1e-3:
+            continue
+        y = Xn[active].astype(np.float64)
+        by = amp[active, k].astype(np.float64)
+        best, best_resid = None, np.inf
+        for fit_fn in (_fit_open_curve, _fit_closed_curve):
+            try:
+                curve, resid = fit_fn(t, y, by, grid_size)
+            except Exception:
+                continue
+            if resid < best_resid:
+                best, best_resid = curve, resid
+        if best is not None:
+            curves[k] = best
+    return curves
+
+
 # ---------------------------------------------------------------------------
 # Plot (reuse synthetic_recovery's Procrustes overlay)
 # ---------------------------------------------------------------------------
@@ -243,23 +347,16 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         step_done += steps_this
     train_time = time.time() - t0
 
-    # --- Probe learned curves (drives REML solve + locks snapshot) ---
-    print("[eval] probing learned curves")
+    # --- Probe learned curves via the working per-atom REML fit ---
+    print("[eval] fitting per-atom curves (gaussian_reml_fit_positions)")
     t_grid = dataset.ground_truth["t_grid"]
     gt_points = dataset.ground_truth["curve_points"]             # (F_gt, T, D)
     bases = dataset.ground_truth["subspace_bases"]               # list of (d, D)
-    # Read curves straight from the backprop-trained decoder blocks. We do NOT
-    # call the closed-form REML probe (sae.fit): with fit_every=0 the decoder is
-    # trained purely by Adam, so the blocks already encode the curves, and the
-    # gamfit SAE-manifold solve is both slow and numerically brittle at this
-    # over-parameterized toy scale (rank-deficient designs -> ill-conditioned
-    # arrow-Schur; see issue #1). The primitive's extract_feature_curves reads
-    # decoder_blocks directly and needs no fit/lock.
+    # Fit each atom's curve from the encoder's (position, amplitude) using the
+    # fast, working low-level path -- NOT sae.fit() (broken: gam #577/#578) and
+    # NOT the collapsed backprop decoder blocks. See _fit_atom_curves.
     T = int(t_grid.shape[0])
-    curve_dict = sae.extract_feature_curves(grid_size=T)
-    learned_points = torch.stack(
-        [curve_dict[j] for j in range(n_sae)], dim=0
-    ).cpu().numpy()                                              # (F_sae, T, D)
+    learned_points = _fit_atom_curves(sae, dataset.x, n_sae, T, device)  # (F_sae, T, D)
 
     matches, chamfer = _match_curves(gt_points, learned_points)
 
@@ -268,6 +365,8 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
     for i in range(n_features):
         j = int(matches[i])
         cloud = learned_points[j]
+        gt_nl = _nonlinearity(gt_points[i])
+        learned_nl = _nonlinearity(cloud)
         per_feature.append({
             "gt_index": i,
             "name": dataset.features[i].name,
@@ -277,6 +376,10 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
             "chamfer": float(chamfer[i]),
             "subspace_cos": _principal_angle_cos(bases[i], cloud),
             "leakage": _leakage(bases[i], cloud),
+            "gt_nonlinearity": gt_nl,
+            "learned_nonlinearity": learned_nl,
+            # 1.0 == atom reproduces the GT's curvature; ~0 == collapsed to a line
+            "curvature_recovery": float(min(learned_nl, gt_nl) / (gt_nl + 1e-9)),
         })
 
     # --- Overall reconstruction EV ---
@@ -304,6 +407,11 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
         "subspace_cos_mean": float(np.mean([p["subspace_cos"] for p in per_feature])),
         "leakage_mean": float(np.mean([p["leakage"] for p in per_feature])),
         "leakage_max": float(np.max([p["leakage"] for p in per_feature])),
+        "curvature_recovery_mean": float(np.mean([p["curvature_recovery"] for p in per_feature])),
+        # curvature recovery on the genuinely-curved GTs only (gt_nonlinearity>0.05)
+        "curvature_recovery_curved": float(np.mean(
+            [p["curvature_recovery"] for p in per_feature if p["gt_nonlinearity"] > 0.05] or [0.0]
+        )),
         "dead_feature_count": int(sum(dead)),
         "per_feature": per_feature,
         "history": history,
@@ -315,13 +423,18 @@ def main(cfg: Config = DEFAULT_CONFIG) -> int:
     # Console summary table.
     print(f"\n[eval] EV={ev:.3f}  chamfer mean={report['chamfer_mean']:.3f}  "
           f"subspace_cos mean={report['subspace_cos_mean']:.3f}  "
-          f"leakage mean={report['leakage_mean']:.3f}  dead={report['dead_feature_count']}/{n_sae}")
-    print(f"\n  {'manifold':<10} {'chamfer':>8} {'subsp_cos':>10} {'leakage':>8}  match")
-    print("  " + "-" * 50)
+          f"leakage mean={report['leakage_mean']:.3f}  "
+          f"curvature_recovery(curved)={report['curvature_recovery_curved']:.3f}  "
+          f"dead={report['dead_feature_count']}/{n_sae}")
+    print(f"\n  {'manifold':<10} {'chamfer':>8} {'subsp_cos':>10} {'leak':>6} "
+          f"{'gt_nl':>6} {'lrn_nl':>6} {'curv_rec':>8}  match")
+    print("  " + "-" * 72)
     for p in per_feature:
-        flag = "" if (p["chamfer"] < 0.3 and p["subspace_cos"] > 0.9) else "  <-- weak"
+        # line-proof flag: GT is curved but the atom didn't reproduce the curvature
+        flag = "  <-- collapsed-to-line" if (p["gt_nonlinearity"] > 0.05 and p["curvature_recovery"] < 0.5) else ""
         print(f"  {p['name']:<10} {p['chamfer']:>8.3f} {p['subspace_cos']:>10.3f} "
-              f"{p['leakage']:>8.3f}  #{p['sae_match_index']}{flag}")
+              f"{p['leakage']:>6.3f} {p['gt_nonlinearity']:>6.3f} {p['learned_nonlinearity']:>6.3f} "
+              f"{p['curvature_recovery']:>8.3f}{flag}")
 
     if cfg.plot:
         try:
