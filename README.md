@@ -85,56 +85,67 @@ What's *not* in the loss: smoothness penalty (REML owns it), curve-norm gauge (R
 
 This is what the code does. The earlier persistent-`B`-as-`nn.Parameter` version did *not* support this claim — there REML wasn't actually running, just a hand-rolled quadratic penalty — and was migrated back to the spec'd architecture (commit `74c307a`).
 
-## Empirical results
+## Joint manifold-SAE recovery objective (gamfit `sae_manifold_fit`)
 
-### Synthetic curves, head-to-head with vanilla TopK SAE at matched dictionary size
+The design session converged on building joint multi-atom recovery directly on
+gamfit's first-class joint solve, `gamfit.sae_manifold_fit`, rather than a
+hand-rolled torch loop. There is no separate encoder net and no student: the
+**canonical answer *is* the joint fit**, and the encode direction (activation →
+coordinate) is the same solver run with the dictionary frozen
+(`ManifoldSAE.encode`).
 
-`experiments/realistic_scaling.py`. Three scenarios, F=#GT curves, TopK matched:
+- **Canonical assignment = IBP.** The assignment prior is `assignment="ibp"` — an
+  Indian-Buffet-Process prior giving an *adaptive* atom count and *true zeros* in
+  the assignment — not `softmax` + `top_k` (a fixed-count soft relaxation). IBP is
+  the gam default and the design-decided answer; every recovery fit uses it.
+- **Cross-atom decoder incoherence (the separability lever, gamfit #671).** When
+  two superposed atoms share a coherent plane, the per-token split between them is
+  ill-posed. `decoder_incoherence_weight` pushes superposed atoms' decoder column
+  spaces apart so the split is identifiable. This is the headline knob the
+  verification harness gates on (ON vs OFF).
+- **Nuclear-norm embedding-rank selection (#672).** The per-atom ambient embedding
+  rank is selected by a nuclear-norm (trace-norm) penalty rather than a hand-set
+  `R`, letting the fit choose how many ambient directions each atom needs.
+- **ScadMcp non-convex sparsity.** Assignment/amplitude sparsity uses SCAD / MCP
+  non-convex penalties (near-unbiased on large coefficients) instead of plain L1.
+- **Isometry gauge + gauge-conditional topology evidence (#673).** The isometry
+  gauge weight (`isometry_weight > 0`, verified load-bearing — at 0 the periodic
+  parameterization collapses) pins each atom's coordinate to be a near-isometry of
+  its manifold; #673 makes the topology model-evidence *conditional on that gauge*,
+  so topology selection is comparable across candidates rather than confounded by
+  gauge freedom.
+- **Per-atom uncertainty + typical coordinate range.** The fit result now exposes,
+  per atom, topology/manifold **uncertainty** (posterior shape bands, the curve
+  mean ± sd) and a **typical coordinate range** (where the coordinate actually
+  concentrates). These are read off the gamfit result, not estimated downstream.
 
-| Scenario | D | GT curves | Anchors/curve | Active/token | Vanilla expl | Curve expl | Δ |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| small | 128 | 16 | 32 | 3 | 0.494 | **0.768** | **+0.274** |
-| mid   | 256 | 32 | 64 | 5 | 0.513 | **0.760** | **+0.247** |
-| large | 512 | 64 | 64 | 8 | 0.452 | **0.643** | **+0.191** |
+### Verification harness
 
-Curve SAE wins on reconstruction at matched F across all scales by
-+19 to +27 percentage points. Hungarian-matched Chamfer (shape recovery)
-is also 30-35% lower for the curve SAE on every scenario.
+Two files in `experiments/` form the recovery verification gate. Both build
+directly on `gamfit.sae_manifold_fit` with the canonical IBP assignment and
+self-gate (report **BLOCKED**, never a false PASS) when a fit diverges or the
+installed gamfit lacks a needed knob:
 
-### Real LM activations — see `docs/findings.md`
+- **`experiments/manifold_recovery.py`** — the gate. Three checks: (1) K=2
+  superposed-circle recovery under IBP (PASS if reconstruction R² > 0.9); (2) the
+  headline **incoherence ON vs OFF** gate across a coherence sweep — ON must raise
+  the recovered-tangent `σ_min` *and* lower the cross-atom decoder cross-Gram
+  ‖B₀B₁ᵀ‖_F (or improve coordinate recovery); (3) a **single-atom out-of-class
+  specification check** (K=1, runs today) that flags a 2D blob mis-fit as a circle
+  via an absolute out-of-class margin calibrated against a true-circle null.
+- **`experiments/manifold_falsifier.py`** — the keystone falsifier + shared scoring
+  primitives. Plants two circles with two orthogonal knobs (coherence → colinear
+  planes; coverage → co-active fraction) and scores per-token coordinate recovery
+  up to each circle's isometry (`circ_procrustes_r2`), plus the **`σ_min`
+  identifiability metric** (smallest singular value of the stacked active-atom
+  tangent frame — 0 iff the split is underdetermined). `--selftest` proves the
+  scoring is trustworthy (isometry-invariant, split-sensitive, σ_min decreasing as
+  planes go colinear) *before* the fit unblocks.
 
-The honest, post-fix assessment of Manifold-SAE on real LM residuals
-lives in `docs/findings.md`. The short version: after fixing a
-late-discovered per-dim normalization bug and measuring the intrinsic
-dimensionality of real concept manifolds (correlation dim 2.4–3.4 for
-most concept×layer pairs), the architecture's core 1D assumption does
-*not* hold at scale. With proper normalization, Manifold-SAE wins only
-at the smallest model (Qwen-0.5B, small F) and loses to vanilla TopK
-SAE at every model with D ≥ 1536. See `docs/findings.md` for the full
-post-fix EV / alive-atom tables, the intrinsic-dimension measurement,
-and the 2D-atom ablation.
-
-An earlier round of real-LM results (holdout concept-encoding transfer,
-concept-localization counts, L18 atom-utilization, the `n_basis` sweep)
-was measured on a contaminated/rank-1 preprocessing path and has been
-retracted; do not cite those numbers.
-
-### Connection to Goodfire's neural-geometry series
-
-Bhalla et al. (2026) (*Can SAEs Capture Neural Geometry?*) identify
-three regimes by which SAEs represent curved manifolds: *shattering*
-(one feature per point), *dilution* (many overlapping features), and
-*compact capture* (small set of shared features acts as a coordinate
-system). Their pipeline reaches compact capture via post-hoc clustering
-of standard SAE features.
-
-**Manifold-SAE is an architecture that targets the compact-capture
-regime directly.** Each curve atom IS a compact-capture unit: one
-atom spans one 1D manifold via its `g_k(t)` curve, parameterized
-natively by the encoder's `t_k`. On pure-synthetic 1D-manifold data the
-architecture does land in compact-capture; whether that transfers to
-real LM residuals is addressed (negatively, at scale) in
-`docs/findings.md`.
+Status: the multi-atom (K ≥ 2) joint solve currently diverges upstream (fix in
+progress), so checks 1–2 self-gate BLOCKED and the single-atom check (3) runs
+today; the harness is correct and goes green the moment the solver fix and the
+incoherence knob land.
 
 ## Repository layout
 
@@ -177,7 +188,19 @@ uv pip install -e ".[llm]"     # transformers / datasets / accelerate / safetens
 uv pip install -e ".[dev]"     # pytest, ruff
 ```
 
-`gamfit >= 0.1.141` is required (multi-dim Duchon + additive REML API, autograd-aware backward, auto-derived knots/penalty).
+**Always newest gamfit.** The standing rule for this repo is to track the newest
+gamfit. The joint manifold-SAE objective and its verification harness (below) depend
+on features that land in the *upcoming* gamfit beyond the 0.1.145 currently installed:
+cross-atom decoder incoherence (`decoder_incoherence_weight`, gamfit #671),
+nuclear-norm embedding-rank selection (#672), ScadMcp non-convex sparsity, the
+gauge-conditional topology evidence on top of the isometry gauge (#673), and the new
+per-atom topology/manifold **uncertainty** (posterior shape bands, mean ± sd) and
+**typical coordinate range** exposed on the fit result. The verification harness
+self-gates (reports BLOCKED, never green-washes) when the installed gamfit does not yet
+expose a knob it needs, so it is correct to run against any version and goes green once
+the upcoming release lands. The base GAM/REML primitives (multi-dim Duchon + additive
+REML API, autograd-aware backward, auto-derived knots/penalty) have been available since
+gamfit 0.1.141.
 
 ## Running things
 
@@ -253,12 +276,20 @@ In scope:
 - Per-batch gamfit REML in training; lock-and-cache for inference
 - Synthetic-first: validate recovery on toy manifolds before real activations
 
-Deferred:
+Now landing via the joint `sae_manifold_fit` objective (see "Joint manifold-SAE
+recovery objective" above):
+
+- Topology discovery — gauge-conditional topology model-evidence (#673) selects
+  per-atom topology rather than requiring the user to declare cyclic vs non-cyclic.
+- Per-atom uncertainty — posterior shape bands (curve mean ± sd) and a typical
+  coordinate range exposed directly on the fit result, replacing the deferred
+  manifold-CLT-style `t_k` interval estimate.
+
+Still deferred:
 
 - 2D feature manifolds (tensor-product smooths)
-- Periodic features (gamfit has periodic-Duchon; not yet plumbed in to lock-and-cache)
-- Manifold-CLT-style uncertainty quantification on `t_k`
-- Topology discovery (currently the user declares cyclic vs non-cyclic per feature)
+- Periodic features through lock-and-cache (gamfit has periodic-Duchon; not yet
+  plumbed in to `update_snapshot`)
 - Multi-layer / cross-layer SAEs
 - Steering-along-curve evaluation on AxBench-style benchmarks
 

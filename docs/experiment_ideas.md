@@ -86,6 +86,12 @@ rank via a gated softmax over R values per atom. Atoms with simple
 1D structure use R=1; complex curves use R=4. Hypothesis: the
 architecture self-discovers feature complexity.
 
+> **Update.** On the joint `sae_manifold_fit` objective this is realized
+> first-class by **nuclear-norm embedding-rank selection (gamfit #672)** — the
+> per-atom ambient embedding rank is chosen by a trace-norm penalty rather than a
+> hand-set or softmax-gated `R`. The gated-softmax sketch above is the pre-gamfit
+> hand-rolled version of the same idea.
+
 ### 12. Manifold-SAE on vision residuals
 
 Apply the architecture to ViT or U-Net activations. Do the same

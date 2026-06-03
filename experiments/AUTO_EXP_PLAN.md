@@ -2,7 +2,10 @@
 
 ## Installed gamfit
 
-- **Installed gamfit** (`/Users/user/Manifold-SAE/.venv`): `0.1.141`
+- **Installed gamfit** (`/Users/user/Manifold-SAE/.venv`): `0.1.145`
+  (standing rule: always track newest gamfit). The joint manifold-recovery
+  objective below depends on knobs shipping in the *upcoming* release beyond
+  0.1.145.
 
 The composition primitives (`LatentCoord`, `TopologyAutoSelector`,
 `IBPAssignmentPenalty`, `ARDPenalty`, `OrthogonalityPenalty`,
@@ -27,14 +30,38 @@ primitive an existing experiment exercises vs. which are still untested.
 | SparsityPenalty (smoothed L1) | auto_exp_24 | covered |
 | TotalVariationPenalty (forward_1d) | auto_exp_24 | covered |
 | TotalVariationPenalty (graph_edges) | none | untested |
-| IBPAssignmentPenalty / sae_manifold_fit | auto_exp_18, 20, 22 | covered |
+| IBPAssignmentPenalty / sae_manifold_fit | auto_exp_18, 20, 22; manifold_recovery, manifold_falsifier | covered |
 | SoftmaxAssignmentSparsityPenalty | none | untested |
+| decoder_incoherence_weight (#671, separability lever) | manifold_recovery (check 2, self-gates until knob ships) | upcoming |
+| nuclear-norm embedding-rank selection (#672) | none yet | upcoming |
+| ScadMcp non-convex sparsity | none yet | upcoming |
+| gauge-conditional topology evidence (#673) | manifold_recovery (topology menu select) | upcoming |
+| per-atom uncertainty (posterior bands) + typical coordinate range | none yet | upcoming |
 | GumbelTemperatureSchedule | auto_exp_22 | covered |
 | select_topology() one-shot | auto_exp_19 | covered |
 | select_topology(score="laml") / "bic" | none | untested |
 | select_topology + custom BasisSpec list | none | untested |
 | `penalties=` kwarg with ≥3 stacked penalties | none | untested |
 | NegBin / Tweedie / Gamma `family=` on glm_reml_fit_latent | none | untested |
+
+## Canonical recovery harness (joint `sae_manifold_fit`)
+
+Separate from the color/composition experiments above, the canonical multi-atom
+recovery verification lives in:
+
+- `experiments/manifold_recovery.py` — the gate: (1) K=2 superposed-circle
+  recovery under IBP (PASS if recon R² > 0.9), (2) headline incoherence ON vs OFF
+  across a coherence sweep (ON must raise recovered-tangent σ_min AND lower the
+  cross-atom decoder cross-Gram / improve coord recovery), (3) single-atom
+  out-of-class specification margin (K=1, runs today).
+- `experiments/manifold_falsifier.py` — keystone falsifier + shared scoring
+  (`circ_procrustes_r2`, `tangent_sigma_min` = the σ_min identifiability metric).
+  `--selftest` validates the scoring before the fit unblocks.
+
+Both use canonical `assignment="ibp"` and self-gate BLOCKED (never false PASS)
+when a fit diverges or the installed gamfit lacks the incoherence knob. The K ≥ 2
+joint solve currently diverges upstream (fix in progress); the single-atom check
+runs today and the rest go green once the solver fix + incoherence knob land.
 
 ## Prioritized new experiments
 

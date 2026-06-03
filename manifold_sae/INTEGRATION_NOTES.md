@@ -1,8 +1,23 @@
-# Integration notes — gamfit-native state (gamfit 0.1.141)
+# Integration notes — gamfit-native state (gamfit ≥ 0.1.145)
 
 This repo is fully cut over to the gamfit primitives. There are no import
 guards, version fallbacks, or stubs. The notes below record the current truth
-(verified against the installed `gamfit==0.1.141`).
+(the SAE-glue facts below were established against `gamfit==0.1.141` and still
+hold; the installed venv is now `gamfit==0.1.145`).
+
+**Standing rule: always newest gamfit.** The joint manifold-recovery objective
+(`gamfit.sae_manifold_fit`, used by `experiments/manifold_recovery.py` +
+`experiments/manifold_falsifier.py`) and its verification harness depend on knobs
+that ship in the *upcoming* gamfit beyond 0.1.145: cross-atom decoder incoherence
+(`decoder_incoherence_weight`, #671), nuclear-norm embedding-rank selection (#672),
+ScadMcp non-convex sparsity, gauge-conditional topology evidence on top of the
+isometry gauge (#673), and per-atom topology/manifold **uncertainty** (posterior
+shape bands, mean ± sd) + **typical coordinate range** on the fit result. The
+harness resolves the incoherence knob name against the live `sae_manifold_fit`
+signature at import and self-gates BLOCKED (never a false PASS) when a knob is
+absent, so this repo stays correct across versions and goes green once the upcoming
+release lands. Canonical assignment is `assignment="ibp"` (adaptive count, true
+zeros) — the gam default — not `softmax`+`top_k`.
 
 ## `manifold_sae/transcoder.py` — direct `SkipAffineSmooth` import
 

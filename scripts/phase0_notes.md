@@ -5,9 +5,9 @@ Quick-reference for the gamfit primitive that the Manifold-SAE decoder wraps.
 > **Historical (gamfit 0.1.64).** These notes record the early
 > reconnaissance against gamfit 0.1.64, including its broken-backward
 > wrapper and the 0.1.64/0.1.66 wrapper-vs-binding version skew. The
-> repo is now on gamfit 0.1.141; the version-skew and "broken in 0.1.64"
-> notes below no longer describe the installed wheel. Kept as the
-> phase-0 record.
+> repo is now on gamfit 0.1.145 (standing rule: always newest gamfit); the
+> version-skew and "broken in 0.1.64" notes below no longer describe the
+> installed wheel. Kept as the phase-0 record.
 
 ## Versions tested
 

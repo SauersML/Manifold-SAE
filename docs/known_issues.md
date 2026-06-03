@@ -90,7 +90,8 @@ practice).
 
 ## float64 for gamfit's REML solve
 
-gamfit's REML primitive runs in float64. As of gamfit 0.1.141 the dtype is
+gamfit's REML primitive runs in float64. As of gamfit 0.1.141 (installed: 0.1.145;
+standing rule is always newest gamfit) the dtype is
 pinned on `ManifoldSAEConfig` (default `float64`) and the primitive *rejects*
 mismatched input dtype rather than silently promoting. The old hand-rolled
 `sae.py` forward that packed `positions`/`y_proj` to float64 around the gamfit

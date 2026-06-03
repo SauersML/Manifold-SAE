@@ -2,9 +2,15 @@
 
 ## Current state
 
-* gamfit 0.1.141 (multi-dim Duchon + additive REML API) is published on PyPI
-  and installed in the local venv.
+* gamfit 0.1.141 (multi-dim Duchon + additive REML API) is published on PyPI;
+  the local venv is on **0.1.145** (standing rule: always newest gamfit).
 * manifold_sae main uses this API; `pyproject.toml` pins `gamfit>=0.1.141`.
+* The joint manifold-recovery objective and its verification harness
+  (`experiments/manifold_recovery.py` + `experiments/manifold_falsifier.py`) depend
+  on knobs landing in the *upcoming* release beyond 0.1.145: cross-atom decoder
+  incoherence (#671), nuclear-norm rank selection (#672), ScadMcp non-convex
+  sparsity, gauge-conditional topology evidence (#673), and per-atom uncertainty +
+  typical coordinate range. Once that gamfit ships, bump the floor (step 3 below).
 * The steps below are the general flow for cutting and shipping a new gamfit
   wheel to the cluster; substitute the next version number as needed.
 

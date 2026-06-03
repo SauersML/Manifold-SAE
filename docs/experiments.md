@@ -131,6 +131,49 @@ Mix of GT point atoms and GT curve atoms in high-D ambient. Tests
 whether Manifold-SAE handles a realistic distribution of feature types
 — some genuinely 1D-manifold, some single-direction.
 
+## Joint manifold-recovery verification gate
+
+The canonical multi-atom recovery objective is the first-class joint solve
+`gamfit.sae_manifold_fit` (canonical `assignment="ibp"` — adaptive count, true
+zeros — not `softmax`+`top_k`). Its verification harness is two files:
+
+### `experiments/manifold_recovery.py` — the gate
+
+Three checks, each wrapped so a crash/non-convergence reports cleanly:
+
+1. **K=2 superposed-circle recovery under IBP** — PASS if reconstruction R² > 0.9.
+2. **Incoherence ON vs OFF (headline)** — sweep coherence; at each level fit with
+   `decoder_incoherence_weight` ON (1.0) vs OFF (0.0). ON must *raise* the
+   recovered-tangent σ_min (better-conditioned per-token split) **and** *lower* the
+   cross-atom decoder cross-Gram ‖B₀B₁ᵀ‖_F (more incoherent decoders) or improve
+   coordinate recovery. The incoherence knob is the separability lever (gamfit
+   #671); the harness resolves its name against the live signature and self-gates
+   BLOCKED if absent.
+3. **Single-atom out-of-class specification margin (K=1, runs today)** — let model
+   evidence pick a topology from the menu, then flag a 2D blob mis-fit as a circle
+   via an absolute out-of-class margin (R²_patch − R²_circle) calibrated against a
+   true-circle null.
+
+### `experiments/manifold_falsifier.py` — keystone falsifier + shared scoring
+
+Plants two circles with two orthogonal knobs — **coherence** (planes share a tangent
+direction; → colinear makes the split ill-posed) and **coverage** (co-active fraction
++ disambiguating-only tokens) — and scores per-token coordinate recovery up to each
+circle's isometry (`circ_procrustes_r2`), plus the **σ_min identifiability metric**
+(`tangent_sigma_min`: smallest singular value of the stacked active-atom tangent
+frame; 0 iff the split is underdetermined). `--selftest` proves the scoring is
+isometry-invariant, split-sensitive, and that σ_min decreases monotonically as planes
+go colinear — i.e. the scoring is trustworthy *before* the fit unblocks.
+
+**Status.** The multi-atom (K ≥ 2) joint fit currently diverges upstream (the
+cold-start assignment logits init to a uniform symmetric saddle; fix in progress), so
+checks 1–2 self-gate BLOCKED and the single-atom check (3) runs today. The harness is
+correct and goes green once the solver fix and the incoherence knob land. The broader
+objective also includes nuclear-norm embedding-rank selection (#672), ScadMcp
+non-convex sparsity, and the isometry gauge + gauge-conditional topology evidence
+(#673), with per-atom uncertainty (posterior shape bands, mean ± sd) and a typical
+coordinate range on the fit result.
+
 ## Tools and analysis
 
 ### `tools/feature_dashboard.py` — top-firing tokens sorted by t_k
@@ -181,6 +224,13 @@ JSONs + PNGs locally (skips multi-GB checkpoints).
   multiple atoms.
 - Periodic Duchon basis through lock-and-cache (gamfit supports
   periodic, not yet plumbed through `update_snapshot`).
-- Manifold-CLT-style posterior intervals on `t_k`.
 - Multi-layer cross-layer SAEs.
 - Steering on AxBench tasks at scale.
+
+Now landing via the joint `sae_manifold_fit` objective (no longer deferred):
+
+- Per-atom uncertainty — posterior shape bands (curve mean ± sd) and a typical
+  coordinate range exposed on the fit result, superseding the deferred
+  Manifold-CLT-style `t_k` interval estimate.
+- Topology discovery — gauge-conditional topology model-evidence (#673) selects
+  per-atom topology from a menu rather than requiring a declared cyclic/non-cyclic.
