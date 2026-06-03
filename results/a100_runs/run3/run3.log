@@ -1,0 +1,96 @@
+=== RUN 3 (solver-independent) model=gpt2 layer=6 ===
+Loading weights:   0%|          | 0/148 [00:00<?, ?it/s]Loading weights: 100%|██████████| 148/148 [00:00<00:00, 4835.80it/s]
+[extract] days: X=(210, 768) -> /home/azuser/exp_logs/run3/acts/days.npz
+[extract] numbers: X=(300, 768) -> /home/azuser/exp_logs/run3/acts/numbers.npz
+
+[TOPOLOGY] days  : top2_PCA_var=0.686 cyclic_order=True order=[3, 4, 5, 6, 0, 1, 2]
+[TOPOLOGY] numbers: top1_PCA_var=0.519 top2=0.767 monotone_corr=1.000
+[SAE days] seed=0 recon_r2=1.000 distinct_top_features=7/7 selective_feats=57
+[SAE days] seed=1 recon_r2=1.000 distinct_top_features=7/7 selective_feats=58
+[SAE days] seed=2 recon_r2=1.000 distinct_top_features=7/7 selective_feats=64
+[SAE days] seed=3 recon_r2=1.000 distinct_top_features=7/7 selective_feats=57
+[SAE days] seed=4 recon_r2=1.000 distinct_top_features=7/7 selective_feats=61
+
+[REPRO] vanilla SAE concept-feature match cosine (cross-seed) mean=0.387
+[REPRO] day concept-subspace Grassmann (bootstrap) mean=0.354 (max=3.142 for 2D in R^768)
+[plot] /home/azuser/exp_logs/run3/plots/topology_evidence.png
+
+SUMMARY:
+{
+  "model": "gpt2",
+  "layer": 6,
+  "F": 256,
+  "l1": 0.001,
+  "seeds": 5,
+  "topology": {
+    "days": {
+      "top2_pca_var": 0.685612678527832,
+      "cyclic_order": true,
+      "order": [
+        3,
+        4,
+        5,
+        6,
+        0,
+        1,
+        2
+      ],
+      "pca_pick": "circle"
+    },
+    "numbers": {
+      "top1_pca_var": 0.5193923115730286,
+      "top2_pca_var": 0.7670944929122925,
+      "monotone_corr": 0.9999999999999999,
+      "pca_pick": "line"
+    }
+  },
+  "vanilla_sae_days": {
+    "recon_r2_mean": 0.999817525207618,
+    "fragment_count_per_seed": [
+      7,
+      7,
+      7,
+      7,
+      7
+    ],
+    "fragment_count_mean": 7.0,
+    "selective_feature_count_per_seed": [
+      57,
+      58,
+      64,
+      57,
+      61
+    ],
+    "selective_feature_count_mean": 59.4
+  },
+  "reproducibility": {
+    "vanilla_feature_match_cosine_mean": 0.38735497891902926,
+    "vanilla_feature_match_cosine_pairs": [
+      0.4,
+      0.349,
+      0.374,
+      0.415,
+      0.339,
+      0.381,
+      0.415,
+      0.395,
+      0.399,
+      0.407
+    ],
+    "concept_subspace_grassmann_mean": 0.35358040034770966,
+    "concept_subspace_grassmann_pairs": [
+      0.411,
+      0.334,
+      0.334,
+      0.312,
+      0.38,
+      0.401,
+      0.377,
+      0.366,
+      0.298,
+      0.324
+    ],
+    "note": "low feature cosine + small Grassmann => directions shatter, geometry reproduces"
+  },
+  "plot_topology": "/home/azuser/exp_logs/run3/plots/topology_evidence.png"
+}

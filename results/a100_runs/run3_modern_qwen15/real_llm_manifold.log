@@ -1,0 +1,30 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/338 [00:00<?, ?it/s]Loading weights:  26%|██▋       | 89/338 [00:00<00:00, 873.73it/s]Loading weights:  60%|█████▉    | 202/338 [00:00<00:00, 1004.46it/s]Loading weights:  90%|████████▉ | 303/338 [00:00<00:00, 957.29it/s] Loading weights: 100%|██████████| 338/338 [00:00<00:00, 838.56it/s]
+model loaded
+[circularity] top-2 PCA var of day-centroids = 0.599  ring order = [2, 3, 4, 5, 6, 0, 1]
+[read] best-aligned atom #30 corr=0.616 | gate-winner atom #41 corr=0.137
+[steer] best-read atom steer=0.842 | gate-winner steer=0.000
+
+SUMMARY: {
+  "model": "Qwen/Qwen2.5-1.5B",
+  "layer": 14,
+  "n_act": 210,
+  "dim": 1536,
+  "circularity_top2_var": 0.599084734916687,
+  "ring_order": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    0,
+    1
+  ],
+  "best_read_atom": 30,
+  "best_read_corr": 0.615659083863384,
+  "gate_winner_atom": 41,
+  "gate_winner_read_corr": 0.13688458616908203,
+  "best_read_steer": 0.841798990573782,
+  "gate_winner_steer": 0.0
+}

@@ -1,0 +1,25 @@
+gamfit 0.1.151  |  Config(n=300, d_ambient=8, noise=0.02, coherence=0.0, coactive_fraction=0.6, n_disambiguating=60, seed=0, isometry_weight=0.1, n_iter=25)
+
+=== SELFTEST: scoring functions on ground truth (no fit) ===
+
+  circ_procrustes_r2 (split-sensitive coordinate metric):
+    self (t vs t)                  = 1.0000   (expect ~1.0)
+    gauge-transformed (flip+shift) = 1.0000   (expect ~1.0; isometry-invariant)
+    shuffled (wrong per-token)     = -0.9244   (expect << 1; blind metrics miss this)
+
+  sigma_min of the active-atom tangent frame across co-active tokens
+  (the identifiability coordinate; theta = (1-coherence)*90deg):
+
+    coherence theta_deg sigma_min_med sigma_min_p10
+         0.00      90.0        0.8572        0.6624
+         0.25      67.5        0.8367        0.6781
+         0.50      45.0        0.8152        0.5489
+         0.75      22.5        0.7968        0.4514
+         0.90       9.0        0.7940        0.4099
+         0.99       0.9        0.7768        0.3835
+
+  CHECKS:
+    [PASS] coordinate metric is isometry-invariant & split-sensitive
+    [PASS] median sigma_min decreases monotonically as coherence -> 1 (colinear)
+
+  SELFTEST PASSED: scoring is trustworthy before the fit unblocks.

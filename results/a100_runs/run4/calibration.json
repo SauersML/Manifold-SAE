@@ -1,0 +1,22 @@
+{
+  "gamfit_version": "0.1.151",
+  "convergence_gate": "FAILED: K=1 circle smoke raises RemlConvergenceError (arrow-Schur adaptive proximal correction failed after 16 attempts) with incoherence ON and OFF -> all typed FITS BLOCKED",
+  "deliverable": "trust score authored + calibrated on solver-independent paths",
+  "synthetic_known_truth": {
+    "claim": "LOW trust predicts HIGH coordinate error",
+    "n": 72,
+    "spearman_trust_vs_coord_err": -0.8359058460351148,
+    "low_trust_mean_coord_err": 0.7869902691553435,
+    "high_trust_mean_coord_err": 0.028355661216092825,
+    "contrast_ratio": 27.754255602006527
+  },
+  "real_leg": {
+    "status": "DOUBLY BLOCKED: (1) typed gam fit non-converged; (2) transformers/torch absent from gpu-runner venv and pip-install forbidden; (3) ~/exp_logs/run3 outputs empty. Methodology validated on a NOISY synthetic stand-in (noise=0.35) that mimics real activations.",
+    "claim": "LOW trust predicts HIGH cross-seed disagreement",
+    "n": 72,
+    "noise": 0.35,
+    "spearman_trust_vs_disagreement": -0.4486783715994598,
+    "low_trust_mean_disagreement": 0.20263658563045886,
+    "high_trust_mean_disagreement": 0.12649089143461473
+  }
+}
