@@ -1,0 +1,13 @@
+ULTRAFAST lam sweep | D=16 n=240 steps=120
+coh lam sigmin coordR2 reconR2
+0.80 0.00 0.777 0.841 0.970
+0.80 0.01 0.777 0.793 0.965
+0.80 0.05 0.777 0.839 0.891
+0.80 0.10 0.777 0.836 0.885
+0.80 0.25 0.777 0.746 0.840
+0.95 0.00 0.760 0.716 0.972
+[1m 00s] [heartbeat] elapsed=1m00s rss=736.8MiB peak_rss=736.8MiB process_threads=97 read_bytes=0B write_bytes=32.0KiB active_threads=0
+0.95 0.01 0.760 0.631 0.971
+0.95 0.05 0.760 0.686 0.870
+0.95 0.10 0.760 0.754 0.867
+0.95 0.25 0.760 0.709 0.853
