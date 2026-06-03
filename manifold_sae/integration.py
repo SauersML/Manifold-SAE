@@ -220,6 +220,11 @@ def _call_loss(model: nn.Module, x: torch.Tensor, name: str) -> dict:
         out = model(xs)
         return {"loss": out["loss"], "recon": out["recons"][0]}
 
+    if name == "transcoder":
+        recon, _z = model(x)
+        loss = model.loss(x, x)
+        return {"loss": loss, "recon": recon}
+
     if hasattr(model, "loss"):
         out = model.loss(x)
         # normalize total-key name

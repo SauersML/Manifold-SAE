@@ -7,7 +7,7 @@ name = "manifold-sae"
 version = "0.0.1"
 description = "Sparse autoencoders whose features are smooth 1D curves in residual stream, with a vector-output GAM decoder wrapping gamfit's Gaussian REML primitive."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "AGPL-3.0-or-later" }
 authors = [
     { name = "Scott Sauers" },
@@ -35,7 +35,7 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.17",
     "tqdm>=4.66",
-    "gamfit>=0.1.141",
+    "gamfit>=0.1.154",
     "matplotlib>=3.8",
     "scikit-learn>=1.4",
 ]

@@ -1,0 +1,70 @@
+[setup] device=cuda output_dir=/home/azuser/exp_logs/run3_modern_qwen05_tinystories_rank1
+[harvest] loading Qwen/Qwen2.5-0.5B
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  74%|███████▍  | 215/290 [00:00<00:00, 2146.58it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 2413.17it/s]
+[harvest] 12,000 tokens at layer 12 (of 24 blocks)
+[harvest] saved /home/azuser/exp_logs/run3_modern_qwen05_tinystories_rank1/activations.pt
+[setup] X_n shape=(12000, 896) var=1.000
+
+========== F = 16 ==========
+  D=896  F=16  top_k=2  batch_size_curve=512
+    [van[F=16] step     0] mse=9.3397e-01
+    [van[F=16] step    80] mse=6.9224e-01
+    [van[F=16] step   160] mse=6.6695e-01
+    [van[F=16] step   240] mse=6.6198e-01
+    [van[F=16] step   320] mse=6.5832e-01
+    [van[F=16]] saved checkpoint to /home/azuser/exp_logs/run3_modern_qwen05_tinystories_rank1/vanilla_F16.pt
+    [crv[F=16] step     0] mse=1.1773e+00
+[1m 00s] [heartbeat] elapsed=1m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[2m 00s] [heartbeat] elapsed=2m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[3m 00s] [heartbeat] elapsed=3m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[4m 00s] [heartbeat] elapsed=4m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[5m 00s] [heartbeat] elapsed=5m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[6m 00s] [heartbeat] elapsed=6m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[7m 00s] [heartbeat] elapsed=7m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[8m 00s] [heartbeat] elapsed=8m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[9m 00s] [heartbeat] elapsed=9m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[10m 00s] [heartbeat] elapsed=10m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[11m 00s] [heartbeat] elapsed=11m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[12m 00s] [heartbeat] elapsed=12m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[13m 00s] [heartbeat] elapsed=13m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[14m 00s] [heartbeat] elapsed=14m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[15m 00s] [heartbeat] elapsed=15m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[16m 00s] [heartbeat] elapsed=16m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.0MiB active_threads=0
+[17m 00s] [heartbeat] elapsed=17m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[18m 00s] [heartbeat] elapsed=18m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[19m 00s] [heartbeat] elapsed=19m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[20m 00s] [heartbeat] elapsed=20m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[21m 00s] [heartbeat] elapsed=21m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[22m 00s] [heartbeat] elapsed=22m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[23m 00s] [heartbeat] elapsed=23m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[24m 00s] [heartbeat] elapsed=24m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[25m 00s] [heartbeat] elapsed=25m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[26m 00s] [heartbeat] elapsed=26m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+    [crv[F=16] step   100] mse=7.8054e-01
+[27m 00s] [heartbeat] elapsed=27m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[28m 00s] [heartbeat] elapsed=28m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[29m 00s] [heartbeat] elapsed=29m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[30m 00s] [heartbeat] elapsed=30m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[31m 00s] [heartbeat] elapsed=31m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[32m 00s] [heartbeat] elapsed=32m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[33m 00s] [heartbeat] elapsed=33m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[34m 00s] [heartbeat] elapsed=34m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[35m 00s] [heartbeat] elapsed=35m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[36m 00s] [heartbeat] elapsed=36m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[37m 00s] [heartbeat] elapsed=37m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[38m 00s] [heartbeat] elapsed=38m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[39m 00s] [heartbeat] elapsed=39m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[40m 00s] [heartbeat] elapsed=40m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[41m 00s] [heartbeat] elapsed=41m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.1MiB active_threads=0
+[42m 00s] [heartbeat] elapsed=42m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[43m 00s] [heartbeat] elapsed=43m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[44m 00s] [heartbeat] elapsed=44m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[45m 00s] [heartbeat] elapsed=45m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[46m 00s] [heartbeat] elapsed=46m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[47m 00s] [heartbeat] elapsed=47m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[48m 00s] [heartbeat] elapsed=48m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=118.2MiB active_threads=0
+[49m 00s] [heartbeat] elapsed=49m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=122.1MiB active_threads=0
+    [crv[F=16] step   200] mse=7.0539e-01
+[50m 00s] [heartbeat] elapsed=50m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=122.1MiB active_threads=0
+[51m 00s] [heartbeat] elapsed=51m00s rss=3.3GiB peak_rss=5.0GiB process_threads=125 read_bytes=0B write_bytes=122.1MiB active_threads=0

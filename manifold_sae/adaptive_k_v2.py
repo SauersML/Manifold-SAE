@@ -113,24 +113,24 @@ class AdaptiveKv2SAE(nn.Module):
 
     # ------------------------------------------------------------------
 
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         z = (x - self.b_d) @ self.W_e + self.b_e
-        z_active, k_pred_eff = self.gate(z)
-        return z_active, k_pred_eff
+        z_active, k_pred_eff, sparsity_penalty = self.gate(z)
+        return z_active, k_pred_eff, sparsity_penalty
 
     def decode(self, z_active: torch.Tensor) -> torch.Tensor:
         return z_active @ self.W_d + self.b_d
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return ``(recon, z_active, k_pred_eff)``; ``k_pred_eff`` shape ``(B,)``."""
-        z_active, k_pred_eff = self.encode(x)
+        z_active, k_pred_eff, _sparsity_penalty = self.encode(x)
         recon = self.decode(z_active)
         return recon, z_active, k_pred_eff
 
     def loss(self, x: torch.Tensor) -> dict:
-        recon, z_active, k_pred_eff = self.forward(x)
+        z_active, k_pred_eff, sparsity = self.encode(x)
+        recon = self.decode(z_active)
         mse = (recon - x).pow(2).mean()
-        sparsity = self.gate.penalty()
         total = mse + self.sparsity_weight * sparsity
         n_active = (z_active.abs() > 0).float().sum(-1).mean()
         return {

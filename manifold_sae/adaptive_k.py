@@ -56,8 +56,8 @@ class HardTopKGate(AdaptiveTopK):
     backward), exactly as the primitive's docstring intends.
     """
 
-    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:  # type: ignore[override]
-        z_soft_active, k_pred = super().forward(z)
+    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:  # type: ignore[override]
+        z_soft_active, k_pred, sparsity_penalty = super().forward(z)
         width = z.shape[-1]
         k_int = k_pred.detach().round().clamp_(1, width).to(torch.long)
         abs_z = z.detach().abs()
@@ -68,7 +68,7 @@ class HardTopKGate(AdaptiveTopK):
         z_hard = z * hard
         # forward value == z_hard (sparse); backward grad via the soft path.
         z_active = z_soft_active + (z_hard - z_soft_active).detach()
-        return z_active, k_pred
+        return z_active, k_pred, sparsity_penalty
 
 
 @dataclass
@@ -142,11 +142,11 @@ class AdaptiveKSAE(nn.Module):
     # Forward
     # ------------------------------------------------------------------
 
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return ``(z_active, k_pred_eff)`` from the gated encoder."""
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return ``(z_active, k_pred_eff, sparsity_penalty)`` from the gated encoder."""
         z = (x - self.b_d) @ self.W_e + self.b_e
-        z_active, k_pred_eff = self.gate(z)
-        return z_active, k_pred_eff
+        z_active, k_pred_eff, sparsity_penalty = self.gate(z)
+        return z_active, k_pred_eff, sparsity_penalty
 
     def decode(self, z_active: torch.Tensor) -> torch.Tensor:
         return z_active @ self.W_d + self.b_d
@@ -158,7 +158,7 @@ class AdaptiveKSAE(nn.Module):
         shape ``(B,)`` — same shape as the old ``k_pred`` so callers that index
         ``out[2]`` per row keep working.
         """
-        z_active, k_pred_eff = self.encode(x)
+        z_active, k_pred_eff, _sparsity_penalty = self.encode(x)
         recon = self.decode(z_active)
         return recon, z_active, k_pred_eff
 
@@ -167,13 +167,13 @@ class AdaptiveKSAE(nn.Module):
     # ------------------------------------------------------------------
 
     def loss(self, x: torch.Tensor) -> dict:
-        recon, z_active, k_pred_eff = self.forward(x)
+        z_active, k_pred_eff, sparsity = self.encode(x)
+        recon = self.decode(z_active)
         mse = (recon - x).pow(2).mean()
-        # Sparsity is λ·E[K_pred] from the primitive. λ is learnable inside the
-        # gate, so the outer sparsity_weight only seeded it. We still expose a
-        # `sparsity_weight` multiplier so trainers can anneal an extra scale on
-        # top of the learnable λ (set to 1.0 to defer entirely to the gate).
-        sparsity = self.gate.penalty()
+        # Sparsity is λ·E[K_pred] from the primitive on this exact batch. λ is
+        # learnable inside the gate, so the outer sparsity_weight only seeded it.
+        # We still expose a multiplier so trainers can anneal an extra scale on
+        # top of the learnable λ.
         total = mse + self.sparsity_weight * sparsity
         n_active = (z_active.abs() > 0).float().sum(-1).mean()
         return {
