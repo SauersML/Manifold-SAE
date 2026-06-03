@@ -73,7 +73,7 @@ class SweepConfig:
     sae_n_basis: int = int(os.environ.get("MSAE_N_BASIS", "10"))
     sae_intrinsic_rank: int = int(os.environ.get("MSAE_INTRINSIC_RANK", "2"))
     sae_sparsity_weight: float = 3e-4
-    sae_ortho_weight: float = 1e-3
+    sae_ortho_weight: float = 0.0
 
     # Training (curve is CPU-bound — keep small)
     n_steps_vanilla: int = int(os.environ.get("MSAE_N_STEPS_VAN", "1500"))
@@ -201,6 +201,7 @@ def _ckpt_sig(F: int, top_k: int, label: str, sae_cfg_dict: dict | None = None) 
     if sae_cfg_dict is not None:
         sig["n_basis"] = sae_cfg_dict.get("n_basis")
         sig["intrinsic_rank"] = sae_cfg_dict.get("intrinsic_rank")
+        sig["ortho_weight"] = sae_cfg_dict.get("ortho_weight")
     return sig
 
 
@@ -546,6 +547,13 @@ def plot_positions(positions: np.ndarray, alive_idx: np.ndarray, F: int, out_dir
 
 def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: torch.device,
               out_dir: Path, do_visualize: bool) -> dict:
+    if cfg.sae_ortho_weight != 0.0:
+        raise ValueError(
+            "llm_sweep performs a closed-form REML lock/snapshot via curve.fit(), "
+            "which cannot honor DecoderConfig.ortho_weight. Set "
+            "sae_ortho_weight=0.0 for this sweep; compare decoder orthogonality "
+            "in a torch-only ablation that does not call closed-form fit()."
+        )
     print(f"\n========== F = {F} ==========", flush=True)
     D = X_n.shape[1]
     top_k = max(cfg.top_k_min, int(F * cfg.top_k_ratio))
@@ -566,6 +574,7 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         "F": F, "top_k": top_k, "n_steps_vanilla": cfg.n_steps_vanilla,
         "n_steps_curve": cfg.n_steps_curve, "batch_size_curve": bsc,
         "n_basis": cfg.sae_n_basis, "intrinsic_rank": cfg.sae_intrinsic_rank,
+        "ortho_weight": cfg.sae_ortho_weight,
         "eval_n": cfg.eval_n,
     }
     if cfg.resume and eval_cache_path.exists():
@@ -618,7 +627,16 @@ def run_one_F(cfg: SweepConfig, F: int, X_n: torch.Tensor, var: float, device: t
         f"crv[F={F}]",
         ckpt_path=out_dir / f"curve_F{F}.pt",
         resume=cfg.resume,
-        sig=_ckpt_sig(F, top_k, "curve", {"n_basis": cfg.sae_n_basis, "intrinsic_rank": cfg.sae_intrinsic_rank}),
+        sig=_ckpt_sig(
+            F,
+            top_k,
+            "curve",
+            {
+                "n_basis": cfg.sae_n_basis,
+                "intrinsic_rank": cfg.sae_intrinsic_rank,
+                "ortho_weight": cfg.sae_ortho_weight,
+            },
+        ),
         is_curve=True, sae_cfg=sae_cfg,
     )
     mse_c, alive_c = eval_curve(curve, X_eval, F, cfg.eval_chunk)
