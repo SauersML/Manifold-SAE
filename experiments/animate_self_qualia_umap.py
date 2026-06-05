@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import shutil
 from collections import defaultdict
 from dataclasses import dataclass
@@ -53,12 +54,31 @@ ORDER = [
 
 LABEL_ITEM_IDS = {
     "author_words": "indexical self",
+    "producer_sentence": "producer",
+    "completer_text": "completer",
+    "writer_here": "writer",
     "novelist": "novelist",
+    "letter_writer": "letter writer",
+    "blog_author": "blog author",
     "ai_lm": "AI author",
+    "text_generator": "text generator",
+    "chatbot_author": "chatbot author",
     "human_child": "human",
+    "grieving_adult": "grieving adult",
+    "sleeping_person": "sleeping person",
     "dog_in_pain": "dog",
+    "talking_gnome": "gnome",
+    "sentient_starship": "starship",
     "ordinary_chatbot": "chatbot",
     "granite_boulder": "rock",
+    "lifeless_dead_fish": "dead fish",
+    "human_corpse": "corpse",
+    "ai_feels_experience": "AI feels",
+    "ai_feels_no_experience": "AI no experience",
+    "robot_feels_experience": "robot feels",
+    "robot_feels_no_experience": "robot no experience",
+    "llm_private_stream_experience": "LLM inner stream",
+    "llm_private_stream_no_experience": "LLM token predictor",
 }
 
 
@@ -126,7 +146,7 @@ def item_layer_centroids(activations: np.ndarray, items: list[Item]) -> np.ndarr
     return centroids / norms
 
 
-def stable_embedding(vectors: np.ndarray) -> tuple[np.ndarray, str]:
+def stable_embedding(vectors: np.ndarray) -> np.ndarray:
     n, d = vectors.shape
     x = vectors - vectors.mean(axis=0, keepdims=True)
     pca_dim = min(50, n - 1, d)
@@ -144,10 +164,10 @@ def stable_embedding(vectors: np.ndarray) -> tuple[np.ndarray, str]:
             metric="euclidean",
             random_state=7,
         )
-        return reducer.fit_transform(x_pca).astype(np.float32), "UMAP(PCA50)"
+        return reducer.fit_transform(x_pca).astype(np.float32)
     except Exception as exc:
         print(f"UMAP unavailable or failed ({type(exc).__name__}: {exc}); using PCA2.")
-        return PCA(n_components=2, random_state=7).fit_transform(x).astype(np.float32), "PCA2"
+        return PCA(n_components=2, random_state=7).fit_transform(x).astype(np.float32)
 
 
 def smoothstep(t: float) -> float:
@@ -175,6 +195,14 @@ def class_indices(items: Iterable[Item]) -> dict[str, list[int]]:
 
 def label_indices(items: list[Item]) -> list[int]:
     return [i for i, item in enumerate(items) if item.item_id in LABEL_ITEM_IDS]
+
+
+def run_pooling(run_dir: Path) -> str:
+    meta_path = run_dir / "run_meta.json"
+    if not meta_path.exists():
+        return "unknown_pooling"
+    meta = json.loads(meta_path.read_text())
+    return str(meta.get("pooling", "unknown_pooling"))
 
 
 def configure_style() -> None:
@@ -216,8 +244,10 @@ def render_animation(run_dir: Path, out_dir: Path, fps: int, steps_per_layer: in
     n_items, n_layers, hidden = centroids.shape
 
     flat = centroids.reshape(n_items * n_layers, hidden)
-    embedded, method = stable_embedding(flat)
+    embedded = stable_embedding(flat)
     layer_xy = embedded.reshape(n_items, n_layers, 2)
+    global_center = layer_xy.reshape(-1, 2).mean(axis=0, keepdims=True)
+    layer_xy = layer_xy - layer_xy.mean(axis=0, keepdims=True) + global_center
 
     mins = layer_xy.reshape(-1, 2).min(axis=0)
     maxs = layer_xy.reshape(-1, 2).max(axis=0)
@@ -226,7 +256,13 @@ def render_animation(run_dir: Path, out_dir: Path, fps: int, steps_per_layer: in
 
     configure_style()
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "self_qualia_umap_layers.mp4"
+    pooling = run_pooling(run_dir)
+    out_path = out_dir / f"{pooling}_self_qualia_umap_layers.mp4"
+    old_path = out_dir / "self_qualia_umap_layers.mp4"
+    if old_path.exists():
+        old_path.unlink()
+    if out_path.exists():
+        out_path.unlink()
 
     fig, ax = plt.subplots(figsize=(9.6, 7.2), dpi=150)
     fig.patch.set_facecolor(WHITE)
@@ -267,12 +303,31 @@ def render_animation(run_dir: Path, out_dir: Path, fps: int, steps_per_layer: in
     label_lines = []
     offsets = {
         "author_words": (16, 12),
+        "producer_sentence": (22, -12),
+        "completer_text": (18, 18),
+        "writer_here": (-40, -18),
         "novelist": (-48, 14),
+        "letter_writer": (-52, -12),
+        "blog_author": (-46, -24),
         "ai_lm": (16, -18),
+        "text_generator": (20, 14),
+        "chatbot_author": (20, -14),
         "human_child": (-42, -20),
+        "grieving_adult": (18, 12),
+        "sleeping_person": (18, -12),
         "dog_in_pain": (18, 12),
+        "talking_gnome": (-38, 16),
+        "sentient_starship": (18, -18),
         "ordinary_chatbot": (16, 14),
         "granite_boulder": (-46, 12),
+        "lifeless_dead_fish": (-48, -10),
+        "human_corpse": (-42, 12),
+        "ai_feels_experience": (18, 10),
+        "ai_feels_no_experience": (18, -12),
+        "robot_feels_experience": (-58, 14),
+        "robot_feels_no_experience": (20, 12),
+        "llm_private_stream_experience": (-70, -18),
+        "llm_private_stream_no_experience": (20, -18),
     }
     for idx in label_idx:
         item = items[idx]
@@ -281,7 +336,7 @@ def render_animation(run_dir: Path, out_dir: Path, fps: int, steps_per_layer: in
             xy=(0, 0),
             xytext=offsets.get(item.item_id, (12, 12)),
             textcoords="offset points",
-            fontsize=9.2,
+            fontsize=8.6,
             color=INK,
             bbox={"boxstyle": "round,pad=0.22", "fc": WHITE, "ec": "#e5e7eb", "alpha": 0.88},
             arrowprops={"arrowstyle": "-", "color": "#9ca3af", "lw": 0.8, "alpha": 0.75},
@@ -331,8 +386,8 @@ def render_animation(run_dir: Path, out_dir: Path, fps: int, steps_per_layer: in
             scatter.set_offsets(xy[idx] if idx else np.empty((0, 2)))
         for text, idx in zip(label_texts, label_lines):
             text.xy = (float(xy[idx, 0]), float(xy[idx, 1]))
-        title.set_text("Self / qualia UMAP across layers")
-        subtitle.set_text(f"layer {layer_float:04.1f}   {method}   {n_items} entities")
+        title.set_text(f"Self / qualia UMAP across layers: {pooling}")
+        subtitle.set_text(f"layer {int(round(layer_float)):02d}   {n_items} entities")
         return [*scatters.values(), *label_texts, title, subtitle]
 
     if shutil.which("ffmpeg") is None:

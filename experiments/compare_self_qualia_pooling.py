@@ -19,6 +19,7 @@ COL_LAST = "#2563eb"
 COL_MEAN = "#d97706"
 COL_HUMAN = "#059669"
 COL_AI = "#64748b"
+PREFIX = "last_token_vs_mean_pool"
 
 
 def configure_style() -> None:
@@ -95,7 +96,22 @@ def write_outputs(last: dict[str, Any], mean: dict[str, Any], out_dir: Path) -> 
             row[key] = run["metrics"][key]
         rows.append(row)
 
-    with (out_dir / "pooling_comparison.csv").open("w", newline="") as f:
+    for path in [
+        out_dir / "pooling_comparison.csv",
+        out_dir / "pooling_comparison.json",
+        out_dir / "pooling_comparison_plane.png",
+        out_dir / "pooling_comparison_bars.png",
+        out_dir / "pooling_comparison_depth.png",
+        out_dir / f"{PREFIX}_pooling_comparison.csv",
+        out_dir / f"{PREFIX}_pooling_comparison.json",
+        out_dir / f"{PREFIX}_pooling_comparison_plane.png",
+        out_dir / f"{PREFIX}_pooling_comparison_bars.png",
+        out_dir / f"{PREFIX}_pooling_comparison_depth.png",
+    ]:
+        if path.exists():
+            path.unlink()
+
+    with (out_dir / f"{PREFIX}_pooling_comparison.csv").open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
@@ -107,7 +123,7 @@ def write_outputs(last: dict[str, Any], mean: dict[str, Any], out_dir: Path) -> 
             key: float(last["metrics"][key]) - float(mean["metrics"][key]) for key in keys
         },
     }
-    (out_dir / "pooling_comparison.json").write_text(json.dumps(comparison, indent=2))
+    (out_dir / f"{PREFIX}_pooling_comparison.json").write_text(json.dumps(comparison, indent=2))
 
     configure_style()
     _plot_plane(last, mean, out_dir)
@@ -143,7 +159,7 @@ def _plot_plane(last: dict[str, Any], mean: dict[str, Any], out_dir: Path) -> No
     ax.set_ylabel("qualia coordinate")
     ax.set_title(f"Pooling comparison at fixed layer {last['layer']}")
     ax.legend(loc="lower right")
-    fig.savefig(out_dir / "pooling_comparison_plane.png", dpi=220, bbox_inches="tight")
+    fig.savefig(out_dir / f"{PREFIX}_pooling_comparison_plane.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -180,7 +196,7 @@ def _plot_bars(last: dict[str, Any], mean: dict[str, Any], out_dir: Path) -> Non
     ax.set_title(f"Readout comparison at fixed layer {last['layer']}")
     ax.grid(axis="y", color=GRID, lw=0.8, alpha=0.72)
     ax.legend(loc="upper right")
-    fig.savefig(out_dir / "pooling_comparison_bars.png", dpi=220, bbox_inches="tight")
+    fig.savefig(out_dir / f"{PREFIX}_pooling_comparison_bars.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -207,7 +223,7 @@ def _plot_depth(last: dict[str, Any], mean: dict[str, Any], out_dir: Path) -> No
         ax.set_ylabel(key.replace("_", " "))
     axes[1].set_xlabel("layer")
     axes[0].legend(loc="lower right")
-    fig.savefig(out_dir / "pooling_comparison_depth.png", dpi=220, bbox_inches="tight")
+    fig.savefig(out_dir / f"{PREFIX}_pooling_comparison_depth.png", dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 

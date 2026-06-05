@@ -31,7 +31,7 @@ COL_AI = "#d97706"
 COL_MIND = "#7c3aed"
 COL_MECH = "#64748b"
 COL_QUAL = "#dc2626"
-COL_NOQUAL = "#60a5fa"
+COL_NOQUAL = "#a16207"
 
 UMAP_COLORS = {
     "mind anchors": COL_MIND,
@@ -50,6 +50,19 @@ UMAP_ORDER = [
     "human author",
     "AI author",
     "indexical self",
+]
+
+PLOT_FILENAMES = [
+    "01_main_result_map.png",
+    "02_depth_coordinates.png",
+    "03_axis_quality_and_distinctness.png",
+    "04_self_to_landmarks.png",
+    "05_self_prompt_stability.png",
+    "06_self_layer_path.png",
+    "07_layer_snapshots.png",
+    "08_result_summary_card.png",
+    "09_umap_prompt_landscape.png",
+    "10_umap_referent_centroids.png",
 ]
 
 
@@ -80,8 +93,9 @@ def configure_style() -> None:
     )
 
 
-def save(fig: Any, out_dir: Path, name: str) -> None:
-    fig.savefig(out_dir / name, dpi=220, bbox_inches="tight")
+def save(fig: Any, out_dir: Path, name: str, prefix: str | None = None) -> None:
+    filename = f"{prefix}_{name}" if prefix else name
+    fig.savefig(out_dir / filename, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -139,6 +153,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     run_meta = json.loads((run_dir / "run_meta.json").read_text())
     best = int(summary["best_layer"])
     layer_label = analysis_layer_label(summary)
+    prefix = str(run_meta.get("pooling", "unknown_pooling"))
 
     layers = np.asarray([int(r["layer"]) for r in rows])
     self_kind = arr(rows, "self_kind_coord")
@@ -172,7 +187,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("qualia coordinate")
     ax.set_title(f"Kind x qualia map, {layer_label}")
     ax.legend(loc="lower right")
-    save(fig, out_dir, "01_main_result_map.png")
+    save(fig, out_dir, "01_main_result_map.png", prefix)
 
     fig, axes = plt.subplots(2, 1, figsize=(10.5, 7.3), sharex=True)
     for ax, y_self, y_human, y_ai, title, ylabel in [
@@ -191,7 +206,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
         add_grid(ax)
     axes[1].set_xlabel("layer")
     axes[0].legend(ncol=3, loc="lower right")
-    save(fig, out_dir, "02_depth_coordinates.png")
+    save(fig, out_dir, "02_depth_coordinates.png", prefix)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.5, 5.0))
     ax = axes[0]
@@ -213,7 +228,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("cosine")
     ax.set_title("Kind/qualia axis cosine")
     add_grid(ax)
-    save(fig, out_dir, "03_axis_quality_and_distinctness.png")
+    save(fig, out_dir, "03_axis_quality_and_distinctness.png", prefix)
 
     fig, ax = plt.subplots(figsize=(10.5, 6.0))
     ax.plot(layers, cos_mind, color=COL_MIND, lw=2.3, alpha=0.82, label="mind anchors")
@@ -226,7 +241,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("cosine similarity")
     add_grid(ax)
     ax.legend(ncol=2, loc="lower left")
-    save(fig, out_dir, "04_self_to_landmarks.png")
+    save(fig, out_dir, "04_self_to_landmarks.png", prefix)
 
     best_self = [r for r in self_rows if int(r["layer"]) == best]
     by_id: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -279,7 +294,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("std. dev.")
     add_grid(ax)
     ax.legend(loc="upper right")
-    save(fig, out_dir, "05_self_prompt_stability.png")
+    save(fig, out_dir, "05_self_prompt_stability.png", prefix)
 
     fig, ax = plt.subplots(figsize=(8.6, 6.9))
     for val in [0, 0.5, 1]:
@@ -301,7 +316,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_title("Indexical self path by layer")
     ax.legend(loc="lower right")
     fig.colorbar(sc, ax=ax, label="layer")
-    save(fig, out_dir, "06_self_layer_path.png")
+    save(fig, out_dir, "06_self_layer_path.png", prefix)
 
     snapshot_layers = sorted({0, len(layers) // 4, len(layers) // 2, best, len(layers) - 1})
     fig, axes = plt.subplots(1, len(snapshot_layers), figsize=(3.0 * len(snapshot_layers), 3.25),
@@ -336,7 +351,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ]
     fig.legend(handles=handles, ncol=3, loc="lower center", bbox_to_anchor=(0.5, -0.08),
                frameon=False)
-    save(fig, out_dir, "07_layer_snapshots.png")
+    save(fig, out_dir, "07_layer_snapshots.png", prefix)
 
     fig, ax = plt.subplots(figsize=(9.3, 4.4))
     ax.axis("off")
@@ -359,13 +374,15 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
         ax.text(0.40, y, value, fontsize=11.5, va="center")
         ax.axhline(y - 0.035, xmin=0.06, xmax=0.94, color="#e5e7eb", lw=0.8)
         y -= 0.085
-    save(fig, out_dir, "08_result_summary_card.png")
+    save(fig, out_dir, "08_result_summary_card.png", prefix)
 
 
 def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
     summary = json.loads((run_dir / "summary.json").read_text())
+    run_meta = json.loads((run_dir / "run_meta.json").read_text())
     best = int(summary["best_layer"])
     layer_label = analysis_layer_label(summary)
+    prefix = str(run_meta.get("pooling", "unknown_pooling"))
     prompts = load_csv(run_dir / "prompts.csv")
     Xn = centered_normalized_layer(run_dir, best)
     classes = np.asarray([class_name(row) for row in prompts], dtype=object)
@@ -387,7 +404,7 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("UMAP 2")
     add_grid(ax)
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9)
-    save(fig, out_dir, "09_umap_prompt_landscape.png")
+    save(fig, out_dir, "09_umap_prompt_landscape.png", prefix)
 
     item_to_idx: dict[str, list[int]] = defaultdict(list)
     for i, row in enumerate(prompts):
@@ -515,7 +532,7 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
     ax.set_ylabel("UMAP 2")
     add_grid(ax)
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9)
-    save(fig, out_dir, "10_umap_referent_centroids.png")
+    save(fig, out_dir, "10_umap_referent_centroids.png", prefix)
 
 
 def main() -> None:
@@ -527,6 +544,12 @@ def main() -> None:
     run_dir = Path(args.run_dir)
     out_dir = Path(args.out_dir) if args.out_dir else run_dir / "beautiful_plots"
     out_dir.mkdir(parents=True, exist_ok=True)
+    run_meta = json.loads((run_dir / "run_meta.json").read_text())
+    prefix = str(run_meta.get("pooling", "unknown_pooling"))
+    for name in PLOT_FILENAMES:
+        for path in [out_dir / name, out_dir / f"{prefix}_{name}"]:
+            if path.exists():
+                path.unlink()
     configure_style()
     make_standard_plots(run_dir, out_dir)
     make_umap_plots(run_dir, out_dir)
