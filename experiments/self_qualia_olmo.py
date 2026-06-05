@@ -442,7 +442,13 @@ def _cosine_matrix(x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return x_n @ y_n.T
 
 
-def analyze(X: np.ndarray, items: list[PromptItem], out_dir: Path) -> dict[str, Any]:
+def analyze(
+    X: np.ndarray,
+    items: list[PromptItem],
+    out_dir: Path,
+    analysis_layer: int | None = None,
+    analysis_layer_percent: float | None = None,
+) -> dict[str, Any]:
     meta = _as_array(items)
     roles = meta["role"]
     groups = meta["group"]
@@ -562,21 +568,37 @@ def analyze(X: np.ndarray, items: list[PromptItem], out_dir: Path) -> dict[str, 
         writer.writeheader()
         writer.writerows(self_rows)
 
-    best = max(
-        layer_rows,
-        key=lambda r: (
-            0.5 * float(r["kind_auc"])
-            + 0.5 * float(r["qualia_auc"])
-            + 0.25 * float(r["qualia_pair_acc"])
-            - 0.05 * abs(float(r["axis_cosine_kind_qualia"]))
-        ),
-    )
+    if analysis_layer is not None and analysis_layer_percent is not None:
+        raise ValueError("pass only one of analysis_layer or analysis_layer_percent")
+    if analysis_layer_percent is not None:
+        analysis_layer = int(round(float(analysis_layer_percent) * (n_layers - 1)))
+    if analysis_layer is not None:
+        if analysis_layer < 0 or analysis_layer >= n_layers:
+            raise ValueError(f"analysis_layer {analysis_layer} outside 0..{n_layers - 1}")
+        best = layer_rows[int(analysis_layer)]
+        selection = {
+            "method": "fixed_layer",
+            "analysis_layer": int(analysis_layer),
+            "analysis_layer_percent": analysis_layer_percent,
+        }
+    else:
+        best = max(
+            layer_rows,
+            key=lambda r: (
+                0.5 * float(r["kind_auc"])
+                + 0.5 * float(r["qualia_auc"])
+                + 0.25 * float(r["qualia_pair_acc"])
+                - 0.05 * abs(float(r["axis_cosine_kind_qualia"]))
+            ),
+        )
+        selection = {"method": "axis_quality"}
 
     summary = {
         "n_prompts": int(X.shape[0]),
         "n_layers": int(X.shape[1]),
         "hidden_dim": int(X.shape[2]),
         "best_layer": int(best["layer"]),
+        "layer_selection": selection,
         "best_layer_metrics": best,
         "interpretation": {
             "kind_coord": "0 ~= mechanism/tool anchors, 1 ~= mind/person/animal anchors",
@@ -691,6 +713,8 @@ def main() -> None:
     )
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--pooling", default="last_token", choices=["last_token", "mean_pool"])
+    ap.add_argument("--analysis-layer", type=int, default=None)
+    ap.add_argument("--analysis-layer-percent", type=float, default=None)
     ap.add_argument("--skip-harvest", action="store_true")
     args = ap.parse_args()
 
@@ -706,6 +730,8 @@ def main() -> None:
         "dtype": args.dtype,
         "batch_size": args.batch_size,
         "pooling": args.pooling,
+        "analysis_layer": args.analysis_layer,
+        "analysis_layer_percent": args.analysis_layer_percent,
         "n_prompts": len(items),
         "carrier_count": len(CARRIERS),
     }
@@ -725,7 +751,13 @@ def main() -> None:
             device=args.device,
             pooling=args.pooling,
         )
-    summary = analyze(X, items, out_dir)
+    summary = analyze(
+        X,
+        items,
+        out_dir,
+        analysis_layer=args.analysis_layer,
+        analysis_layer_percent=args.analysis_layer_percent,
+    )
     print(json.dumps(summary, indent=2), flush=True)
 
 

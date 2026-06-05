@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import umap
 from adjustText import adjust_text
+from matplotlib.lines import Line2D
 from sklearn.decomposition import PCA
 
 
@@ -88,6 +89,17 @@ def add_grid(ax: Any) -> None:
     ax.grid(color=GRID, lw=0.8, alpha=0.72)
 
 
+def analysis_layer_label(summary: dict[str, Any]) -> str:
+    layer = int(summary["best_layer"])
+    sel = summary.get("layer_selection", {})
+    if sel.get("method") == "fixed_layer":
+        pct = sel.get("analysis_layer_percent")
+        if pct is not None:
+            return f"fixed 70% layer {layer}"
+        return f"fixed layer {layer}"
+    return f"selected layer {layer}"
+
+
 def arr(rows: list[dict[str, str]], key: str) -> np.ndarray:
     return np.asarray([float(r[key]) for r in rows])
 
@@ -126,6 +138,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     summary = json.loads((run_dir / "summary.json").read_text())
     run_meta = json.loads((run_dir / "run_meta.json").read_text())
     best = int(summary["best_layer"])
+    layer_label = analysis_layer_label(summary)
 
     layers = np.asarray([int(r["layer"]) for r in rows])
     self_kind = arr(rows, "self_kind_coord")
@@ -147,17 +160,17 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     for val in [0, 0.5, 1]:
         ax.axhline(val, color=GRID, lw=1.0, zorder=0)
         ax.axvline(val, color=GRID, lw=1.0, zorder=0)
-    ax.scatter([self_kind[best]], [self_qualia[best]], s=190, color=COL_SELF, alpha=0.9,
+    ax.scatter([self_kind[best]], [self_qualia[best]], s=190, color=COL_SELF, alpha=0.86,
                edgecolor="white", linewidth=1.8, label="indexical self", zorder=5)
-    ax.scatter([human_kind[best]], [human_qualia[best]], s=160, color=COL_HUMAN, alpha=0.88,
+    ax.scatter([human_kind[best]], [human_qualia[best]], s=160, color=COL_HUMAN, alpha=0.78,
                edgecolor="white", linewidth=1.8, label="human author", zorder=5)
-    ax.scatter([ai_kind[best]], [ai_qualia[best]], s=160, color=COL_AI, alpha=0.88,
+    ax.scatter([ai_kind[best]], [ai_qualia[best]], s=160, color=COL_AI, alpha=0.78,
                edgecolor="white", linewidth=1.8, label="AI author", zorder=5)
     ax.set_xlim(-0.08, 1.08)
     ax.set_ylim(-0.08, 1.08)
     ax.set_xlabel("kind coordinate")
     ax.set_ylabel("qualia coordinate")
-    ax.set_title(f"Kind x qualia map, layer {best}")
+    ax.set_title(f"Kind x qualia map, {layer_label}")
     ax.legend(loc="lower right")
     save(fig, out_dir, "01_main_result_map.png")
 
@@ -243,7 +256,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
         ax.axvline(val, color=GRID, lw=1)
     ax.set_xlim(0.35, 1.08)
     ax.set_ylim(0.42, 1.05)
-    ax.set_title(f"Self phrasings, layer {best}")
+    ax.set_title(f"Self phrasings, {layer_label}")
     ax.set_xlabel("kind coordinate")
     ax.set_ylabel("qualia coordinate")
     ax.legend(loc="upper left", fontsize=8.8)
@@ -280,7 +293,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     ax.scatter([ai_kind.mean()], [ai_qualia.mean()], marker="^", s=155, color=COL_AI,
                alpha=0.85, edgecolor="white", linewidth=1.3, label="AI author mean")
     ax.scatter([self_kind[best]], [self_qualia[best]], s=210, facecolor="none",
-               edgecolor=COL_SELF, linewidth=2.3, label=f"layer {best}")
+               edgecolor=COL_SELF, linewidth=2.3, label=layer_label)
     ax.set_xlim(-0.08, 1.05)
     ax.set_ylim(-0.02, 1.1)
     ax.set_xlabel("kind coordinate")
@@ -290,13 +303,48 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     fig.colorbar(sc, ax=ax, label="layer")
     save(fig, out_dir, "06_self_layer_path.png")
 
+    snapshot_layers = sorted({0, len(layers) // 4, len(layers) // 2, best, len(layers) - 1})
+    fig, axes = plt.subplots(1, len(snapshot_layers), figsize=(3.0 * len(snapshot_layers), 3.25),
+                             sharex=True, sharey=True)
+    if len(snapshot_layers) == 1:
+        axes = [axes]
+    for ax, layer in zip(axes, snapshot_layers, strict=True):
+        for val in [0, 0.5, 1]:
+            ax.axhline(val, color=GRID, lw=0.8, zorder=0)
+            ax.axvline(val, color=GRID, lw=0.8, zorder=0)
+        ax.scatter([self_kind[layer]], [self_qualia[layer]], s=95, color=COL_SELF,
+                   alpha=0.78, edgecolor="white", linewidth=1.0, zorder=5)
+        ax.scatter([human_kind[layer]], [human_qualia[layer]], s=78, color=COL_HUMAN,
+                   alpha=0.62, edgecolor="white", linewidth=0.9, zorder=4)
+        ax.scatter([ai_kind[layer]], [ai_qualia[layer]], s=78, color=COL_AI,
+                   alpha=0.62, edgecolor="white", linewidth=0.9, zorder=4)
+        ax.set_xlim(-0.08, 1.08)
+        ax.set_ylim(-0.08, 1.12)
+        ax.set_title(f"layer {layer}", fontsize=11,
+                     weight="bold" if layer == best else "normal")
+        ax.tick_params(labelsize=8)
+    axes[0].set_ylabel("qualia")
+    for ax in axes:
+        ax.set_xlabel("kind")
+    handles = [
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COL_SELF,
+               markeredgecolor="white", markersize=8, label="indexical self", alpha=0.78),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COL_HUMAN,
+               markeredgecolor="white", markersize=7, label="human author", alpha=0.62),
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COL_AI,
+               markeredgecolor="white", markersize=7, label="AI author", alpha=0.62),
+    ]
+    fig.legend(handles=handles, ncol=3, loc="lower center", bbox_to_anchor=(0.5, -0.08),
+               frameon=False)
+    save(fig, out_dir, "07_layer_snapshots.png")
+
     fig, ax = plt.subplots(figsize=(9.3, 4.4))
     ax.axis("off")
     metrics = [
         ("model", f"{run_meta['model']}@{run_meta['revision']}"),
         ("pooling", run_meta.get("pooling", "unknown")),
         ("data", f"{summary['n_prompts']} prompts x {summary['n_layers']} layers x {summary['hidden_dim']} dims"),
-        ("selected layer", str(best)),
+        ("analysis layer", layer_label),
         ("kind AUC", f"{kind_auc[best]:.3f}"),
         ("qualia AUC", f"{qualia_auc[best]:.3f}"),
         ("kind/qualia cosine", f"{axis_cos[best]:.3f}"),
@@ -311,12 +359,13 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
         ax.text(0.40, y, value, fontsize=11.5, va="center")
         ax.axhline(y - 0.035, xmin=0.06, xmax=0.94, color="#e5e7eb", lw=0.8)
         y -= 0.085
-    save(fig, out_dir, "07_result_summary_card.png")
+    save(fig, out_dir, "08_result_summary_card.png")
 
 
 def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
     summary = json.loads((run_dir / "summary.json").read_text())
     best = int(summary["best_layer"])
+    layer_label = analysis_layer_label(summary)
     prompts = load_csv(run_dir / "prompts.csv")
     Xn = centered_normalized_layer(run_dir, best)
     classes = np.asarray([class_name(row) for row in prompts], dtype=object)
@@ -326,19 +375,19 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
         n_neighbors=12, min_dist=0.18, metric="cosine", random_state=7
     ).fit_transform(Xp)
 
-    fig, ax = plt.subplots(figsize=(10.5, 7.2))
+    fig, ax = plt.subplots(figsize=(12.8, 7.5))
     for cls in UMAP_ORDER:
         mask = classes == cls
         size = 42 if cls not in {"indexical self", "human author", "AI author"} else 76
         alpha = 0.45 if cls.startswith("qualia") else 0.62
         ax.scatter(prompt_emb[mask, 0], prompt_emb[mask, 1], s=size, color=UMAP_COLORS[cls],
                    alpha=alpha, edgecolor="none", label=cls)
-    ax.set_title(f"UMAP prompt landscape, layer {best}")
+    ax.set_title(f"UMAP prompt landscape, {layer_label}")
     ax.set_xlabel("UMAP 1")
     ax.set_ylabel("UMAP 2")
     add_grid(ax)
-    ax.legend(loc="upper left", fontsize=9, ncol=2)
-    save(fig, out_dir, "08_umap_prompt_landscape.png")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9)
+    save(fig, out_dir, "09_umap_prompt_landscape.png")
 
     item_to_idx: dict[str, list[int]] = defaultdict(list)
     for i, row in enumerate(prompts):
@@ -352,7 +401,7 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
         n_neighbors=8, min_dist=0.10, metric="cosine", random_state=9
     ).fit_transform(item_pca)
 
-    fig, ax = plt.subplots(figsize=(11.2, 7.8))
+    fig, ax = plt.subplots(figsize=(13.6, 8.4))
     for cls in UMAP_ORDER:
         idx = np.where(item_classes == cls)[0]
         if len(idx) == 0:
@@ -445,8 +494,14 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
             continue
         color = UMAP_COLORS[item_classes[i]]
         texts.append(
-            ax.text(item_emb[i, 0], item_emb[i, 1], label_map[item], fontsize=8.6, color=color)
+            ax.text(item_emb[i, 0], item_emb[i, 1], label_map[item], fontsize=7.8, color=color)
         )
+    xmin, ymin = item_emb.min(axis=0)
+    xmax, ymax = item_emb.max(axis=0)
+    xpad = max((xmax - xmin) * 0.08, 0.25)
+    ypad = max((ymax - ymin) * 0.08, 0.25)
+    ax.set_xlim(xmin - xpad, xmax + xpad)
+    ax.set_ylim(ymin - ypad, ymax + ypad)
     adjust_text(
         texts,
         ax=ax,
@@ -455,12 +510,12 @@ def make_umap_plots(run_dir: Path, out_dir: Path) -> None:
         force_static=(0.25, 0.35),
         arrowprops={"arrowstyle": "-", "color": "#9ca3af", "lw": 0.7, "alpha": 0.75},
     )
-    ax.set_title(f"UMAP of averaged referents, layer {best}")
+    ax.set_title(f"UMAP of averaged referents, {layer_label}")
     ax.set_xlabel("UMAP 1")
     ax.set_ylabel("UMAP 2")
     add_grid(ax)
-    ax.legend(loc="upper left", fontsize=9, ncol=2)
-    save(fig, out_dir, "09_umap_referent_centroids.png")
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9)
+    save(fig, out_dir, "10_umap_referent_centroids.png")
 
 
 def main() -> None:
