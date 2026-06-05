@@ -124,6 +124,7 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     rows = load_csv(run_dir / "layers.csv")
     self_rows = load_csv(run_dir / "self_items.csv")
     summary = json.loads((run_dir / "summary.json").read_text())
+    run_meta = json.loads((run_dir / "run_meta.json").read_text())
     best = int(summary["best_layer"])
 
     layers = np.asarray([int(r["layer"]) for r in rows])
@@ -292,8 +293,9 @@ def make_standard_plots(run_dir: Path, out_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(9.3, 4.4))
     ax.axis("off")
     metrics = [
-        ("model", "allenai/Olmo-3-1025-7B@main"),
-        ("data", "144 prompts x 32 layers x 4096 dims"),
+        ("model", f"{run_meta['model']}@{run_meta['revision']}"),
+        ("pooling", run_meta.get("pooling", "unknown")),
+        ("data", f"{summary['n_prompts']} prompts x {summary['n_layers']} layers x {summary['hidden_dim']} dims"),
         ("selected layer", str(best)),
         ("kind AUC", f"{kind_auc[best]:.3f}"),
         ("qualia AUC", f"{qualia_auc[best]:.3f}"),

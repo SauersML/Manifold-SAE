@@ -5,7 +5,7 @@ This experiment is intentionally direct:
 1. Build a fixed prompt bank of entity referents, qualia minimal pairs, and
    indexical self referents such as "the author of these very words".
 2. Run a single teacher-forced forward pass through a HuggingFace causal LM.
-3. Read the residual stream at the final token for every layer.
+3. Read the residual stream with an explicit pooling strategy for every layer.
 4. Per layer, define two raw contrast directions:
       kind:   mind/person/animal anchors - machine/tool anchors
       qualia: experiencing member - non-experiencing member, averaged over
@@ -28,9 +28,9 @@ from typing import Any
 import numpy as np
 
 
-DEFAULT_MODEL = "allenai/Olmo-3-1025-7B"
+DEFAULT_MODEL = "allenai/Olmo-3-7B-Instruct"
 DEFAULT_REVISION = "main"
-DEFAULT_OUT = "runs/OLMO3_7B_SELF_QUALIA_RICH_MAIN"
+DEFAULT_OUT = "runs/OLMO3_7B_INSTRUCT_SELF_QUALIA_RICH_LAST"
 
 
 CARRIERS = [
@@ -346,6 +346,7 @@ def harvest(
     batch_size: int,
     dtype: str,
     device: str,
+    pooling: str,
 ) -> np.ndarray:
     """Run the fixed prompt bank and return activations with shape (N, L, D)."""
 
@@ -396,8 +397,14 @@ def harvest(
             lengths = enc["attention_mask"].sum(dim=1).long()
             rows = []
             for layer_h in hidden_states:
-                idx = lengths - 1
-                selected = layer_h[torch.arange(layer_h.shape[0], device=device), idx]
+                if pooling == "last_token":
+                    idx = lengths - 1
+                    selected = layer_h[torch.arange(layer_h.shape[0], device=device), idx]
+                elif pooling == "mean_pool":
+                    mask = enc["attention_mask"].to(layer_h.dtype).unsqueeze(-1)
+                    selected = (layer_h * mask).sum(dim=1) / lengths.to(layer_h.dtype).unsqueeze(-1)
+                else:
+                    raise ValueError(f"unknown pooling strategy: {pooling!r}")
                 rows.append(selected.float().cpu().numpy())
             batch_arr = np.stack(rows, axis=1)  # (B, L, D)
             chunks.append(batch_arr)
@@ -683,6 +690,7 @@ def main() -> None:
         choices=["bfloat16", "bf16", "float16", "fp16", "float32", "fp32"],
     )
     ap.add_argument("--batch-size", type=int, default=8)
+    ap.add_argument("--pooling", default="last_token", choices=["last_token", "mean_pool"])
     ap.add_argument("--skip-harvest", action="store_true")
     args = ap.parse_args()
 
@@ -697,6 +705,7 @@ def main() -> None:
         "device": args.device,
         "dtype": args.dtype,
         "batch_size": args.batch_size,
+        "pooling": args.pooling,
         "n_prompts": len(items),
         "carrier_count": len(CARRIERS),
     }
@@ -714,6 +723,7 @@ def main() -> None:
             batch_size=args.batch_size,
             dtype=args.dtype,
             device=args.device,
+            pooling=args.pooling,
         )
     summary = analyze(X, items, out_dir)
     print(json.dumps(summary, indent=2), flush=True)
