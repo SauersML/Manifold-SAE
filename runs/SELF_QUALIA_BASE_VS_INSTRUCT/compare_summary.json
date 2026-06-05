@@ -1,0 +1,43 @@
+{
+  "base_dir": "runs/OLMO3_7B_SELF_QUALIA_MAIN",
+  "instruct_dir": "runs/OLMO3_7B_INSTRUCT_SELF_QUALIA_RICH_LAST",
+  "n_shared_referents": 36,
+  "n_layers": 32,
+  "analysis_layer": 28,
+  "matched_at_best_layer": {
+    "base": {
+      "kind_auc": 0.9947916666666666,
+      "qualia_auc": 1.0,
+      "kind_dprime": 4.4902143478393555,
+      "qualia_dprime": 4.540036201477051,
+      "axis_cos": 0.40036070346832275,
+      "coordvar_kind": 0.15257658622766918,
+      "coordvar_qualia": 0.15715311682096753,
+      "self_kind": 0.7629901170730591,
+      "self_qualia": 0.809256911277771,
+      "self_ha_ai_gap": 0.1206212043762207
+    },
+    "instruct": {
+      "kind_auc": 1.0,
+      "qualia_auc": 0.9901147959183674,
+      "kind_dprime": 3.721989393234253,
+      "qualia_dprime": 2.73984694480896,
+      "axis_cos": 0.26312416791915894,
+      "coordvar_kind": 0.15418765262845155,
+      "coordvar_qualia": 0.13868973173538843,
+      "self_kind": 0.6245725154876709,
+      "self_qualia": 0.7935926914215088,
+      "self_ha_ai_gap": 0.050116539001464844
+    }
+  },
+  "ownbank_coordvar_at_best_layer": {
+    "base": {
+      "coordvar_kind": 0.15257658622766918,
+      "coordvar_qualia": 0.15715311682096753
+    },
+    "instruct": {
+      "coordvar_kind": 0.17055621169533897,
+      "coordvar_qualia": 0.24528310118047014
+    }
+  }
+}
