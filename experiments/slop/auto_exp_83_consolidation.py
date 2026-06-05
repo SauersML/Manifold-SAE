@@ -29,11 +29,11 @@ import numpy as np
 import torch
 from torch import nn
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from experiments.auto_exp_80_amortized_floor import plant_circles, circ_corr  # noqa: E402
-from experiments.auto_exp_81_causal_gauge import behavior, T_RING  # noqa: E402
-from experiments.auto_exp_82_steering_ceiling import (  # noqa: E402
+from experiments.slop.auto_exp_80_amortized_floor import plant_circles, circ_corr  # noqa: E402
+from experiments.slop.auto_exp_81_causal_gauge import behavior, T_RING  # noqa: E402
+from experiments.slop.auto_exp_82_steering_ceiling import (  # noqa: E402
     train as train_freehead, steer_matrix, read_matrix,
 )
 from manifold_sae.amortized_manifold_sae import _circle_basis  # noqa: E402
