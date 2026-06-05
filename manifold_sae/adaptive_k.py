@@ -41,36 +41,6 @@ from torch import nn
 from gamfit.torch import AdaptiveTopK  # gamfit (post-refactor wheel)
 
 
-class HardTopKGate(AdaptiveTopK):
-    """:class:`gamfit.torch.AdaptiveTopK` with a corrected hard top-K forward.
-
-    Works around a gamfit 0.1.134 bug: ``_AdaptiveTopKSTE.forward`` builds
-    ``z_active = z + (z*hard_mask - z*soft_mask).detach()`` — i.e. the STE base
-    is the raw ``z`` instead of ``z*soft_mask`` — so the forward *value* is
-    ``z*(1 + hard - soft)`` and never zeroes the non-top-K entries; the codes
-    stay fully dense (all F atoms active). We keep everything the primitive
-    contributes — the learned K-head, the differentiable order-statistic ``tau``,
-    :meth:`penalty` (``λ·E[K_pred]``) and :meth:`reml_descriptor` — and only
-    re-impose the hard mask on the forward value. Gradient still flows through
-    the primitive's soft-mask path (clean straight-through: hard forward, soft
-    backward), exactly as the primitive's docstring intends.
-    """
-
-    def forward(self, z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:  # type: ignore[override]
-        z_soft_active, k_pred, sparsity_penalty = super().forward(z)
-        width = z.shape[-1]
-        k_int = k_pred.detach().round().clamp_(1, width).to(torch.long)
-        abs_z = z.detach().abs()
-        hard = torch.zeros_like(z)
-        for row in range(z.shape[0]):
-            idx = torch.topk(abs_z[row], k=int(k_int[row].item())).indices
-            hard[row, idx] = 1.0
-        z_hard = z * hard
-        # forward value == z_hard (sparse); backward grad via the soft path.
-        z_active = z_soft_active + (z_hard - z_soft_active).detach()
-        return z_active, k_pred, sparsity_penalty
-
-
 @dataclass
 class AdaptiveKSAEConfig:
     input_dim: int
@@ -129,7 +99,7 @@ class AdaptiveKSAE(nn.Module):
 
         # gamfit primitive owns the K-head + STE + learnable-λ sparsity.
         # v1 == linear head (simplest predictor), wide K regime.
-        self.gate = HardTopKGate(
+        self.gate = AdaptiveTopK(
             F=F,
             k_min=k_min,
             k_max=k_max,

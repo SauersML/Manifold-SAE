@@ -12,14 +12,23 @@ Composes two gamfit-torch penalties in a small Adam loop over leaf tensors:
 Both penalty modules return scalars *with* an autograd graph, so a single
 ``loss.backward()`` drives all parameters.
 
-We deliberately do **not** use ``gamfit.identifiable_factor_fit``: in gamfit
-0.1.141 its strict ``conditional_prior_ivae`` rank check is unsatisfiable for a
-mean-only auxiliary (the ``log σ`` block is hardcoded to zero, so the stacked
-``[μ ‖ log σ]`` signature can never reach the required ``2·n_supervised`` rank —
-every supervised fit raises ``GamError``; see SauersML/gam#576). The penalty
-composition here trusts the same underlying gamfit primitives via their torch
-modules, which work, and recovers planted factors (corr_sup ≈ 0.76 on the
-recovery test). Switch back to the high-level recipe once gam#576 ships.
+Relationship to ``gamfit.identifiable_factor_fit``
+--------------------------------------------------
+The high-level recipe ``gamfit.identifiable_factor_fit`` (the gam#576
+auxiliary-conditional rank fix shipped in gamfit 0.1.144) is the *amortized*
+estimator: it learns an MLP encoder ``E(X) -> (T_sup, T_free)`` and selects
+penalty weights by a log-evidence grid search. Reach for it when you need an
+encoder that generalizes to **out-of-sample** ``X``.
+
+This function is the complementary *transductive* estimator: it optimizes the
+latent codes ``T`` for a fixed ``X`` directly, so it is far cheaper
+(sub-second vs. ~2 min for the recipe's MLP+grid path), deterministic, and
+avoids the recipe's Khemakhem bare-linear-encoder identifiability caveat. On
+the planted-factor recovery it lands ``corr_sup ≈ 0.76``. It composes the same
+two gamfit primitives the recipe is built on (``IvaeRidgeMeanGauge`` +
+``MechanismSparsityPenalty``) via their torch modules — current API, not a
+workaround. Use the recipe for amortized inference; use this for a fast,
+fixed-design factorisation.
 
 ``T`` (latent codes) and ``W`` (decoder) are leaf tensors optimised directly;
 ``X ≈ T @ W.T``.

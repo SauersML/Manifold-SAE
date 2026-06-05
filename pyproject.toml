@@ -35,7 +35,7 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.17",
     "tqdm>=4.66",
-    "gamfit>=0.1.154",
+    "gamfit>=0.1.169",
     "matplotlib>=3.8",
     "scikit-learn>=1.4",
 ]

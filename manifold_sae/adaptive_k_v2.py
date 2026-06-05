@@ -25,7 +25,7 @@ import math
 import torch
 from torch import nn
 
-from manifold_sae.adaptive_k import HardTopKGate  # corrected hard-forward gate
+from gamfit.torch import AdaptiveTopK
 
 
 @dataclass
@@ -92,7 +92,7 @@ class AdaptiveKv2SAE(nn.Module):
         self.b_d = nn.Parameter(torch.zeros(input_dim))
 
         # v2 == MLP head + target-K regime, sparsity via AdaptiveTopK.
-        self.gate = HardTopKGate(
+        self.gate = AdaptiveTopK(
             F=F,
             k_min=k_min,
             k_max=k_max,

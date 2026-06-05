@@ -5,11 +5,12 @@
 in a small Adam loop over leaf tensors ``T`` (latent codes) and ``W`` (decoder),
 fitting ``X ≈ T @ W.T``.
 
-It deliberately does NOT use ``gamfit.identifiable_factor_fit``: in gamfit
-0.1.141 that recipe's strict ``conditional_prior_ivae`` rank check is
-unsatisfiable for a mean-only aux (``aux_scale`` hardcoded to ones → every
-supervised fit raises ``GamError``; see SauersML/gam#576). The penalty-module
-composition tested here works and recovers planted factors.
+This is the *transductive* sibling of the high-level
+``gamfit.identifiable_factor_fit`` recipe (which is *amortized* — it learns an
+encoder for out-of-sample X, and whose gam#576 rank fix shipped in gamfit
+0.1.144). The penalty-module composition tested here optimizes the latent
+codes directly for a fixed X: fast, deterministic, and recovers planted
+factors. See ``manifold_sae.identifiable`` for the full relationship.
 """
 from __future__ import annotations
 
