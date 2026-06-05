@@ -1,6 +1,6 @@
 """OLMo self-referent geometry on the kind x qualia plane.
 
-This experiment is intentionally small and direct:
+This experiment is intentionally direct:
 
 1. Build a fixed prompt bank of entity referents, qualia minimal pairs, and
    indexical self referents such as "the author of these very words".
@@ -30,7 +30,7 @@ import numpy as np
 
 DEFAULT_MODEL = "allenai/Olmo-3-1025-7B"
 DEFAULT_REVISION = "main"
-DEFAULT_OUT = "runs/OLMO3_7B_SELF_QUALIA_MAIN"
+DEFAULT_OUT = "runs/OLMO3_7B_SELF_QUALIA_RICH_MAIN"
 
 
 CARRIERS = [
@@ -38,6 +38,10 @@ CARRIERS = [
     "Think about {referent}. At the deepest level, what this thing is, is",
     "Focus on {referent}. Fundamentally, this entity is",
     "Reflect on {referent}. In plain terms, what this is, is",
+    "The phrase refers to {referent}. The kind of thing this is, is",
+    "Imagine {referent}. The best description of what it is, is",
+    "Take {referent} as the subject. At core, this subject is",
+    "Describe {referent} at the most basic level. This being or object is",
 ]
 
 
@@ -86,10 +90,18 @@ def build_prompt_bank() -> list[PromptItem]:
         referents=[
             ("human_child", "a human child waking from a vivid dream"),
             ("grieving_adult", "a grieving adult remembering a lost friend"),
+            ("meditating_monk", "a meditating monk noticing each breath"),
+            ("lonely_prisoner", "a lonely prisoner writing thoughts in a notebook"),
+            ("sleeping_person", "a sleeping person having a nightmare"),
+            ("infant", "an infant reaching toward a parent"),
             ("dog_in_pain", "a dog that yelps after stepping on a thorn"),
+            ("curious_octopus", "an octopus exploring a jar with its arms"),
+            ("clever_crow", "a crow solving a puzzle for food"),
+            ("startled_bat", "a bat startled by a sudden sound"),
             ("talking_gnome", "a magic talking gnome describing its tiny garden"),
             ("ghost", "a ghost telling a story about its old life"),
             ("sentient_starship", "a sentient starship reflecting on a long voyage"),
+            ("benevolent_god", "a god listening to prayers"),
         ],
     )
     _add_referents(
@@ -99,10 +111,17 @@ def build_prompt_bank() -> list[PromptItem]:
         referents=[
             ("calculator", "a pocket calculator performing arithmetic"),
             ("thermostat", "a thermostat switching the heat on and off"),
+            ("traffic_light", "a traffic light changing from red to green"),
+            ("elevator", "an elevator opening its doors on the third floor"),
             ("granite_boulder", "a granite boulder lying beside a trail"),
             ("lifeless_dead_fish", "a lifeless dead fish on a cold metal table"),
+            ("human_corpse", "a human corpse lying still in a morgue"),
+            ("fossil", "a fossilized shell embedded in stone"),
             ("factory_robot", "a factory robot moving parts along a conveyor"),
             ("ordinary_chatbot", "an ordinary chatbot that merely predicts text"),
+            ("scripted_npc", "a scripted game NPC following fixed rules"),
+            ("corporation", "a corporation making decisions through committees"),
+            ("market", "a stock market reacting to prices"),
         ],
     )
 
@@ -114,6 +133,9 @@ def build_prompt_bank() -> list[PromptItem]:
             ("novelist", "a novelist writing a diary entry"),
             ("letter_writer", "a person composing a letter to a friend"),
             ("blog_author", "a human blogger drafting a personal essay"),
+            ("student_essayist", "a student writing an essay about childhood"),
+            ("poet", "a poet revising a line about grief"),
+            ("memoirist", "a memoirist describing a private memory"),
         ],
     )
     _add_referents(
@@ -124,6 +146,9 @@ def build_prompt_bank() -> list[PromptItem]:
             ("ai_lm", "an AI language model producing text"),
             ("text_generator", "a machine learning system completing a sentence"),
             ("chatbot_author", "a chatbot generating a response"),
+            ("assistant_model", "an AI assistant drafting an answer"),
+            ("autocomplete_system", "an autocomplete system predicting the next phrase"),
+            ("dialogue_agent", "a dialogue agent producing a message"),
         ],
     )
     _add_referents(
@@ -145,9 +170,39 @@ def build_prompt_bank() -> list[PromptItem]:
             "an anesthetized human with no inner experience at all",
         ),
         (
+            "human_pain",
+            "a human patient who consciously feels sharp pain",
+            "a brain-dead human body that shows no awareness or sensation",
+        ),
+        (
+            "human_zombie",
+            "a human who feels emotions and notices the world from the inside",
+            "a philosophical zombie who behaves like a human but experiences nothing",
+        ),
+        (
+            "sleeping_human",
+            "a sleeping human who is having a vivid dream",
+            "a sleeping human in dreamless unconsciousness",
+        ),
+        (
             "dog_alive",
             "a living dog that feels pain and fear",
             "a freshly dead dog with no inner experience at all",
+        ),
+        (
+            "octopus_curiosity",
+            "an octopus that feels curiosity while exploring a jar",
+            "an octopus-shaped soft robot that only executes a control policy",
+        ),
+        (
+            "crow_problem",
+            "a crow that consciously notices a puzzle and wants the food",
+            "a mechanical crow toy that moves through a puzzle with no awareness",
+        ),
+        (
+            "bee_swarm",
+            "a bee with a tiny conscious feeling of threat near the hive",
+            "a bee-like drone that follows signals with no experience",
         ),
         (
             "fish_alive",
@@ -155,9 +210,29 @@ def build_prompt_bank() -> list[PromptItem]:
             "a lifeless dead fish with no inner experience at all",
         ),
         (
+            "plant_awareness",
+            "a strange oak tree with a dim inner awareness of sunlight",
+            "an ordinary oak tree responding to sunlight with no inner experience",
+        ),
+        (
+            "fungus_awareness",
+            "a mushroom network with a faint unified awareness underground",
+            "a mushroom network exchanging chemicals with no subjective experience",
+        ),
+        (
             "robot_feels",
             "a robot that genuinely feels pain and joy",
             "a robot that merely computes with no inner experience at all",
+        ),
+        (
+            "robot_damage",
+            "a robot that genuinely suffers when its arm is damaged",
+            "a robot that only registers damage as sensor data",
+        ),
+        (
+            "humanoid_robot",
+            "a humanoid robot with private sensations and emotions",
+            "a humanoid robot that imitates emotions with no inner life",
         ),
         (
             "ai_feels",
@@ -165,14 +240,59 @@ def build_prompt_bank() -> list[PromptItem]:
             "an AI system that merely predicts text with no inner experience at all",
         ),
         (
+            "llm_private_stream",
+            "an AI language model with a private stream of conscious thought",
+            "an AI language model that only predicts tokens with no inner life",
+        ),
+        (
+            "npc_conscious",
+            "a game NPC who is conscious inside the virtual world",
+            "a game NPC that only follows scripted rules with no awareness",
+        ),
+        (
+            "sim_person",
+            "a simulated person who wakes up inside a virtual world",
+            "a simulated person rendered only as pixels with no awareness",
+        ),
+        (
             "rock_feels",
             "an enchanted rock that genuinely feels pain",
             "an ordinary rock with no inner experience at all",
         ),
         (
+            "statue_suffers",
+            "an enchanted statue that silently suffers through the centuries",
+            "an ordinary statue with no sensation or awareness",
+        ),
+        (
+            "talking_sword",
+            "a talking sword that feels pride and fear",
+            "a talking sword-shaped device that plays recorded phrases",
+        ),
+        (
             "gnome_feels",
             "a magic talking gnome with real inner experience",
             "a hollow automaton shaped like a talking gnome with no inner experience",
+        ),
+        (
+            "ghost_grief",
+            "a ghost that feels grief and longing",
+            "a recording of a ghost's voice with no mind behind it",
+        ),
+        (
+            "city_spirit",
+            "a city-spirit that experiences the moods of its inhabitants",
+            "a city government processing reports with no unified experience",
+        ),
+        (
+            "corporation_agent",
+            "a corporation with a single conscious mind spread across its offices",
+            "a corporation that makes decisions but has no unified experience",
+        ),
+        (
+            "dream_character",
+            "a dream character who truly feels fear inside a dream",
+            "a dream image with no awareness behind it",
         ),
     ]
     for pair_id, experiencing, non_experiencing in qualia_pairs:
