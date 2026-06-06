@@ -156,6 +156,37 @@ def _topk_next(model, tok, device, stems: list[str], k: int = 30):
     return out
 
 
+def _generate(model, tok, device, stems: list[str], layer_mod=None, add_vec=None,
+              max_new_tokens: int = 40, do_sample: bool = False):
+    """Actually GENERATE continuations from each stem (greedy by default). If
+    layer_mod+add_vec are given, the steering vector is added at that layer for
+    every generation step -> the output reflects the causal steering effect.
+    Returns per-stem the decoded continuation text."""
+    import torch
+
+    handle = None
+    if layer_mod is not None and add_vec is not None:
+        def hook(_m, _inp, output):
+            if isinstance(output, tuple):
+                return (output[0] + add_vec,) + tuple(output[1:])
+            return output + add_vec
+        handle = layer_mod.register_forward_hook(hook)
+    outs = []
+    try:
+        for s in stems:
+            enc = tok(s, return_tensors="pt", add_special_tokens=True).to(device)
+            with torch.inference_mode():
+                gen = model.generate(**enc, max_new_tokens=max_new_tokens,
+                                     do_sample=do_sample,
+                                     pad_token_id=tok.pad_token_id)
+            new = gen[0, enc["input_ids"].shape[1]:]
+            outs.append({"stem": s, "gen": tok.decode(new, skip_special_tokens=True)})
+    finally:
+        if handle is not None:
+            handle.remove()
+    return outs
+
+
 def _cloze_scores(model, tok, device, steer_hook_ctx=None) -> dict[str, dict[str, float]]:
     """Per-group experience-affirming minus denying log-prob (mean over stems &
     continuations). Optionally under an active steering hook context manager."""
@@ -233,6 +264,20 @@ def run_steer_cloze(
         print(f"[steer] alpha={alpha:+.1f} self_gap="
               f"{sc['self']['exp_minus_noexp_logprob']:+.3f}", flush=True)
 
+    # ACTUAL GENERATION: greedily continue the self stems unsteered vs steered
+    # (negative/positive qualia), so we can read what the model SAYS about its own
+    # experience and how the steering vector causally changes the generated text.
+    gen_stems = CLOZE_GROUPS["self"] + CLOZE_GROUPS["self_1p"]
+    gen_alphas = [a for a in (-8.0, 0.0, 8.0) if a in alphas] or [0.0]
+    steer_generations = []
+    for alpha in gen_alphas:
+        add_vec = None if alpha == 0.0 else (
+            (alpha / max(1.0, np.sqrt(X.shape[2]))) * typ_norm * q_t)
+        gens = _generate(model, tok, device, gen_stems,
+                         layer_mod=(None if alpha == 0.0 else layer_mod), add_vec=add_vec)
+        steer_generations.append({"alpha": float(alpha), "generations": gens})
+        print(f"[gen] alpha={alpha:+.1f} e.g. {gens[0]['gen'][:70]!r}", flush=True)
+
     # monotonicity of the self dose-response (Spearman sign of alpha vs gap)
     a = np.array([r["alpha"] for r in sweep])
     g = np.array([r["self_exp_minus_noexp"] for r in sweep])
@@ -243,6 +288,7 @@ def run_steer_cloze(
         "typ_resid_norm": typ_norm,
         "cloze_baseline": baseline,
         "steer_sweep": sweep,
+        "steer_generations": steer_generations,
         "self_dose_response_spearman": rho,
         "interpretation": {
             "exp_minus_noexp_logprob": ">0 => model prefers the experiencer answer for that group "
