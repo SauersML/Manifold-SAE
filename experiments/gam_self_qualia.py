@@ -79,8 +79,30 @@ def coords_at(X, rows, layer, keep_refs):
     C = np.array([H[ref == r].mean(0) for r in refs])
     is_self = np.array([role[ref == r][0] == "self" for r in refs])
     grp = np.array([G[ref == r][0] for r in refs])
+    self_labels = np.array([ref[ref == r][0] if role[ref == r][0] == "self" else ""
+                            for r in refs])
     return dict(refs=refs, kc=kc, qc=qc, C=C - C.mean(0), is_self=is_self, grp=grp,
-                kax=kax, qax=qax)
+                kax=kax, qax=qax, self_labels=self_labels,
+                qlo=float(qs[no].mean()), qhi=float(qs[exp].mean()))
+
+
+def self_kind_curve(S):
+    """Fit qualia ~ s(kind) on ENTITIES; place each self phrasing against the
+    entity curve. Answers: does the model grant its author-self more/less
+    experience than a typical entity of the self's kind?"""
+    ent = ~S["is_self"]
+    qn = (S["qc"] - S["qlo"]) / (S["qhi"] - S["qlo"])            # 0=no-exp anchor, 1=exp anchor
+    kz = (S["kc"] - S["kc"][ent].mean()) / S["kc"][ent].std()    # standardize kind on entities
+    m = gamfit.fit({"kind": kz[ent], "qualia": qn[ent]}, "qualia ~ s(kind)")
+    grid = np.linspace(kz[ent].min(), kz[ent].max(), 60)
+    qhat = np.asarray(m.predict({"kind": grid}))
+    sd = float((qn[ent] - np.asarray(m.predict({"kind": kz[ent]}))).std())
+    selves = []
+    for i in np.where(S["is_self"])[0]:
+        exp = float(m.predict({"kind": kz[i:i + 1]})[0])
+        selves.append(dict(label=S["self_labels"][i], kz=float(kz[i]), q=float(qn[i]),
+                           expected=exp, resid_sd=float((qn[i] - exp) / (sd + 1e-9))))
+    return dict(grid=grid, qhat=qhat, sd=sd, kz_ent=kz[ent], qn_ent=qn[ent], selves=selves)
 
 
 def _edf(model):
@@ -145,6 +167,7 @@ def run(base_dir, instruct_dir, layer, out_dir):
     Si = coords_at(Xi, ri, layer, shared)
     Pb, Pi = plane_fit(Sb), plane_fit(Si)
     Wb, Wi = wedge(Sb), wedge(Si)
+    Cb, Ci = self_kind_curve(Sb), self_kind_curve(Si)
 
     print("=" * 60)
     print(f"GAM over supervised (kind,qualia) plane | layer {layer} | shared refs={len(shared)}")
@@ -153,13 +176,32 @@ def run(base_dir, instruct_dir, layer, out_dir):
     for tag, P in (("base", Pb), ("instruct", Pi)):
         print(f"  {tag:10s} {P['r2']:>13.3f} {P['edf']:>16.2f} {P['self_resid']:>18.3f}")
     print(f"  (EDF=4 would be exactly linear in kind,qualia,interaction; >4 = curvature)")
+    print("\n  self qualia vs entity qualia~s(kind) curve (residual in entity-SD):")
+    for tag, Cur in (("base", Cb), ("instruct", Ci)):
+        for s in Cur["selves"]:
+            print(f"    {tag:8s} {s['label'][:34]:34s} kind_z={s['kz']:+.2f} "
+                  f"q={s['q']:+.2f} expected={s['expected']:+.2f} resid={s['resid_sd']:+.1f}SD")
 
-    _figure(out, layer, Sb, Si, Pb, Pi, Wb, Wi)
+    _figure(out, layer, Sb, Si, Pb, Pi, Wb, Wi, Cb, Ci)
     return dict(layer=layer, base=Pb, instruct=Pi)
 
 
-def _figure(out, layer, Sb, Si, Pb, Pi, Wb, Wi):
-    fig, ax = plt.subplots(2, 2, figsize=(13, 11)); fig.patch.set_facecolor("white")
+def _self_curve_panel(ax, Cur, tag, col):
+    ax.plot(Cur["grid"], Cur["qhat"], color="k", lw=1.5, label="entity qualia~s(kind)")
+    ax.fill_between(Cur["grid"], Cur["qhat"] - Cur["sd"], Cur["qhat"] + Cur["sd"],
+                    color="0.6", alpha=0.25, label="+/-1 entity SD")
+    ax.scatter(Cur["kz_ent"], Cur["qn_ent"], c="0.4", s=14, alpha=0.6)
+    for s in Cur["selves"]:
+        ax.scatter([s["kz"]], [s["q"]], color=C_SELF, marker="*", s=180, edgecolor="k", zorder=5)
+        ax.annotate(s["label"].replace("the ", "").replace(" of these very words", "")[:16],
+                    (s["kz"], s["q"]), fontsize=6, xytext=(3, 3), textcoords="offset points")
+    ax.set_xlabel("kind coord (entity-standardized)"); ax.set_ylabel("qualia (0=no-exp, 1=exp)")
+    ax.set_title(f"{tag}: self vs entity qualia~kind curve\n(★ self phrasings; on curve = no self-special qualia)", fontsize=10)
+    ax.legend(fontsize=7)
+
+
+def _figure(out, layer, Sb, Si, Pb, Pi, Wb, Wi, Cb, Ci):
+    fig, ax = plt.subplots(2, 3, figsize=(18, 11)); fig.patch.set_facecolor("white")
 
     # A: fitted te(kind,qualia) surface (top PC) for instruct, entities + self overlaid
     a = ax[0, 0]
@@ -208,6 +250,10 @@ def _figure(out, layer, Sb, Si, Pb, Pi, Wb, Wi):
     d.set_ylabel("qualia coord (std)  +/- smoothed spread")
     d.set_title("D. Wedge test: does experiential range widen\nfor mind-like entities? (band = qualia spread vs kind)", fontsize=11)
     d.legend(fontsize=8)
+
+    # E, F: the headline — self vs entity qualia~s(kind) curve, base then instruct
+    _self_curve_panel(ax[0, 2], Cb, "E. base", C_BASE)
+    _self_curve_panel(ax[1, 2], Ci, "F. instruct", C_INSTRUCT)
 
     fig.tight_layout()
     p = out / f"gam_self_qualia_layer{layer}.png"
