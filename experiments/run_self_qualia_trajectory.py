@@ -108,20 +108,27 @@ def run(args) -> None:
     if not todo:
         say("nothing to do."); return
 
-    # block on the first checkpoint, then pipeline subsequent prefetches
-    first_cache = _rev_cache(cache_root, todo[0])
-    say(f"downloading first checkpoint {todo[0]} ...")
-    res0: dict = {}
-    _prefetch(args.model, todo[0], first_cache, res0)
-    if not res0.get("ok"):
-        say(f"FATAL: first checkpoint download failed: {res0.get('error')}"); return
-
+    # Each iteration blocks to ensure its own revision is present (fast no-op if a
+    # prior prefetch already fetched it) and then prefetches the NEXT one, so the
+    # first checkpoint needs no special-casing and a bad checkpoint is non-fatal.
     for i, rev in enumerate(todo):
         out_dir = out_parent / rev
         cache_dir = _rev_cache(cache_root, rev)
         prefetch_th = prefetch_res = next_rev = None
+        model = tok = None  # bound up-front so the finally never NameErrors
         try:
-            say(f"=== {rev} ({i + 1}/{len(todo)})  free={_free_disk_gb(cache_root):.0f}GB ===")
+            free = _free_disk_gb(cache_root)
+            say(f"=== {rev} ({i + 1}/{len(todo)})  free={free:.0f}GB ===")
+            if free < args.min_free_gb:
+                say(f"WARN low disk ({free:.0f}GB < {args.min_free_gb}GB) before {rev}")
+            # Ensure THIS revision is present before loading. If its prefetch
+            # failed/was never started (e.g. after a prior load error), this is a
+            # blocking download; if prefetch already populated cache_dir it is a
+            # fast no-op. Guarantees correctness independent of pipeline state.
+            ens: dict = {}
+            _prefetch(args.model, rev, cache_dir, ens)
+            if not ens.get("ok"):
+                raise RuntimeError(f"download failed for {rev}: {ens.get('error')}")
             model, tok, n_layers = load_model(
                 args.model, rev, args.dtype, args.device, cache_dir=str(cache_dir))
 
@@ -173,22 +180,31 @@ def run(args) -> None:
         except Exception as e:  # noqa: BLE001 - never abort the whole sweep
             say(f"{rev}: ERROR (skipping): {e}\n{traceback.format_exc()}")
         finally:
-            # free GPU + this checkpoint's weights before next iteration
+            # free GPU + this checkpoint's weights before next iteration. Always
+            # empty the cache even if the load itself failed (model stayed None) —
+            # a partial allocation from a failed from_pretrained must be released
+            # so the next good checkpoint does not OOM.
+            model = None
+            tok = None
+            gc.collect()
             try:
                 import torch
-                del model
-                gc.collect()
                 if args.device == "cuda":
                     torch.cuda.empty_cache()
             except Exception:
                 pass
             shutil.rmtree(cache_dir, ignore_errors=True)
-            # ensure the prefetch finished before we try to load it next loop
+            # wait (bounded) for the prefetch so the next iter can reuse it; on
+            # timeout/failure we just continue — the next iter's blocking ensure
+            # step will (re)download as needed, so the sweep never hangs here.
             if prefetch_th is not None:
-                prefetch_th.join()
-                if not prefetch_res.get("ok"):
+                prefetch_th.join(timeout=args.prefetch_join_timeout)
+                if prefetch_th.is_alive():
+                    say(f"WARN prefetch of {next_rev} still running after "
+                        f"{args.prefetch_join_timeout}s; continuing (next iter will ensure it)")
+                elif not prefetch_res.get("ok"):
                     say(f"WARN prefetch of {next_rev} failed: {prefetch_res.get('error')} "
-                        f"(will retry blocking next iter)")
+                        f"(next iter will re-download blocking)")
 
     say("trajectory ALLDONE")
 
@@ -208,6 +224,10 @@ def main() -> None:
     ap.add_argument("--steer-layer-percent", type=float, default=0.40)
     ap.add_argument("--no-steer", action="store_true",
                     help="harvest only; skip the steering+cloze window-filler")
+    ap.add_argument("--min-free-gb", type=float, default=140.0,
+                    help="warn if free disk on the cache volume drops below this")
+    ap.add_argument("--prefetch-join-timeout", type=float, default=1800.0,
+                    help="max seconds to wait on a background prefetch before continuing")
     args = ap.parse_args()
     run(args)
 

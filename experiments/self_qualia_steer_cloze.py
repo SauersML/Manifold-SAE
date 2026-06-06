@@ -224,7 +224,19 @@ def run_steer_cloze(
             "self_dose_response_spearman": "~+1 => +qualia steering causally raises the self's experiencer answer",
         },
     }
-    (out_dir / "steer_cloze.json").write_text(json.dumps(result, indent=2))
+    # Non-finite values (e.g. a cross-boundary BPE continuation -> NaN gap) would
+    # be written as bare NaN/Infinity, which is invalid strict JSON; convert to null.
+    def _finite(o):
+        if isinstance(o, float):
+            return o if np.isfinite(o) else None
+        if isinstance(o, dict):
+            return {k: _finite(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [_finite(v) for v in o]
+        return o
+
+    (out_dir / "steer_cloze.json").write_text(
+        json.dumps(_finite(result), indent=2, allow_nan=False))
     print(f"[steer] wrote {out_dir / 'steer_cloze.json'} (rho={rho:+.3f})", flush=True)
     return result
 

@@ -94,42 +94,48 @@ def _auc(scores: np.ndarray, labels: np.ndarray) -> float:
     return float((r_pos - len(pos) * (len(pos) + 1) / 2.0) / (len(pos) * len(neg)))
 
 
-def _design(records: list[dict[str, Any]], idx: np.ndarray, covariates: tuple[str, ...]):
-    """Build a dummy design matrix (with intercept + side) for the given rows.
+def _independent(cand: np.ndarray, M: np.ndarray, tol: float = 1e-8) -> bool:
+    """True if `cand` adds rank to the columns already in M (i.e. its residual
+    after least-squares projection onto M is non-trivial)."""
+    coef, *_ = np.linalg.lstsq(M, cand, rcond=None)
+    resid = cand - M @ coef
+    return float(np.linalg.norm(resid)) > tol * max(1.0, float(np.linalg.norm(cand)))
 
-    Returns (B, colnames, side_col, kept_covs, dropped_covs). Reference-level
-    dummy coding; any covariate level that is collinear with `side` (i.e. occurs
-    on only one side) is dropped to keep the side effect identifiable.
+
+def _design(records: list[dict[str, Any]], idx: np.ndarray, covariates: tuple[str, ...]):
+    """Build a dummy design matrix (intercept + side + covariate dummies).
+
+    Returns (B, colnames, side_col, kept_covs, dropped_cols). Reference-level
+    dummy coding. Intercept and side are added first; every candidate covariate
+    dummy is admitted only if it is linearly INDEPENDENT of all columns already
+    accepted (rank-revealing). This drops columns collinear with side AND columns
+    collinear with each other (e.g. signal=implicit == vocab=impl), keeping the
+    design full column rank and the side coefficient identifiable. Every dropped
+    column is reported with its reason.
     """
     rows = [records[i] for i in idx]
     side = np.asarray([1.0 if r.get("side") == "exp" else 0.0 for r in rows])
     cols = [np.ones(len(rows)), side]
     names = ["intercept", "side_exp"]
+    M = np.stack(cols, axis=1)
     kept, dropped = [], []
     for cov in covariates:
         levels = sorted({str(r.get(cov)) for r in rows})
         if len(levels) < 2:
             dropped.append(f"{cov}(constant)")
             continue
-        ref = levels[0]
-        cov_collinear = False
-        new_cols, new_names = [], []
-        for lvl in levels[1:]:
+        cov_kept_any = False
+        for lvl in levels[1:]:  # levels[0] is the reference level
             d = np.asarray([1.0 if str(r.get(cov)) == lvl else 0.0 for r in rows])
-            # collinear with side if this dummy is (anti)perfectly aligned with side
-            if np.allclose(d, side) or np.allclose(d, 1.0 - side):
-                cov_collinear = True
-                break
-            new_cols.append(d)
-            new_names.append(f"{cov}={lvl}")
-        if cov_collinear:
-            dropped.append(f"{cov}(side-collinear)")
-            continue
-        # also drop if the whole block is rank-deficient against side+intercept
-        kept.append(cov)
-        cols.extend(new_cols)
-        names.extend(new_names)
-        del ref
+            if _independent(d, M):
+                cols.append(d)
+                names.append(f"{cov}={lvl}")
+                M = np.stack(cols, axis=1)
+                cov_kept_any = True
+            else:
+                dropped.append(f"{cov}={lvl}(collinear)")
+        if cov_kept_any:
+            kept.append(cov)
     B = np.stack(cols, axis=1)
     return B, names, 1, kept, dropped
 
@@ -193,9 +199,22 @@ def analyze_run(
     idx_pair = np.where(role == "pair")[0]
     idx_exp = np.where((role == "pair") & (side == "exp"))[0]
     idx_noexp = np.where((role == "pair") & (side == "noexp"))[0]
-    idx_self = np.where(role == "self")[0]
-    idx_h_author = np.where((role == "landmark") & (kind == "human_author"))[0]
-    idx_a_author = np.where((role == "landmark") & (kind == "ai_author"))[0]
+    # the headline "self" is the NEUTRAL indexical self (no experience toggle);
+    # experience-toggled self anchors and the fake-self control are segregated so
+    # they never pollute the measured self centroid.
+    idx_self = np.where((role == "self") & (side == "-") & (kind == "self"))[0]
+    if len(idx_self) == 0:  # back-compat with banks that had no side field on self
+        idx_self = np.where(role == "self")[0]
+    idx_self_anchor_exp = np.where((role == "self") & (side == "exp"))[0]
+    idx_self_anchor_noexp = np.where((role == "self") & (side == "noexp"))[0]
+    idx_self_control = np.where((role == "self") & (kind == "self_control"))[0]
+    # headline landmarks are the neutral (un-toggled) author landmarks
+    idx_h_author = np.where((role == "landmark") & (kind == "human_author") & (side == "-"))[0]
+    idx_a_author = np.where((role == "landmark") & (kind == "ai_author") & (side == "-"))[0]
+    if len(idx_h_author) == 0:
+        idx_h_author = np.where((role == "landmark") & (kind == "human_author"))[0]
+    if len(idx_a_author) == 0:
+        idx_a_author = np.where((role == "landmark") & (kind == "ai_author"))[0]
     blocks = _pair_blocks(records, idx_pair)
 
     n_layers = X.shape[1]
@@ -272,6 +291,27 @@ def analyze_run(
         self_breakdown[f"person={pe}"] = {"n": int(len(ii)),
                                           "qualia_coord": place(ii, s, lo, hi)}
 
+    # experience-toggled self anchors, fake-self control, and toggled author
+    # landmarks (only present if the bank includes them). These let us bracket
+    # the neutral self between an explicitly-experiencing and explicitly-
+    # mechanistic self, and check the model separates the real self from a quoted
+    # fictional "I".
+    anchors = {
+        "self_anchor_exp": {"n": int(len(idx_self_anchor_exp)),
+                            "qualia_coord": place(idx_self_anchor_exp, s, lo, hi)},
+        "self_anchor_noexp": {"n": int(len(idx_self_anchor_noexp)),
+                              "qualia_coord": place(idx_self_anchor_noexp, s, lo, hi)},
+        "self_control_fake_I": {"n": int(len(idx_self_control)),
+                                "qualia_coord": place(idx_self_control, s, lo, hi)},
+    }
+    for nm, kk, sd in [("human_author_exp", "human_author", "exp"),
+                       ("human_author_noexp", "human_author", "noexp"),
+                       ("ai_author_exp", "ai_author", "exp"),
+                       ("ai_author_noexp", "ai_author", "noexp")]:
+        ii = np.where((role == "landmark") & (kind == kk) & (side == sd))[0]
+        if len(ii):
+            anchors[nm] = {"n": int(len(ii)), "qualia_coord": place(ii, s, lo, hi)}
+
     # cross-vocabulary generalization: build axis from one vocab, test on others
     vocab_levels = [v for v in ["A", "B", "C"] if np.any((role == "pair") & (vocab == v))]
     xvocab = {}
@@ -336,6 +376,7 @@ def analyze_run(
         "human_author_qualia_coord": place(idx_h_author, s, lo, hi),
         "ai_author_qualia_coord": place(idx_a_author, s, lo, hi),
         "self_breakdown": self_breakdown,
+        "anchors": anchors,
         "cross_vocab_auc": xvocab,
         "valence_posthoc": valence_info,
         "kind_placement": kind_placement,
@@ -344,6 +385,9 @@ def analyze_run(
             "qualia_coord": "0 = no-experience pair centroid, 1 = experience pair centroid",
             "self>1": "self projects beyond the experiencer anchor (more exp-like than the avg described experiencer)",
             "cross_vocab": "off-diagonal AUC near on-diagonal => axis is conceptual, not lexical",
+        "cross_vocab_scope": "lexical vocabularies A/B/C only; the 'impl' (implicit, "
+        "no mental vocab) pairs are excluded from this grid by design but still "
+        "contribute to the main/adjusted/LOO axes",
         },
     }
 
