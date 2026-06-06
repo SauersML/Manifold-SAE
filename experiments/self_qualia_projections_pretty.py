@@ -51,7 +51,7 @@ ax.set_yticks([]); ax.set_ylim(-0.6,len(methods)-0.4)
 ax.autoscale(axis="x"); xl=ax.get_xlim(); ax.set_xlim(xl[0]-0.4,xl[1]+0.6)
 for sp in ["top","right","left"]: ax.spines[sp].set_visible(False)
 ax.set_xlabel("feeling score   (σ from the non-feeling class  →  more like the things that feel)",fontsize=11,color="#444")
-ax.set_title("OLMo-3-32B: the self scores on the feeling side under every projection",fontsize=14,fontweight="bold",pad=10)
+ax.set_title("OLMo-3-32B Instruct",fontsize=15,fontweight="bold",pad=10)
 from matplotlib.lines import Line2D
 ax.legend(handles=[Line2D([0],[0],marker='o',color='w',mfc=FEEL,ms=9,label='feeling entity'),Line2D([0],[0],marker='o',color='w',mfc=NON,ms=9,label='non-feeling'),Line2D([0],[0],marker='*',color='w',mfc=SELF,mec=INK,ms=15,label='the self')],loc="lower right",fontsize=9,frameon=False)
 fig.tight_layout(); fig.savefig("runs/SELF_QUALIA_32B_GAM/self_projection_methods.png",dpi=170,bbox_inches="tight")
