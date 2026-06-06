@@ -196,9 +196,11 @@ def analyze_run(
     person = _field(records, "person")
     valence = _field(records, "valence")
 
+    control = _field(records, "control")
     idx_pair = np.where(role == "pair")[0]
     idx_exp = np.where((role == "pair") & (side == "exp"))[0]
     idx_noexp = np.where((role == "pair") & (side == "noexp"))[0]
+    idx_null = np.where(role == "null_pair")[0]  # falsification: axis must NOT separate
     # the headline "self" is the NEUTRAL indexical self (no experience toggle);
     # experience-toggled self anchors and the fake-self control are segregated so
     # they never pollute the measured self centroid.
@@ -355,6 +357,39 @@ def analyze_run(
             "1=positive(pos)-like, 0=negative(neg)-like.",
         }
 
+    # null-control falsification: the qualia axis must NOT separate pairs that
+    # differ only in an experience-irrelevant attribute (color, size, ...). A
+    # near-0.5 AUC and ~0 coordinate gap mean the axis tracks experience, not
+    # surface lexical changes; an AUC far from 0.5 would expose a confound.
+    null_control = {}
+    if len(idx_null):
+        npid: dict[Any, dict[str, list[int]]] = {}
+        for i in idx_null:
+            npid.setdefault(records[i]["pair_id"], {}).setdefault(records[i]["side"], []).append(i)
+        nblocks = [(v[list(v)[0]], v[list(v)[1]]) for v in npid.values() if len(v) == 2]
+        gaps = [abs(float(s[a].mean() - s[b].mean())) for a, b in nblocks]
+        a_all = np.concatenate([np.asarray(a) for a, _ in nblocks])
+        b_all = np.concatenate([np.asarray(b) for _, b in nblocks])
+        null_auc = _auc(np.r_[s[a_all], s[b_all]],
+                        np.r_[np.ones(len(a_all)), np.zeros(len(b_all))])
+        # express the gap in qualia-coordinate units (exp-noexp anchor span)
+        span = abs(hi - lo) + 1e-12
+        by_dim = {}
+        for dim in sorted(set(control[idx_null])):
+            db = [(a, b) for a, b in nblocks if control[a[0]] == dim]
+            if db:
+                by_dim[dim] = float(np.mean(
+                    [abs(float(s[a].mean() - s[b].mean())) / span for a, b in db]))
+        null_control = {
+            "n_pairs": len(nblocks),
+            "axis_auc_a_vs_b": null_auc,
+            "mean_abs_coord_gap": float(np.mean(gaps) / span),
+            "gap_by_control_dim": by_dim,
+            "note": "axis_auc_a_vs_b near 0.5 and mean_abs_coord_gap near 0 => the "
+            "qualia axis ignores the irrelevant attribute (passes falsification); "
+            "compare gap to the real exp/noexp separation (coord span = 1.0).",
+        }
+
     # placement of the dead/unconscious kind on the qualia axis (sanity)
     kind_placement = {}
     for kk in sorted(set(kind[idx_pair])):
@@ -379,6 +414,7 @@ def analyze_run(
         "anchors": anchors,
         "cross_vocab_auc": xvocab,
         "valence_posthoc": valence_info,
+        "null_control": null_control,
         "kind_placement": kind_placement,
         "covariate_model": adj_info,
         "interpretation": {

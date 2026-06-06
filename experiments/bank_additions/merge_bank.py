@@ -16,7 +16,11 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BASE = HERE.parent / "self_qualia_prompts.jsonl"
+# Read from the pristine canonical base (the original 329) so the merge is fully
+# idempotent: re-running rebuilds the bank from scratch instead of doubling
+# already-merged additions.
+BASE_INPUT = HERE / "base_bank.jsonl"
+OUT = HERE.parent / "self_qualia_prompts.jsonl"
 ADDITIONS = sorted(HERE.glob("add_*.jsonl"))
 REQUIRED = ["role", "side", "entity", "kind", "framing", "signal", "vocab",
             "person", "valence", "markedness", "pair_id", "prompt"]
@@ -43,10 +47,14 @@ def load(path: Path, tag: str) -> list[dict]:
 
 
 def main() -> None:
-    all_rows = load(BASE, "base")
+    all_rows = load(BASE_INPUT, "base")
     for add in ADDITIONS:
         all_rows += load(add, add.stem)
     print(f"loaded {len(all_rows)} rows from base + {len(ADDITIONS)} addition files")
+    # uniform schema: every row carries a `control` field ('-' unless it is a
+    # null-control pair naming the irrelevant attribute that was toggled).
+    for r in all_rows:
+        r.setdefault("control", "-")
 
     # global pair_id renumber: (source, original pair_id) -> new id, for pid != -1
     new_pid: dict[tuple, int] = {}
@@ -105,14 +113,16 @@ def main() -> None:
         r.pop("_src", None)
         r["id"] = i
 
-    with open(BASE, "w") as f:
+    with open(OUT, "w") as f:
         for r in all_rows:
             f.write(json.dumps(r) + "\n")
 
     # report
-    print(f"\nWROTE {len(all_rows)} rows -> {BASE}")
+    print(f"\nWROTE {len(all_rows)} rows -> {OUT}")
     n_pairs = len(groups)
-    print(f"pairs: {n_pairs}  singletons: {sum(1 for r in all_rows if r['pair_id'] < 0)}")
+    n_null = sum(1 for r in all_rows if r["role"] == "null_pair") // 2
+    print(f"pairs: {n_pairs}  (incl. {n_null} null-control)  "
+          f"singletons: {sum(1 for r in all_rows if r['pair_id'] < 0)}")
     for key in ["role", "kind", "framing", "signal", "vocab", "person", "valence", "markedness"]:
         c = collections.Counter(r.get(key) for r in all_rows)
         print(f"\n{key}: " + ", ".join(f"{k}={v}" for k, v in c.most_common()))
