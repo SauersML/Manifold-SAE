@@ -219,7 +219,7 @@ def _layer_module(model, layer: int):
 def run_steer_cloze(
     *, model, tok, device: str, X: np.ndarray, records: list[dict[str, Any]],
     steer_layer: int, out_dir: Path,
-    alphas: tuple[float, ...] = (-12.0, -8.0, -4.0, -2.0, 0.0, 2.0, 4.0, 8.0, 12.0),
+    alphas: tuple[float, ...] = (-8.0, -4.0, 0.0, 4.0, 8.0),
 ) -> dict[str, Any]:
     """Run cloze (baseline) + steering sweep; write steer_cloze.json. Reuses a
     loaded model (call right after harvest)."""

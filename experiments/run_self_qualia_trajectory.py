@@ -63,7 +63,10 @@ def _prefetch(model: str, rev: str, cache_dir: Path, result: dict) -> None:
     """Download one revision's snapshot into an isolated cache dir."""
     try:
         from huggingface_hub import snapshot_download
-        snapshot_download(repo_id=model, revision=rev, cache_dir=str(cache_dir))
+        # max_workers: parallelize shard downloads (the ~64GB is the wall-clock
+        # bottleneck; compute is hidden under it). allow_patterns trims tiny extras.
+        snapshot_download(repo_id=model, revision=rev, cache_dir=str(cache_dir),
+                          max_workers=16)
         result["ok"] = True
     except Exception as e:  # noqa: BLE001 - record and let caller decide
         result["ok"] = False
