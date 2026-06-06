@@ -415,7 +415,7 @@ def harvest(
     save_name: str = "activations.npy",
     model: Any = None,
     tokenizer: Any = None,
-    alltok_layer: int | None = None,
+    alltok_layers: list[int] | None = None,
     alltok_name: str = "alltok",
 ) -> np.ndarray:
     """Run a list of prompts and return last-token/mean activations (N, L, D).
@@ -423,10 +423,10 @@ def harvest(
     If `model`/`tokenizer` are provided they are reused (no reload); otherwise a
     checkpoint is loaded via load_model().
 
-    If `alltok_layer` is given, ALSO save every real (non-pad) token's residual at
-    that one layer as a flat (total_tokens, D) fp16 array `<alltok_name>_L{l}.npy`
-    plus an int32 `<alltok_name>_L{l}_meta.npy` of [prompt_index, token_pos,
-    token_id] per row. This is the cheap token-level export (~one layer); the
+    If `alltok_layers` is given, ALSO save every real (non-pad) token's residual at
+    EACH listed layer as a flat (total_tokens, D) fp16 array `<alltok_name>_L{l}.npy`,
+    sharing one int32 `<alltok_name>_meta.npy` of [prompt_index, token_pos,
+    token_id] per row (rows align across layers). Cheap token-level export; the
     forward already computes it, so it costs only CPU copy + disk, not GPU time.
     """
 
@@ -434,7 +434,9 @@ def harvest(
 
     if model is None or tokenizer is None:
         model, tokenizer, _ = load_model(model_name, revision, dtype, device)
-    alltok_vecs: list = []
+    if isinstance(alltok_layers, int):
+        alltok_layers = [alltok_layers]
+    alltok_vecs: dict = {l: [] for l in (alltok_layers or [])}
     alltok_meta: list = []
 
     # Length-bucket: sort by token length so each batch pads only to ~its own
@@ -468,12 +470,15 @@ def harvest(
             batch_arr = np.stack(rows, axis=1)  # (B, L, D) in bidx order
             for j, i in enumerate(bidx):
                 results[i] = batch_arr[j]
-            if alltok_layer is not None:
-                lh = hidden_states[alltok_layer]  # (B, T, D)
+            if alltok_layers:
                 ids = enc["input_ids"]
-                for j, i in enumerate(bidx):
+                for layer in alltok_layers:
+                    lh = hidden_states[layer]  # (B, T, D)
+                    for j in range(len(bidx)):
+                        t = int(lengths[j])
+                        alltok_vecs[layer].append(lh[j, :t].to(torch.float16).cpu().numpy())
+                for j, i in enumerate(bidx):  # meta once (shared across layers)
                     t = int(lengths[j])
-                    alltok_vecs.append(lh[j, :t].to(torch.float16).cpu().numpy())
                     tok_ids = ids[j, :t].cpu().numpy()
                     alltok_meta.append(np.stack(
                         [np.full(t, i, dtype=np.int32),
@@ -484,13 +489,14 @@ def harvest(
 
     X = np.stack(results, axis=0).astype(np.float32, copy=False)
     np.save(out_dir / save_name, X)
-    if alltok_layer is not None:
-        Xt = np.concatenate(alltok_vecs, axis=0)            # (total_tokens, D) fp16
+    if alltok_layers:
         Mt = np.concatenate(alltok_meta, axis=0)            # (total_tokens, 3) int32
-        np.save(out_dir / f"{alltok_name}_L{alltok_layer}.npy", Xt)
-        np.save(out_dir / f"{alltok_name}_L{alltok_layer}_meta.npy", Mt)
-        print(f"[harvest] saved all-token layer {alltok_layer}: {Xt.shape} "
-              f"({Xt.nbytes / 1e6:.0f} MB)", flush=True)
+        np.save(out_dir / f"{alltok_name}_meta.npy", Mt)
+        for layer in alltok_layers:
+            Xt = np.concatenate(alltok_vecs[layer], axis=0)  # (total_tokens, D) fp16
+            np.save(out_dir / f"{alltok_name}_L{layer}.npy", Xt)
+            print(f"[harvest] saved all-token L{layer}: {Xt.shape} "
+                  f"({Xt.nbytes / 1e6:.0f} MB)", flush=True)
     return X
 
 
