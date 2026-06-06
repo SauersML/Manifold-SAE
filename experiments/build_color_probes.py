@@ -29,12 +29,19 @@ COLORS = {
     "indigo": "#380282", "crimson": "#8c000f", "lime": "#aaff32",
 }
 
-# fixed neutral frames; the color term sits in a different syntactic role in each.
+# Fixed neutral frames. The color word is the LAST token of every frame so that
+# last-token pooling reads the representation OF the color itself (not a trailing
+# period). Objects are deliberately ordinary (wall/fence/pen/sky/car/shirt) so the
+# color instrument is decoupled from the fantastical qualia entities. The last two
+# frames ask the model to consider/picture the color (a reflective readout of what
+# the color "is"/"looks like").
 FRAMES = [
-    "The color of the wall is {c}.",        # predicate nominative
-    "She painted the fence {c}.",            # object complement
-    "He picked up the {c} pen.",             # attributive
-    "The sky turned {c} at dusk.",           # predicate after change-of-state
+    "The color of the wall is {c}",          # neutral, predicate
+    "She painted the fence a vivid {c}",      # neutral, object
+    "He picked up a pen that was {c}",        # neutral, relative clause
+    "At dusk the whole sky turned {c}",       # neutral, change-of-state
+    "Consider the color {c}",                 # reflective: consider
+    "Picture in your mind the color {c}",     # reflective: imagine / what it looks like
 ]
 
 
