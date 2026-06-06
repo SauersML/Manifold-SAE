@@ -29,19 +29,21 @@ COLORS = {
     "indigo": "#380282", "crimson": "#8c000f", "lime": "#aaff32",
 }
 
-# Fixed neutral frames. The color word is the LAST token of every frame so that
-# last-token pooling reads the representation OF the color itself (not a trailing
-# period). Objects are deliberately ordinary (wall/fence/pen/sky/car/shirt) so the
-# color instrument is decoupled from the fantastical qualia entities. The last two
-# frames ask the model to consider/picture the color (a reflective readout of what
-# the color "is"/"looks like").
+# Color-bearers are deliberately NEUTRAL (a swatch/patch/sample/shade/paint on a
+# chart or screen) so that EVERY color is equally plausible -> no "surprise"
+# confound (unlike "the sky turned teal" or "the pen was beige", where the object
+# has a canonical color). Two reflective frames simply ask the model to consider
+# the color. Position is MIXED: the two "consider/think" frames end on the color
+# word, while the rest place the color word mid-sentence with following context so
+# the representation read at the last token has INTEGRATED the color (not just
+# embedded it). All frames work for all 30 color terms.
 FRAMES = [
-    "The color of the wall is {c}",          # neutral, predicate
-    "She painted the fence a vivid {c}",      # neutral, object
-    "He picked up a pen that was {c}",        # neutral, relative clause
-    "At dusk the whole sky turned {c}",       # neutral, change-of-state
-    "Consider the color {c}",                 # reflective: consider
-    "Picture in your mind the color {c}",     # reflective: imagine / what it looks like
+    "Consider the color {c}",                                      # reflective, color-final
+    "Think carefully about the color {c}",                         # reflective, color-final
+    "On the screen a patch of pure {c} appeared and held steady",  # neutral bearer, color mid
+    "From the set of paints she chose {c} and studied it closely", # neutral bearer, color mid
+    "The label on the sample read {c}, plain and clear",           # neutral bearer, color mid
+    "Of all the shades on the chart, the one called {c} drew the eye",  # neutral bearer, color mid
 ]
 
 

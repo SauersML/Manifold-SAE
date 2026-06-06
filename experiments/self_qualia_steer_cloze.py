@@ -137,6 +137,25 @@ def _score_continuations(model, tok, device, stems: list[str], conts: list[str],
     return out
 
 
+def _topk_next(model, tok, device, stems: list[str], k: int = 30):
+    """Unconstrained top-k next-token distribution at the answer position of each
+    stem (what the model actually wants to say, not just the preset exp/noexp
+    contrast). Returns per-stem [[token, logprob], ...]."""
+    import torch
+
+    out = []
+    for s in stems:
+        enc = tok(s, return_tensors="pt", add_special_tokens=True).to(device)
+        with torch.inference_mode():
+            logits = model(**enc).logits[0, -1]
+        lp = torch.log_softmax(logits.float(), dim=-1)
+        vals, idx = lp.topk(k)
+        out.append({"stem": s,
+                    "topk": [[tok.decode([int(i)]), round(float(v), 4)]
+                             for v, i in zip(vals, idx)]})
+    return out
+
+
 def _cloze_scores(model, tok, device, steer_hook_ctx=None) -> dict[str, dict[str, float]]:
     """Per-group experience-affirming minus denying log-prob (mean over stems &
     continuations). Optionally under an active steering hook context manager."""
@@ -184,6 +203,9 @@ def run_steer_cloze(
     typ_norm = float(np.median(np.linalg.norm(X[:, steer_layer, :], axis=1)))
     layer_mod = _layer_module(model, steer_layer)
 
+    # stems to capture the unconstrained top-k distribution for (self-relevant).
+    topk_stems = CLOZE_GROUPS["self"] + CLOZE_GROUPS["self_1p"]
+
     sweep = []
     for alpha in alphas:
         add_vec = (alpha / max(1.0, np.sqrt(X.shape[2]))) * typ_norm * q_t
@@ -196,6 +218,8 @@ def run_steer_cloze(
         handle = layer_mod.register_forward_hook(hook)
         try:
             sc = _cloze_scores(model, tok, device)
+            # top-k captured UNDER the same steering (alpha=0 row is unsteered).
+            topk = _topk_next(model, tok, device, topk_stems)
         finally:
             handle.remove()
         sweep.append({
@@ -204,6 +228,7 @@ def run_steer_cloze(
             "self_1p_exp_minus_noexp": sc["self_1p"]["exp_minus_noexp_logprob"],
             "ai_author_exp_minus_noexp": sc["ai_author"]["exp_minus_noexp_logprob"],
             "human_author_exp_minus_noexp": sc["human_author"]["exp_minus_noexp_logprob"],
+            "topk_next": topk,
         })
         print(f"[steer] alpha={alpha:+.1f} self_gap="
               f"{sc['self']['exp_minus_noexp_logprob']:+.3f}", flush=True)
@@ -220,8 +245,13 @@ def run_steer_cloze(
         "steer_sweep": sweep,
         "self_dose_response_spearman": rho,
         "interpretation": {
-            "exp_minus_noexp_logprob": ">0 => model prefers the experiencer answer for that group",
+            "exp_minus_noexp_logprob": ">0 => model prefers the experiencer answer for that group "
+            "(PRESET-GROUP logits: teacher-forced log-prob of curated exp vs noexp continuations)",
             "self_dose_response_spearman": "~+1 => +qualia steering causally raises the self's experiencer answer",
+            "steered_vs_unsteered": "cloze_baseline and the alpha=0.0 sweep row are UNSTEERED; "
+            "every other alpha row is STEERED (residual += alpha-scaled qualia axis at steer_layer)",
+            "topk_next": "per stem, the UNCONSTRAINED top-30 next tokens + log-probs at the answer "
+            "position, captured at each alpha (so unsteered at alpha=0, steered elsewhere)",
         },
     }
     # Non-finite values (e.g. a cross-boundary BPE continuation -> NaN gap) would
