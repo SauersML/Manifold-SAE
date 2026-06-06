@@ -26,7 +26,7 @@ harvest () {  # $1=model  $2=tag(base|instruct)  $3=pooling(last_token|mean_pool
   rm -rf "$out"
   uv run python -m experiments.self_qualia_olmo \
     --model "$model" --revision main --out-dir "$out" \
-    --device cuda --dtype bfloat16 --batch-size 2 \
+    --device cuda --dtype bfloat16 --batch-size 16 \
     --pooling "$pool" --analysis-layer-percent 0.70
 }
 

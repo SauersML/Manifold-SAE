@@ -362,33 +362,41 @@ def harvest(
         "fp32": torch.float32,
     }[dtype]
 
+    # Fast matmul paths (harmless under bf16; helps any fp32 fallbacks).
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
     print(f"[load] model={model_name} revision={revision} dtype={dtype} device={device}", flush=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        revision=revision,
-        torch_dtype=torch_dtype,
-        low_cpu_mem_usage=True,
-    )
-    model.eval().to(device)
+    load_kwargs = dict(revision=revision, torch_dtype=torch_dtype, low_cpu_mem_usage=True)
+    if device == "cuda":
+        # Stream weights straight onto the GPU (no 64GB CPU staging) + fused SDPA.
+        load_kwargs["device_map"] = {"": 0}
+        load_kwargs["attn_implementation"] = "sdpa"
+    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    model.eval()
+    if device != "cuda":
+        model.to(device)
     n_layers = _get_layers(model)
     print(f"[load] layers={n_layers}", flush=True)
 
     prompts = [x.prompt for x in items]
-    chunks: list[np.ndarray] = []
-    with torch.no_grad():
-        for start in range(0, len(prompts), batch_size):
-            batch_prompts = prompts[start : start + batch_size]
+    # Length-bucket: sort by token length so each batch pads only to ~its own
+    # length (no wasted compute on padding), then scatter results back to order.
+    tok_lens = [len(tokenizer(p, add_special_tokens=True)["input_ids"]) for p in prompts]
+    order = sorted(range(len(prompts)), key=lambda i: tok_lens[i])
+    results: list = [None] * len(prompts)
+    done = 0
+    with torch.inference_mode():
+        for start in range(0, len(order), batch_size):
+            bidx = order[start : start + batch_size]
             enc = tokenizer(
-                batch_prompts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=128,
+                [prompts[i] for i in bidx],
+                return_tensors="pt", padding=True, truncation=True, max_length=128,
                 return_token_type_ids=False,
             )
             enc = {k: v.to(device) for k, v in enc.items()}
@@ -398,19 +406,20 @@ def harvest(
             rows = []
             for layer_h in hidden_states:
                 if pooling == "last_token":
-                    idx = lengths - 1
-                    selected = layer_h[torch.arange(layer_h.shape[0], device=device), idx]
+                    sel = layer_h[torch.arange(layer_h.shape[0], device=device), lengths - 1]
                 elif pooling == "mean_pool":
                     mask = enc["attention_mask"].to(layer_h.dtype).unsqueeze(-1)
-                    selected = (layer_h * mask).sum(dim=1) / lengths.to(layer_h.dtype).unsqueeze(-1)
+                    sel = (layer_h * mask).sum(dim=1) / lengths.to(layer_h.dtype).unsqueeze(-1)
                 else:
                     raise ValueError(f"unknown pooling strategy: {pooling!r}")
-                rows.append(selected.float().cpu().numpy())
-            batch_arr = np.stack(rows, axis=1)  # (B, L, D)
-            chunks.append(batch_arr)
-            print(f"[harvest] {min(start + batch_size, len(prompts))}/{len(prompts)}", flush=True)
+                rows.append(sel.float().cpu().numpy())
+            batch_arr = np.stack(rows, axis=1)  # (B, L, D) in bidx order
+            for j, i in enumerate(bidx):
+                results[i] = batch_arr[j]
+            done += len(bidx)
+            print(f"[harvest] {done}/{len(prompts)}", flush=True)
 
-    X = np.concatenate(chunks, axis=0).astype(np.float32, copy=False)
+    X = np.stack(results, axis=0).astype(np.float32, copy=False)
     np.save(out_dir / "activations.npy", X)
     return X
 
