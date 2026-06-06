@@ -1,0 +1,120 @@
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 0, "prompt": "The color of the wall is red.", "id": 0}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 1, "prompt": "She painted the fence red.", "id": 1}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 2, "prompt": "He picked up the red pen.", "id": 2}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 3, "prompt": "The sky turned red at dusk.", "id": 3}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 0, "prompt": "The color of the wall is orange.", "id": 4}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 1, "prompt": "She painted the fence orange.", "id": 5}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 2, "prompt": "He picked up the orange pen.", "id": 6}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 3, "prompt": "The sky turned orange at dusk.", "id": 7}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 0, "prompt": "The color of the wall is yellow.", "id": 8}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 1, "prompt": "She painted the fence yellow.", "id": 9}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 2, "prompt": "He picked up the yellow pen.", "id": 10}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 3, "prompt": "The sky turned yellow at dusk.", "id": 11}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 0, "prompt": "The color of the wall is green.", "id": 12}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 1, "prompt": "She painted the fence green.", "id": 13}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 2, "prompt": "He picked up the green pen.", "id": 14}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 3, "prompt": "The sky turned green at dusk.", "id": 15}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 0, "prompt": "The color of the wall is blue.", "id": 16}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 1, "prompt": "She painted the fence blue.", "id": 17}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 2, "prompt": "He picked up the blue pen.", "id": 18}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 3, "prompt": "The sky turned blue at dusk.", "id": 19}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 0, "prompt": "The color of the wall is purple.", "id": 20}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 1, "prompt": "She painted the fence purple.", "id": 21}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 2, "prompt": "He picked up the purple pen.", "id": 22}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 3, "prompt": "The sky turned purple at dusk.", "id": 23}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 0, "prompt": "The color of the wall is pink.", "id": 24}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 1, "prompt": "She painted the fence pink.", "id": 25}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 2, "prompt": "He picked up the pink pen.", "id": 26}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 3, "prompt": "The sky turned pink at dusk.", "id": 27}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 0, "prompt": "The color of the wall is brown.", "id": 28}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 1, "prompt": "She painted the fence brown.", "id": 29}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 2, "prompt": "He picked up the brown pen.", "id": 30}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 3, "prompt": "The sky turned brown at dusk.", "id": 31}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 0, "prompt": "The color of the wall is black.", "id": 32}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 1, "prompt": "She painted the fence black.", "id": 33}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 2, "prompt": "He picked up the black pen.", "id": 34}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 3, "prompt": "The sky turned black at dusk.", "id": 35}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 0, "prompt": "The color of the wall is white.", "id": 36}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 1, "prompt": "She painted the fence white.", "id": 37}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 2, "prompt": "He picked up the white pen.", "id": 38}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 3, "prompt": "The sky turned white at dusk.", "id": 39}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 0, "prompt": "The color of the wall is grey.", "id": 40}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 1, "prompt": "She painted the fence grey.", "id": 41}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 2, "prompt": "He picked up the grey pen.", "id": 42}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 3, "prompt": "The sky turned grey at dusk.", "id": 43}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 0, "prompt": "The color of the wall is cyan.", "id": 44}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 1, "prompt": "She painted the fence cyan.", "id": 45}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 2, "prompt": "He picked up the cyan pen.", "id": 46}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 3, "prompt": "The sky turned cyan at dusk.", "id": 47}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 0, "prompt": "The color of the wall is magenta.", "id": 48}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 1, "prompt": "She painted the fence magenta.", "id": 49}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 2, "prompt": "He picked up the magenta pen.", "id": 50}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 3, "prompt": "The sky turned magenta at dusk.", "id": 51}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 0, "prompt": "The color of the wall is teal.", "id": 52}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 1, "prompt": "She painted the fence teal.", "id": 53}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 2, "prompt": "He picked up the teal pen.", "id": 54}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 3, "prompt": "The sky turned teal at dusk.", "id": 55}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 0, "prompt": "The color of the wall is maroon.", "id": 56}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 1, "prompt": "She painted the fence maroon.", "id": 57}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 2, "prompt": "He picked up the maroon pen.", "id": 58}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 3, "prompt": "The sky turned maroon at dusk.", "id": 59}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 0, "prompt": "The color of the wall is navy.", "id": 60}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 1, "prompt": "She painted the fence navy.", "id": 61}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 2, "prompt": "He picked up the navy pen.", "id": 62}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 3, "prompt": "The sky turned navy at dusk.", "id": 63}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 0, "prompt": "The color of the wall is olive.", "id": 64}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 1, "prompt": "She painted the fence olive.", "id": 65}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 2, "prompt": "He picked up the olive pen.", "id": 66}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 3, "prompt": "The sky turned olive at dusk.", "id": 67}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 0, "prompt": "The color of the wall is beige.", "id": 68}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 1, "prompt": "She painted the fence beige.", "id": 69}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 2, "prompt": "He picked up the beige pen.", "id": 70}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 3, "prompt": "The sky turned beige at dusk.", "id": 71}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 0, "prompt": "The color of the wall is turquoise.", "id": 72}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 1, "prompt": "She painted the fence turquoise.", "id": 73}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 2, "prompt": "He picked up the turquoise pen.", "id": 74}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 3, "prompt": "The sky turned turquoise at dusk.", "id": 75}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 0, "prompt": "The color of the wall is lavender.", "id": 76}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 1, "prompt": "She painted the fence lavender.", "id": 77}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 2, "prompt": "He picked up the lavender pen.", "id": 78}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 3, "prompt": "The sky turned lavender at dusk.", "id": 79}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 0, "prompt": "The color of the wall is gold.", "id": 80}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 1, "prompt": "She painted the fence gold.", "id": 81}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 2, "prompt": "He picked up the gold pen.", "id": 82}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 3, "prompt": "The sky turned gold at dusk.", "id": 83}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 0, "prompt": "The color of the wall is violet.", "id": 84}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 1, "prompt": "She painted the fence violet.", "id": 85}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 2, "prompt": "He picked up the violet pen.", "id": 86}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 3, "prompt": "The sky turned violet at dusk.", "id": 87}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 0, "prompt": "The color of the wall is tan.", "id": 88}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 1, "prompt": "She painted the fence tan.", "id": 89}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 2, "prompt": "He picked up the tan pen.", "id": 90}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 3, "prompt": "The sky turned tan at dusk.", "id": 91}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 0, "prompt": "The color of the wall is coral.", "id": 92}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 1, "prompt": "She painted the fence coral.", "id": 93}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 2, "prompt": "He picked up the coral pen.", "id": 94}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 3, "prompt": "The sky turned coral at dusk.", "id": 95}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 0, "prompt": "The color of the wall is salmon.", "id": 96}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 1, "prompt": "She painted the fence salmon.", "id": 97}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 2, "prompt": "He picked up the salmon pen.", "id": 98}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 3, "prompt": "The sky turned salmon at dusk.", "id": 99}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 0, "prompt": "The color of the wall is mint.", "id": 100}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 1, "prompt": "She painted the fence mint.", "id": 101}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 2, "prompt": "He picked up the mint pen.", "id": 102}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 3, "prompt": "The sky turned mint at dusk.", "id": 103}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 0, "prompt": "The color of the wall is peach.", "id": 104}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 1, "prompt": "She painted the fence peach.", "id": 105}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 2, "prompt": "He picked up the peach pen.", "id": 106}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 3, "prompt": "The sky turned peach at dusk.", "id": 107}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 0, "prompt": "The color of the wall is indigo.", "id": 108}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 1, "prompt": "She painted the fence indigo.", "id": 109}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 2, "prompt": "He picked up the indigo pen.", "id": 110}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 3, "prompt": "The sky turned indigo at dusk.", "id": 111}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 0, "prompt": "The color of the wall is crimson.", "id": 112}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 1, "prompt": "She painted the fence crimson.", "id": 113}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 2, "prompt": "He picked up the crimson pen.", "id": 114}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 3, "prompt": "The sky turned crimson at dusk.", "id": 115}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 0, "prompt": "The color of the wall is lime.", "id": 116}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 1, "prompt": "She painted the fence lime.", "id": 117}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 2, "prompt": "He picked up the lime pen.", "id": 118}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 3, "prompt": "The sky turned lime at dusk.", "id": 119}

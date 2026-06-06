@@ -161,6 +161,26 @@ def run(args) -> None:
             t_harvest = time.time() - t0
             say(f"{rev}: harvested {X.shape} in {t_harvest:.0f}s")
 
+            # optional second bank (e.g. color probes), harvested on the same
+            # already-loaded checkpoint -> near-free extra data per step.
+            if args.extra_prompts_file:
+                try:
+                    extra_recs = load_bank_jsonl(Path(args.extra_prompts_file))
+                    extra_dir = tmp / "extra"
+                    extra_dir.mkdir(exist_ok=True)
+                    with open(extra_dir / "prompts.jsonl", "w") as f:
+                        for r in extra_recs:
+                            f.write(json.dumps(r) + "\n")
+                    Xe = harvest(
+                        model_name=args.model, revision=rev,
+                        prompts=[str(r["prompt"]) for r in extra_recs], out_dir=extra_dir,
+                        batch_size=args.batch_size, dtype=args.dtype, device=args.device,
+                        pooling="last_token", model=model, tokenizer=tok,
+                    )
+                    say(f"{rev}: extra bank harvested {Xe.shape}")
+                except Exception as e:  # noqa: BLE001
+                    say(f"{rev}: extra-bank harvest FAILED (non-fatal): {e}")
+
             steer_layer = (args.steer_layer if args.steer_layer is not None
                            else int(round(args.steer_layer_percent * (n_layers - 1))))
             if not args.no_steer:
@@ -230,6 +250,9 @@ def main() -> None:
     ap.add_argument("--steer-layer-percent", type=float, default=0.40)
     ap.add_argument("--no-steer", action="store_true",
                     help="harvest only; skip the steering+cloze window-filler")
+    ap.add_argument("--extra-prompts-file", default=None,
+                    help="optional second JSONL bank (e.g. color probes) harvested on "
+                    "the same loaded checkpoint into <rev>/extra/ for free")
     ap.add_argument("--min-free-gb", type=float, default=140.0,
                     help="warn if free disk on the cache volume drops below this")
     ap.add_argument("--prefetch-join-timeout", type=float, default=1800.0,
