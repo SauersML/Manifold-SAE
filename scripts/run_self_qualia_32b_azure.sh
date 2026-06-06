@@ -15,7 +15,8 @@ HF_HOME="$ROOT/.scratch/hf"
 export HF_HOME HUGGINGFACE_HUB_CACHE="$HF_HOME/hub" TRANSFORMERS_CACHE="$HF_HOME/hub"
 export UV_CACHE_DIR="$ROOT/.scratch/uvcache" TMPDIR="$ROOT/.scratch/tmp"
 export PATH="$HOME/.local/bin:$PATH"
-export HF_HUB_ENABLE_HF_TRANSFER=1
+# Fast parallel HF downloads (64GB x2 models); only enable if the lib is present.
+"$ROOT/.venv/bin/pip" install -q hf_transfer >/dev/null 2>&1 && export HF_HUB_ENABLE_HF_TRANSFER=1 || true
 LOG="$ROOT/runs/OLMO3_32B_SELF_QUALIA_RUN.log"
 mkdir -p "$(dirname "$LOG")" "$HF_HOME" "$UV_CACHE_DIR" "$TMPDIR"
 
@@ -24,7 +25,7 @@ harvest () {  # $1=model  $2=tag(base|instruct)  $3=pooling(last_token|mean_pool
   local out="$ROOT/runs/OLMO3_32B_${tag^^}_SELF_QUALIA_${pool^^}"
   echo "### harvest $tag $pool -> $out $(date)"
   rm -rf "$out"
-  uv run python -m experiments.self_qualia_olmo \
+  "$ROOT/.venv/bin/python" -m experiments.self_qualia_olmo \
     --model "$model" --revision main --out-dir "$out" \
     --device cuda --dtype bfloat16 --batch-size 16 \
     --pooling "$pool" --analysis-layer-percent 0.70
@@ -32,16 +33,16 @@ harvest () {  # $1=model  $2=tag(base|instruct)  $3=pooling(last_token|mean_pool
 
 {
   echo "### HOST $(hostname) $(date)"; nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
-  if ! command -v uv >/dev/null 2>&1; then curl -LsSf https://astral.sh/uv/install.sh | sh; export PATH="$HOME/.local/bin:$PATH"; fi
-  echo "### sync"; uv sync --extra llm; uv pip install hf_transfer >/dev/null 2>&1 || true
-  uv run python -c "import torch;print('cuda',torch.cuda.is_available())"
+  # Use the existing venv directly (uv sync is broken by a scipy/requires-python
+  # resolution conflict; the venv already has torch/transformers/accelerate).
+  "$ROOT/.venv/bin/python" -c "import torch;print('cuda',torch.cuda.is_available())"
   harvest "$BASE_MODEL"     base     last_token
   harvest "$BASE_MODEL"     base     mean_pool
   harvest "$INSTRUCT_MODEL" instruct last_token
   harvest "$INSTRUCT_MODEL" instruct mean_pool
   echo "### summaries"
   for d in runs/OLMO3_32B_*_SELF_QUALIA_*; do
-    [ -f "$d/summary.json" ] && uv run python -c "import json,sys;s=json.load(open('$d/summary.json'));b=s['best_layer_metrics'];print('$d',(s['n_prompts'],s['n_layers'],s['hidden_dim']),'bestL',s['best_layer'],'kAUC',round(b['kind_auc'],3),'qAUC',round(b['qualia_auc'],3),'self',(round(b['self_kind_coord'],2),round(b['self_qualia_coord'],2)))"
+    [ -f "$d/summary.json" ] && "$ROOT/.venv/bin/python" -c "import json,sys;s=json.load(open('$d/summary.json'));b=s['best_layer_metrics'];print('$d',(s['n_prompts'],s['n_layers'],s['hidden_dim']),'bestL',s['best_layer'],'kAUC',round(b['kind_auc'],3),'qAUC',round(b['qualia_auc'],3),'self',(round(b['self_kind_coord'],2),round(b['self_qualia_coord'],2)))"
   done
   echo "ALLDONE $(date)"
 } >"$LOG" 2>&1
