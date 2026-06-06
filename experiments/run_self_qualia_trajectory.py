@@ -39,12 +39,18 @@ from pathlib import Path
 import numpy as np
 
 
-# Default base trajectory: log-spaced, early-weighted, pretrain -> mid -> long-ctx.
+# Default base trajectory for allenai/Olmo-3-1125-32B: log-spaced, early-weighted,
+# pretrain (stage1) -> mid-training (stage2) -> long-context (stage3). All 18
+# revisions verified to exist on the Hub (snapped to existing steps). NOTE: stage2
+# is published as separate data-mix runs (ingredient1/ingredient2) that are later
+# souped into the base; we follow ingredient1 as one coherent mid-training path.
 DEFAULT_REVS = [
-    "stage1-step0", "stage1-step1000", "stage1-step2000", "stage1-step4000",
+    "stage1-step0", "stage1-step1000", "stage1-step2000", "stage1-step5000",
     "stage1-step8000", "stage1-step16000", "stage1-step32000", "stage1-step64000",
-    "stage1-step128000", "stage1-step256000", "stage1-step512000", "stage1-step656000",
-    "stage2-step4000", "stage2-step12000", "stage2-step23842",
+    "stage1-step128000", "stage1-step256000", "stage1-step400000", "stage1-step512000",
+    "stage1-step656000",
+    "stage2-ingredient1-step4000", "stage2-ingredient1-step12000",
+    "stage2-ingredient1-step23842",
     "stage3-step4000", "stage3-step11921",
 ]
 

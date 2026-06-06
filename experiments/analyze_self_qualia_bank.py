@@ -439,12 +439,13 @@ def analyze_run(
 # trajectory: many checkpoint dirs -> one CSV + plot
 # ---------------------------------------------------------------------------
 def _ckpt_sort_key(name: str):
-    # stageX-stepN -> (X, N) for natural ordering
-    try:
-        stage, step = name.split("-step")
-        return (int(stage.replace("stage", "")), int(step))
-    except Exception:
-        return (99, name)
+    # stageX-...-stepN -> (X, N) for natural ordering across the training stages
+    # (handles stage2-ingredient1-step4000 as well as stage1-step1000).
+    import re
+    m = re.match(r"stage(\d+).*?step(\d+)", name)
+    if m:
+        return (int(m.group(1)), int(m.group(2)))
+    return (99, name)
 
 
 def analyze_trajectory(parent: Path, analysis_layer_percent: float | None,
