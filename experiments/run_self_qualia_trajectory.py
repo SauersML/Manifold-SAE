@@ -137,6 +137,9 @@ def run(args) -> None:
                 raise RuntimeError(f"download failed for {rev}: {ens.get('error')}")
             model, tok, n_layers = load_model(
                 args.model, rev, args.dtype, args.device, cache_dir=str(cache_dir))
+            alltok_layer = (None if args.no_alltok else
+                            (args.alltok_layer if args.alltok_layer is not None
+                             else int(round(args.alltok_layer_percent * (n_layers - 1)))))
 
             # kick off NEXT checkpoint download now, to overlap with compute below
             if i + 1 < len(todo):
@@ -157,6 +160,7 @@ def run(args) -> None:
                 model_name=args.model, revision=rev, prompts=prompts, out_dir=tmp,
                 batch_size=args.batch_size, dtype=args.dtype, device=args.device,
                 pooling="last_token", model=model, tokenizer=tok,
+                alltok_layer=alltok_layer,
             )
             t_harvest = time.time() - t0
             say(f"{rev}: harvested {X.shape} in {t_harvest:.0f}s")
@@ -176,6 +180,7 @@ def run(args) -> None:
                         prompts=[str(r["prompt"]) for r in extra_recs], out_dir=extra_dir,
                         batch_size=args.batch_size, dtype=args.dtype, device=args.device,
                         pooling="last_token", model=model, tokenizer=tok,
+                        alltok_layer=alltok_layer,
                     )
                     say(f"{rev}: extra bank harvested {Xe.shape}")
                 except Exception as e:  # noqa: BLE001
@@ -253,6 +258,13 @@ def main() -> None:
     ap.add_argument("--extra-prompts-file", default=None,
                     help="optional second JSONL bank (e.g. color probes) harvested on "
                     "the same loaded checkpoint into <rev>/extra/ for free")
+    ap.add_argument("--alltok-layer", type=int, default=None,
+                    help="also save every real token's residual at this one layer "
+                    "(flat fp16 + meta); default uses --alltok-layer-percent")
+    ap.add_argument("--alltok-layer-percent", type=float, default=0.40,
+                    help="layer (as depth fraction) for the one-layer all-token export")
+    ap.add_argument("--no-alltok", action="store_true",
+                    help="disable the one-layer all-token export")
     ap.add_argument("--min-free-gb", type=float, default=140.0,
                     help="warn if free disk on the cache volume drops below this")
     ap.add_argument("--prefetch-join-timeout", type=float, default=1800.0,
