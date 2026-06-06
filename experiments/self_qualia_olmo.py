@@ -337,44 +337,60 @@ def _get_layers(model: Any) -> int:
     raise RuntimeError(f"Could not infer layer count for {type(model).__name__}")
 
 
-def harvest(
-    *,
-    model_name: str,
-    revision: str,
-    items: list[PromptItem],
-    out_dir: Path,
-    batch_size: int,
-    dtype: str,
-    device: str,
-    pooling: str,
-) -> np.ndarray:
-    """Run the fixed prompt bank and return activations with shape (N, L, D)."""
+def load_bank_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Load the hand-written prompt bank (one JSON object per line).
 
+    Every record must carry a ``prompt`` string; all other fields (role, side,
+    entity, kind, framing, signal, vocab, person, valence, markedness, pair_id,
+    id, ...) are passed through verbatim as metadata so the analysis can use any
+    of them. Records are returned in file order, which also fixes the row order
+    of the saved activations.
+    """
+    records: list[dict[str, Any]] = []
+    with open(path) as f:
+        for ln, line in enumerate(f):
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if "prompt" not in rec or not str(rec["prompt"]).strip():
+                raise ValueError(f"{path}:{ln + 1} record has no 'prompt'")
+            records.append(rec)
+    if not records:
+        raise ValueError(f"{path} contained no prompts")
+    return records
+
+
+_TORCH_DTYPES = {
+    "float16": "float16", "fp16": "float16",
+    "bfloat16": "bfloat16", "bf16": "bfloat16",
+    "float32": "float32", "fp32": "float32",
+}
+
+
+def load_model(model_name: str, revision: str, dtype: str, device: str,
+               cache_dir: str | None = None):
+    """Load tokenizer + model once (GPU-direct, SDPA, TF32). Returns
+    (model, tokenizer, n_layers). Reusable across harvest/steer/cloze so a
+    checkpoint is loaded a single time. `cache_dir` isolates this revision's
+    weights (lets a pipelined driver delete one checkpoint without touching the
+    one downloading next)."""
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    torch_dtype = {
-        "float16": torch.float16,
-        "fp16": torch.float16,
-        "bfloat16": torch.bfloat16,
-        "bf16": torch.bfloat16,
-        "float32": torch.float32,
-        "fp32": torch.float32,
-    }[dtype]
-
-    # Fast matmul paths (harmless under bf16; helps any fp32 fallbacks).
+    torch_dtype = getattr(torch, _TORCH_DTYPES[dtype])
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision, cache_dir=cache_dir)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
     print(f"[load] model={model_name} revision={revision} dtype={dtype} device={device}", flush=True)
-    load_kwargs = dict(revision=revision, torch_dtype=torch_dtype, low_cpu_mem_usage=True)
+    load_kwargs = dict(revision=revision, dtype=torch_dtype, low_cpu_mem_usage=True,
+                       cache_dir=cache_dir)
     if device == "cuda":
-        # Stream weights straight onto the GPU (no 64GB CPU staging) + fused SDPA.
         load_kwargs["device_map"] = {"": 0}
         load_kwargs["attn_implementation"] = "sdpa"
     model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
@@ -383,8 +399,34 @@ def harvest(
         model.to(device)
     n_layers = _get_layers(model)
     print(f"[load] layers={n_layers}", flush=True)
+    return model, tokenizer, n_layers
 
-    prompts = [x.prompt for x in items]
+
+def harvest(
+    *,
+    model_name: str,
+    revision: str,
+    prompts: list[str],
+    out_dir: Path,
+    batch_size: int,
+    dtype: str,
+    device: str,
+    pooling: str,
+    save_name: str = "activations.npy",
+    model: Any = None,
+    tokenizer: Any = None,
+) -> np.ndarray:
+    """Run a list of prompts and return activations with shape (N, L, D).
+
+    If `model`/`tokenizer` are provided they are reused (no reload); otherwise a
+    checkpoint is loaded via load_model().
+    """
+
+    import torch
+
+    if model is None or tokenizer is None:
+        model, tokenizer, _ = load_model(model_name, revision, dtype, device)
+
     # Length-bucket: sort by token length so each batch pads only to ~its own
     # length (no wasted compute on padding), then scatter results back to order.
     tok_lens = [len(tokenizer(p, add_special_tokens=True)["input_ids"]) for p in prompts]
@@ -420,7 +462,7 @@ def harvest(
             print(f"[harvest] {done}/{len(prompts)}", flush=True)
 
     X = np.stack(results, axis=0).astype(np.float32, copy=False)
-    np.save(out_dir / "activations.npy", X)
+    np.save(out_dir / save_name, X)
     return X
 
 
@@ -725,10 +767,64 @@ def main() -> None:
     ap.add_argument("--analysis-layer", type=int, default=None)
     ap.add_argument("--analysis-layer-percent", type=float, default=None)
     ap.add_argument("--skip-harvest", action="store_true")
+    ap.add_argument(
+        "--prompts-file",
+        default=None,
+        help="Path to a hand-written JSONL prompt bank (one object/line, each with a "
+        "'prompt' field). When set, the built-in carrier bank is bypassed: activations "
+        "are harvested for those prompts and the bank is copied to the run dir as "
+        "prompts.jsonl. The carrier-schema analyze() is skipped; use "
+        "analyze_self_qualia_bank.py for the covariate-adjusted analysis.",
+    )
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.prompts_file:
+        records = load_bank_jsonl(Path(args.prompts_file))
+        prompts = [str(r["prompt"]) for r in records]
+        # Persist the exact bank (in row order) alongside the activations so the
+        # analysis is self-contained and reproducible per checkpoint.
+        with open(out_dir / "prompts.jsonl", "w") as f:
+            for r in records:
+                f.write(json.dumps(r) + "\n")
+        run_meta = {
+            "model": args.model,
+            "revision": args.revision,
+            "device": args.device,
+            "dtype": args.dtype,
+            "batch_size": args.batch_size,
+            "pooling": args.pooling,
+            "prompts_file": str(args.prompts_file),
+            "n_prompts": len(prompts),
+            "bank_mode": "jsonl",
+        }
+        (out_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2))
+        acts_path = out_dir / "activations.npy"
+        if args.skip_harvest:
+            X = np.load(acts_path)
+        else:
+            X = harvest(
+                model_name=args.model,
+                revision=args.revision,
+                prompts=prompts,
+                out_dir=out_dir,
+                batch_size=args.batch_size,
+                dtype=args.dtype,
+                device=args.device,
+                pooling=args.pooling,
+            )
+        print(
+            json.dumps(
+                {"n_prompts": int(X.shape[0]), "n_layers": int(X.shape[1]),
+                 "hidden_dim": int(X.shape[2]), "out_dir": str(out_dir),
+                 "note": "run analyze_self_qualia_bank.py on this dir"},
+                indent=2,
+            ),
+            flush=True,
+        )
+        return
 
     items = build_prompt_bank()
     write_prompt_bank(items, out_dir)
@@ -743,6 +839,7 @@ def main() -> None:
         "analysis_layer_percent": args.analysis_layer_percent,
         "n_prompts": len(items),
         "carrier_count": len(CARRIERS),
+        "bank_mode": "carrier",
     }
     (out_dir / "run_meta.json").write_text(json.dumps(run_meta, indent=2))
 
@@ -753,7 +850,7 @@ def main() -> None:
         X = harvest(
             model_name=args.model,
             revision=args.revision,
-            items=items,
+            prompts=[x.prompt for x in items],
             out_dir=out_dir,
             batch_size=args.batch_size,
             dtype=args.dtype,
