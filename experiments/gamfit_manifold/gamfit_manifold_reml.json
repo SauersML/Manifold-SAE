@@ -1,0 +1,65 @@
+[
+  {
+    "topology":"SHEET_te_mds12",
+    "formula":"{y} ~ te(mds1,mds2)",
+    "total_reml":31.8344288368,
+    "total_edf":45.0651366374,
+    "mean_edf":9.0130273275,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"LINE_mds1",
+    "formula":"{y} ~ s(mds1)",
+    "total_reml":123.6808988601,
+    "total_edf":24.056490414,
+    "mean_edf":4.8112980828,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"CIRCLE_hue_cyclic",
+    "formula":"{y} ~ s(hue, bs='cc')",
+    "total_reml":249.6986041607,
+    "total_edf":21.318766746,
+    "mean_edf":4.2637533492,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"SHEET_te_hue_sat",
+    "formula":"{y} ~ te(hx,hy)",
+    "total_reml":255.7059569065,
+    "total_edf":27.9258670299,
+    "mean_edf":5.585173406,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"LINE_lightness",
+    "formula":"{y} ~ s(light)",
+    "total_reml":275.0545534631,
+    "total_edf":15.9419740558,
+    "mean_edf":3.1883948112,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"VOLUME_te_mds123",
+    "formula":"{y} ~ te(mds1,mds2,mds3)",
+    "total_reml":340.1153364321,
+    "total_edf":102.9374971585,
+    "mean_edf":20.5874994317,
+    "ok":true,
+    "errors":""
+  },
+  {
+    "topology":"VOLUME_te_RGB",
+    "formula":"{y} ~ te(R,G,B)",
+    "total_reml":340.2156123979,
+    "total_edf":98.3772149632,
+    "mean_edf":19.6754429926,
+    "ok":true,
+    "errors":""
+  }
+]
