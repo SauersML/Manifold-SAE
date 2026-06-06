@@ -716,8 +716,8 @@ def rgb_to_lch(rgb01: np.ndarray) -> np.ndarray:
     return np.stack([L, C, h], axis=1)
 
 
-def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3
-                               ) -> tuple[np.ndarray, np.ndarray]:
+def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3,
+                            knots=None, return_knots: bool = False):
     """Cyclic (periodic) 1D B-spline. Inputs in [0, 1]; the basis wraps so
     the fit doesn't have a seam at 0/1.
 
@@ -727,13 +727,21 @@ def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3
     non-periodic matrix sized to the open-knot basis count, which doesn't
     match the wrapped-basis column count — so we build the cyclic penalty
     manually here.
+
+    If `knots` (a resolved knot tensor) is given, the basis is evaluated on
+    THOSE fixed knots (so out-of-sample / single-point evaluation yields the
+    SAME basis columns as the fit). Otherwise gamfit resolves quantile-spaced
+    interior knots from `t` for the integer `n_basis`. With return_knots=True
+    the resolved knot tensor and effective degree are also returned, so a
+    caller can reuse them for the derivative / prediction basis.
     """
     import gamfit.torch as gt
     from gamfit.torch._basis import _resolve_knots_tensor
     t_t = torch.from_numpy(np.ascontiguousarray(t, dtype=np.float64))
-    knots_t = _resolve_knots_tensor(t_t, n_basis, degree=degree)
+    if knots is None:
+        knots, degree = _resolve_knots_tensor(t_t, n_basis, degree=degree)
     with torch.no_grad():
-        B_t = gt.bspline_basis(t_t, knots_t, degree=degree, periodic=True)
+        B_t = gt.bspline_basis(t_t, knots, degree=degree, periodic=True)
     B = B_t.detach().cpu().numpy()
     k = B.shape[1]
     # Cyclic 2nd-difference operator D (k × k): row i = e_i − 2 e_{i+1} + e_{i+2}, mod k
@@ -743,6 +751,8 @@ def bspline_1d_cyclic_basis(t: np.ndarray, n_basis: int = 12, degree: int = 3
         D[i, (i + 1) % k] = -2.0
         D[i, (i + 2) % k] = 1.0
     P = D.T @ D
+    if return_knots:
+        return B, P, knots, int(degree)
     return B, P
 
 
