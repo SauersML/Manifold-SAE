@@ -63,7 +63,7 @@ def collect(runs_root: Path, py: str) -> list[dict]:
         if not base.exists():
             continue
         cks = sorted(
-            [d for d in glob.glob(str(base / "*/")) if os.path.exists(d + "done.json")],
+            [d for d in glob.glob(f"{base}/*/") if os.path.exists(os.path.join(d, "done.json"))],
             key=lambda d: _ckpt_key(Path(d).name))
         for d in cks:
             name = Path(d).name

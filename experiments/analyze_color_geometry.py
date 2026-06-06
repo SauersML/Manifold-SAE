@@ -96,7 +96,7 @@ def main() -> None:
         base = Path(args.runs_root) / stage
         if not base.exists():
             continue
-        cks = sorted([d for d in glob.glob(str(base / "*/")) if os.path.exists(d + "done.json")],
+        cks = sorted([d for d in glob.glob(f"{base}/*/") if os.path.exists(os.path.join(d, "done.json"))],
                      key=lambda d: _ckpt_key(Path(d).name))
         for d in cks:
             extra = str(Path(d) / "extra")
