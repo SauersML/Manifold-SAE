@@ -36,20 +36,13 @@ def classical_mds(D, k=3):
     return V[:, idx] * np.sqrt(w + 1e-12)
 
 
-def fit_score(df, formula):
+def fit_score(df, formula, n):
     m = gamfit.fit(df, formula, config=CONFIG)
-    reml = float(getattr(m, "reml_score", np.nan))
-    if np.isnan(reml):
-        s = m.summary() if hasattr(m, "summary") else None
-        reml = float(getattr(s, "reml_score", getattr(s, "reml", np.nan)) if s is not None else np.nan)
-    edf = float(getattr(m, "edf_total", np.nan))
-    dev = float(getattr(m, "deviance", np.nan))
-    bic = np.nan
-    if _st is not None:
-        for fn in ("_bic_value", "bic_value"):
-            if hasattr(_st, fn):
-                try: bic = float(getattr(_st, fn)(m)); break
-                except Exception: pass
+    s = m.summary()
+    reml = float(s.reml_score)          # = m.evidence (restricted marginal lik; lower=better)
+    edf = float(s.edf_total)
+    dev = float(s.deviance)
+    bic = dev + np.log(n) * edf         # from gamfit's own deviance+edf (gamfit._bic_value formula)
     return reml, bic, edf, dev
 
 
@@ -76,7 +69,7 @@ def run_ckpt(d, layer=25, npc=5):
         for j in range(npc):
             df = base.copy(); df["y"] = Y[:, j]
             try:
-                reml, bic, edf, dev = fit_score(df, tmpl.format(y="y"))
+                reml, bic, edf, dev = fit_score(df, tmpl.format(y="y"), len(df))
                 agg["reml"] += reml; agg["bic"] += (bic if not np.isnan(bic) else 0)
                 agg["edf"] += edf; agg["dev"] += dev
             except Exception as e:
