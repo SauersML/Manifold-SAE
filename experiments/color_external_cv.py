@@ -171,8 +171,13 @@ def main():
     ap.add_argument("--npc", type=int, default=8)
     ap.add_argument("--nboot", type=int, default=2000)
     ap.add_argument("--kfold", type=int, default=6, help="grouped-by-color k-fold; <=0 = leave-one-color-out")
+    ap.add_argument("--topos", default="", help="comma-sep topology names to run (default all); enables fine per-topology parallelism")
     ap.add_argument("--csv", default="")
     args = ap.parse_args()
+    if args.topos:
+        global TOPOS
+        want = set(args.topos.split(","))
+        TOPOS = [t for t in TOPOS if t[0] in want]
     layers = [int(x) for x in args.layers.split(",")]
     csvrows = []
     for ck in args.ckpt_dirs:
@@ -185,7 +190,8 @@ def main():
                   f"— held-out LOO-color CV loglik (higher=better) ===", flush=True)
             for r in ok:
                 print("  %-18s cv_loglik=%12.1f" % (r["topology"], r["cv"]), flush=True)
-                csvrows.append({"ckpt": tag, "layer": layer, "topology": r["topology"], "cv_loglik": r["cv"]})
+                vec = ";".join("%.5f" % v for v in r["vec"]) if r.get("vec") is not None else ""
+                csvrows.append({"ckpt": tag, "layer": layer, "topology": r["topology"], "cv_loglik": r["cv"], "vec": vec})
             if boot:
                 print("  bootstrap %s − %s: margin=%.1f  95%%CI[%.1f, %.1f]  P(best>runnerup)=%.3f"
                       % (boot["best"], boot["runnerup"], boot["margin"], boot["ci_lo"], boot["ci_hi"], boot["frac_pos"]), flush=True)
