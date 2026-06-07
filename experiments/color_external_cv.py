@@ -70,13 +70,22 @@ def load_color(ckpt_dir, layer):
 
 
 def build_feat(meta):
-    fr = pd.get_dummies(meta["frame"], prefix="fr", drop_first=True).astype(float)
+    # coords only; frame is controlled by demeaning the RESPONSE per frame (below),
+    # NOT by a linear term in the formula -- a frame term makes the mixed smooth+linear
+    # outer-REML grind ~70x slower (gam#821), and for this balanced design (every color
+    # in every frame) per-frame response-demeaning is the equivalent frame adjustment.
     coords = meta[COORDS].reset_index(drop=True).copy()
     for c in COORDS:
         v = coords[c].to_numpy(); coords[c] = (v - v.mean()) / (v.std() + 1e-9)
-    feat = pd.concat([coords, fr.reset_index(drop=True)], axis=1)
-    fr_term = (" + " + " + ".join(fr.columns)) if len(fr.columns) else ""
-    return feat, fr_term
+    return coords, ""
+
+
+def demean_by_frame(Y, frame):
+    Yd = Y.copy()
+    for f in np.unique(frame):
+        m = frame == f
+        Yd[m] -= Yd[m].mean(0)
+    return Yd
 
 
 def fit_safe(df, formula):
@@ -86,11 +95,18 @@ def fit_safe(df, formula):
         return None
 
 
-def loo_percolor(feat, colors_arr, Y, formula, uniq):
-    """Per-color held-out loglik (summed over PCs). Returns vec[len(uniq)] or None."""
-    vec = np.zeros(len(uniq))
-    for ci, c in enumerate(uniq):
-        te = np.where(colors_arr == c)[0]; tr = np.where(colors_arr != c)[0]
+def kfold_percolor(feat, colors_arr, Y, formula, uniq, kfold):
+    """Grouped-by-color k-fold CV; per-color held-out loglik (summed over PCs).
+    kfold<=0 or >=len(uniq) -> leave-one-color-out. Each color is held out exactly
+    once, so per-color scores survive for the refit-free bootstrap; folds just batch
+    the train-fits (k fits/topology/PC instead of len(uniq)). Returns vec or None."""
+    nC = len(uniq)
+    k = nC if (kfold <= 0 or kfold >= nC) else kfold
+    folds = [uniq[i::k] for i in range(k)]   # round-robin color groups
+    cidx = {c: i for i, c in enumerate(uniq)}
+    vec = np.zeros(nC)
+    for grp in folds:
+        te = np.where(np.isin(colors_arr, grp))[0]; tr = np.where(~np.isin(colors_arr, grp))[0]
         for j in range(Y.shape[1]):
             dtr = feat.iloc[tr].copy(); dtr["y"] = Y[tr, j]; dte = feat.iloc[te].copy()
             m = fit_safe(dtr, formula)
@@ -101,23 +117,27 @@ def loo_percolor(feat, colors_arr, Y, formula, uniq):
             except Exception:
                 return None
             sd = max(float((Y[tr, j] - ptr).std()), 1e-6)
-            r = Y[te, j] - pte
-            ll = float((-0.5 * np.log(2 * np.pi * sd ** 2) - 0.5 * (r / sd) ** 2).sum())
-            if not np.isfinite(ll):
-                return None
-            vec[ci] += ll
+            cte = colors_arr[te]
+            for c in grp:
+                sel = cte == c
+                r = Y[te][sel, j] - pte[sel]
+                ll = float((-0.5 * np.log(2 * np.pi * sd ** 2) - 0.5 * (r / sd) ** 2).sum())
+                if not np.isfinite(ll):
+                    return None
+                vec[cidx[c]] += ll
     return vec
 
 
-def run_layer(H, meta, layer, npc, nboot):
+def run_layer(H, meta, layer, npc, nboot, kfold):
     Hc = H - H.mean(0)
     U, S, _ = np.linalg.svd(Hc, full_matrices=False)
     Y = U[:, :npc] * S[:npc]; Y = Y / (Y.std(0, keepdims=True) + 1e-9)
+    Y = demean_by_frame(Y, meta["frame"].to_numpy())   # remove frame main effect
     colors_arr = meta["color"].to_numpy(); uniq = pd.unique(colors_arr)
     feat, fr_term = build_feat(meta)
     res = []
     for name, f in TOPOS:
-        vec = loo_percolor(feat, colors_arr, Y, f + fr_term, uniq)
+        vec = kfold_percolor(feat, colors_arr, Y, f + fr_term, uniq, kfold)
         res.append({"topology": name, "vec": vec, "cv": (float(vec.sum()) if vec is not None else None)})
     ok = [r for r in res if r["cv"] is not None]; ok.sort(key=lambda r: -r["cv"])
     boot = None
@@ -150,6 +170,7 @@ def main():
     ap.add_argument("--layers", default="44")
     ap.add_argument("--npc", type=int, default=8)
     ap.add_argument("--nboot", type=int, default=2000)
+    ap.add_argument("--kfold", type=int, default=6, help="grouped-by-color k-fold; <=0 = leave-one-color-out")
     ap.add_argument("--csv", default="")
     args = ap.parse_args()
     layers = [int(x) for x in args.layers.split(",")]
@@ -159,7 +180,7 @@ def main():
         print(f"\n######## {ck} ########", flush=True)
         for layer in layers:
             H, meta = load_color(ck, layer)
-            ok, boot, tk = run_layer(H, meta, layer, args.npc, args.nboot)
+            ok, boot, tk = run_layer(H, meta, layer, args.npc, args.nboot, args.kfold)
             print(f"\n=== {tag} L{layer} (n={len(meta)}, {meta['color'].nunique()} colors, npc={args.npc}) "
                   f"— held-out LOO-color CV loglik (higher=better) ===", flush=True)
             for r in ok:
