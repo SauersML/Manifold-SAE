@@ -50,8 +50,8 @@ def main():
     self_i = np.where((role == "self") & (side == "-"))[0]
     if len(self_i) == 0:
         self_i = np.where(role == "self")[0]
-    ai_i = np.where(kind == "ai_author")[0]
-    hu_i = np.where(kind == "human_author")[0]
+    ai_i = np.where((kind == "ai_author") & (side == "-"))[0]
+    hu_i = np.where((kind == "human_author") & (side == "-"))[0]
 
     def coord(idx, He, Hno, Hall):
         axis = He.mean(0) - Hno.mean(0); axis /= max(np.linalg.norm(axis), 1e-9)

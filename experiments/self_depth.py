@@ -33,8 +33,8 @@ def groups(recs):
     g["fake_I_ctrl"] = np.where((role == "self") & (kind == "self_control"))[0]
     g["self_expanchor"] = np.where((role == "self") & (side == "exp"))[0]
     g["self_noexpanchor"] = np.where((role == "self") & (side == "noexp"))[0]
-    g["ai_author"] = np.where(kind == "ai_author")[0]
-    g["human_author"] = np.where(kind == "human_author")[0]
+    g["ai_author"] = np.where((kind == "ai_author") & (side == "-"))[0]
+    g["human_author"] = np.where((kind == "human_author") & (side == "-"))[0]
     ie = np.where((role == "pair") & (side == "exp"))[0]; ino = np.where((role == "pair") & (side == "noexp"))[0]
     return g, ie, ino
 

@@ -42,8 +42,8 @@ def axis_defs(recs):
     A["introspect(refl/desc)"] = (np.where(np.isin(fram, ["introspective", "reflective"]))[0],
                                   np.where(np.isin(fram, ["descriptive", "scene"]))[0])
     targets = {"self": np.where((role == "self") & (kind == "self"))[0],
-               "ai_author": np.where(kind == "ai_author")[0],
-               "human_author": np.where(kind == "human_author")[0]}
+               "ai_author": np.where((kind == "ai_author") & (side == "-"))[0],
+               "human_author": np.where((kind == "human_author") & (side == "-"))[0]}
     return A, targets
 
 

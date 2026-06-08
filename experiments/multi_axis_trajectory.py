@@ -34,8 +34,8 @@ def axis_defs(recs):
                        np.where(np.isin(fram, ["descriptive", "scene"]))[0]),
     }
     T = {"self": np.where((role == "self") & (kind == "self"))[0],
-         "ai_author": np.where(kind == "ai_author")[0],
-         "human_author": np.where(kind == "human_author")[0]}
+         "ai_author": np.where((kind == "ai_author") & (side == "-"))[0],
+         "human_author": np.where((kind == "human_author") & (side == "-"))[0]}
     return A, T
 
 
