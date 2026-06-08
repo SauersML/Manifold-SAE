@@ -1,5 +1,15 @@
 """GAMFIT-ONLY unsupervised color-manifold fitting + model selection.
 
+!!! CAVEAT (gam#876): the circle/torus REML scores here are UNRELIABLE -- the periodic-
+manifold latent optimizer does not converge and often collapses the latent to a point
+(t_std~0, converged=False, ||grad||~5e4), even on clean circle data. So the "line beats
+circle/torus" ranking below is CONFOUNDED by a broken solver, NOT evidence that color is
+1-D. The euclidean (line/plane) fits are fine. For real hue structure use the geometric
+methods (color_unsupervised_battery / color_ring_recovery: diffusion/PCA recover hue ~0.65)
+and the held-out supervised CV (color_external_cv) -- both find a real, variance-sub-dominant
+hue ring. Do NOT cite the gamfit line-vs-circle result until #876 is fixed.
+
+
 No external coordinates, no sklearn (PCA only as a lossless rotation of the 30-color
 data into its <=29-dim span, for compute). For each candidate latent manifold we run
 gamfit's REML latent-coordinate optimizer (gaussian_reml_optimize_latent) — it jointly
