@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse, json, colorsys, csv, os
 from pathlib import Path
 import numpy as np, pandas as pd, gamfit
+import gamfit_predict_patch  # noqa: F401  (gam#867 predict KeyError workaround for 0.1.179/0.1.180)
 
 CONFIG = {"outer_max_iter": 15}
 
