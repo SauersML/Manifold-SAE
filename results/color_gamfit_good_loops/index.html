@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Good gamfit color loops</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; background:#080a0f; color:#edf2ff; font:15px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif; }
+    header { padding:34px 38px 12px; max-width:980px; }
+    h1 { font-size:40px; line-height:1.04; margin:0 0 12px; }
+    p { color:#b8c1d6; max-width:880px; }
+    code { background:rgba(255,255,255,.08); color:white; padding:2px 5px; border-radius:5px; }
+    table { margin-top:20px; border-collapse:collapse; width:100%; max-width:920px; }
+    th,td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.12); text-align:left; }
+    section { padding:22px 26px 44px; border-top:1px solid rgba(255,255,255,.11); }
+    section h2 { margin:0 0 6px 12px; font-size:22px; }
+    section p { margin:0 0 12px 12px; }
+    iframe { display:block; width:100%; height:760px; border:0; border-radius:10px; background:#080a0f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Good gamfit color loops</h1>
+    <p>Loop-only. No UMAP, no surfaces, no nearest-neighbor ordering. The first two curves use hue as an
+    interpretable color-wheel coordinate; the final curve lets gamfit learn a circle-latent coordinate and is
+    labeled as diagnostic because the optimizer still reports non-convergence. All curves are actual Duchon
+    decoder images evaluated densely.</p>
+    <table><thead><tr><th>loop</th><th>colors</th><th>color R²</th><th>prompt R²</th><th>EDF</th><th>median λ</th></tr></thead><tbody>
+      <tr><td>core_bright</td><td>15</td><td>0.590</td><td>0.359</td><td>2.9</td><td>0.022</td></tr>
+<tr><td>expanded_vivid</td><td>19</td><td>0.507</td><td>0.313</td><td>2.6</td><td>0.0227</td></tr>
+<tr><td>learned_circle</td><td>15</td><td>0.934</td><td>—</td><td>12.8</td><td>6.13e-12</td></tr>
+    </tbody></table>
+  </header>
+  <section><h2>Core bright-color loop</h2><p>Actual periodic Duchon loop, fitted by gamfit REML. Color-mean R²=0.590; prompt-replicate R²=0.359; EDF=2.9; median λ=0.022;</p><iframe src='core_bright.html' loading='lazy'></iframe></section><section><h2>Expanded vivid-color loop</h2><p>Actual periodic Duchon loop, fitted by gamfit REML. Color-mean R²=0.507; prompt-replicate R²=0.313; EDF=2.6; median λ=0.0227;</p><iframe src='expanded_vivid.html' loading='lazy'></iframe></section><section><h2>Learned circle-latent Duchon curve</h2><p>Actual periodic Duchon loop, fitted by gamfit REML. Color-mean R²=0.934; prompt-replicate R²=—; EDF=12.8; median λ=6.13e-12; converged=False; ∥grad_t∥=1.4e+02;</p><iframe src='learned_circle.html' loading='lazy'></iframe></section>
+</body>
+</html>
