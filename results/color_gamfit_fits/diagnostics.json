@@ -1,0 +1,50 @@
+[
+  {
+    "name": "line_k8",
+    "title": "Learned 1-D Duchon curve",
+    "manifold": "euclidean",
+    "latent_dim": 1,
+    "r2": 0.631825849681187,
+    "converged": false,
+    "grad_t_norm": 23.767249688968963,
+    "spread": 0.8174779477299563,
+    "reml": 112.45542935048768,
+    "decoder_reproduction_error": 7.238654120556021e-14
+  },
+  {
+    "name": "circle_k12",
+    "title": "Learned circle-latent Duchon curve",
+    "manifold": "circle",
+    "latent_dim": 1,
+    "r2": 0.8347844145138185,
+    "converged": false,
+    "grad_t_norm": 164.3519361614429,
+    "spread": 0.48721997707886283,
+    "reml": -113.40923923445713,
+    "decoder_reproduction_error": 5.968558980384842e-13
+  },
+  {
+    "name": "torus_k16",
+    "title": "Learned torus-latent Duchon surface",
+    "manifold": "torus",
+    "latent_dim": 2,
+    "r2": 0.9999761678476379,
+    "converged": false,
+    "grad_t_norm": 143.594511900502,
+    "spread": 0.5332368980371849,
+    "reml": -240.66793761990627,
+    "decoder_reproduction_error": 5.943023850818463e-12
+  },
+  {
+    "name": "sheet_k24",
+    "title": "Learned 2-D Euclidean Duchon sheet",
+    "manifold": "euclidean",
+    "latent_dim": 2,
+    "r2": 0.9991211515068923,
+    "converged": false,
+    "grad_t_norm": 86.35066750781698,
+    "spread": 0.8515414975985749,
+    "reml": 21.3852156930865,
+    "decoder_reproduction_error": 5.5067062021407764e-14
+  }
+]

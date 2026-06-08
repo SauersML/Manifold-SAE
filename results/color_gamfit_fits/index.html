@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Actual gamfit color fits</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin:0;
+      background:#080a0f;
+      color:#edf2ff;
+      font:15px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+    }
+    header { padding:34px 38px 10px; max-width:980px; }
+    h1 { font-size:40px; line-height:1.04; margin:0 0 12px; }
+    p { color:#b7c0d5; max-width:850px; }
+    code { background:rgba(255,255,255,.08); padding:2px 5px; border-radius:5px; color:white; }
+    table { margin-top:20px; border-collapse:collapse; width:100%; max-width:920px; }
+    th,td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.12); text-align:left; }
+    section { padding:22px 26px 42px; border-top:1px solid rgba(255,255,255,.11); }
+    section h2 { margin:0 0 6px 12px; font-size:22px; }
+    section p { margin:0 0 12px 12px; }
+    iframe { display:block; width:100%; height:720px; border:0; border-radius:10px; background:#080a0f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Actual gamfit fit lines/surfaces</h1>
+    <p>No forced ordering. No UMAP. No connected data points. Each white curve/surface is the actual
+    <code>gamfit.gaussian_reml_optimize_latent</code> Duchon decoder image evaluated densely, plotted over
+    prompt-frame-cleaned color points. The 3-D view is only a display projection.</p>
+    <table><thead><tr><th>fit</th><th>manifold</th><th>R²</th><th>converged</th><th>grad</th><th>spread</th></tr></thead><tbody>
+    <tr><td>line_k8</td><td>euclidean</td><td>0.632</td><td>False</td><td>24</td><td>0.82</td></tr>
+<tr><td>circle_k12</td><td>circle</td><td>0.835</td><td>False</td><td>1.6e+02</td><td>0.49</td></tr>
+<tr><td>torus_k16</td><td>torus</td><td>1.000</td><td>False</td><td>1.4e+02</td><td>0.53</td></tr>
+<tr><td>sheet_k24</td><td>euclidean</td><td>0.999</td><td>False</td><td>86</td><td>0.85</td></tr>
+    </tbody></table>
+  </header>
+  <section><h2>Learned 1-D Duchon curve</h2><p>R²=0.632; converged=False; ∥grad_t∥=24; decoder reproduction error=7.2e-14. The white object is the actual gamfit decoder evaluated densely.</p><iframe src='line_k8.html' loading='lazy'></iframe></section><section><h2>Learned circle-latent Duchon curve</h2><p>R²=0.835; converged=False; ∥grad_t∥=1.6e+02; decoder reproduction error=6.0e-13. The white object is the actual gamfit decoder evaluated densely.</p><iframe src='circle_k12.html' loading='lazy'></iframe></section><section><h2>Learned torus-latent Duchon surface</h2><p>R²=1.000; converged=False; ∥grad_t∥=1.4e+02; decoder reproduction error=5.9e-12. The white object is the actual gamfit decoder evaluated densely.</p><iframe src='torus_k16.html' loading='lazy'></iframe></section><section><h2>Learned 2-D Euclidean Duchon sheet</h2><p>R²=0.999; converged=False; ∥grad_t∥=86; decoder reproduction error=5.5e-14. The white object is the actual gamfit decoder evaluated densely.</p><iframe src='sheet_k24.html' loading='lazy'></iframe></section>
+</body>
+</html>
