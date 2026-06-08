@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Order-free color geometry</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(72,112,255,.18), transparent 34rem),
+        radial-gradient(circle at 82% 14%, rgba(255,72,120,.13), transparent 30rem),
+        #080a0f;
+      color: #edf2ff;
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    }
+    main { max-width: 1020px; padding: 42px 38px 64px; }
+    h1 { font-size: 40px; line-height: 1.02; margin: 0 0 12px; }
+    h2 { margin-top: 34px; font-size: 20px; }
+    p { color: #b7c0d5; max-width: 800px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin: 26px 0; }
+    .metric { border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.045); border-radius: 8px; padding: 14px 15px; }
+    .metric b { display: block; font-size: 24px; color: white; }
+    a { display: block; color: #f8fbff; text-decoration: none; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.07); border-radius: 8px; padding: 13px 15px; margin: 9px 0; }
+    a:hover { background: rgba(255,255,255,.12); }
+    table { border-collapse: collapse; margin-top: 12px; width: 100%; }
+    td, th { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.11); }
+    code { background: rgba(255,255,255,.08); border-radius: 5px; padding: 2px 5px; color: white; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Order-free color geometry</h1>
+  <p>RL3.1 final, layer 44. No nearest-color order, no nearest-representation order, no supplied loop parameter.
+  UMAP pages are order-free views. Gamfit pages use <code>gaussian_reml_optimize_latent</code> with <code>basis_kind="duchon"</code>, so gamfit chooses the latent coordinates.</p>
+  <div class="metrics">
+    <div class="metric"><b>15</b><span>core colors</span></div>
+    <div class="metric"><b>90</b><span>prompt replicates</span></div>
+    <div class="metric"><b>72%</b><span>prompt-frame variance</span></div>
+    <div class="metric"><b>9%</b><span>color variance</span></div>
+  </div>
+  <h2>Point-cloud views</h2>
+  <a href="cloud_color_pc3.html">prompt-cleaned color cloud · PC3</a>
+  <a href='umap_cosine_local.html'>umap cosine local</a><a href='umap_cosine_balanced.html'>umap cosine balanced</a><a href='umap_cosine_global.html'>umap cosine global</a><a href='umap_euclidean.html'>umap euclidean</a>
+  <h2>Gamfit order-free latent fits</h2>
+  <p>These are not forced loops. They are learned latent positions. Known gamfit issue #876 may cause periodic latent manifolds to collapse; the table exposes convergence, gradient, and spread.</p>
+  <table><thead><tr><th>fit</th><th>R²</th><th>converged</th><th>grad</th><th>spread</th><th>page</th></tr></thead><tbody>
+  <tr><td>euclidean d=1</td><td>0.995</td><td>False</td><td>3.4e+02</td><td>0.62</td><td><a href='gamfit_latent_euclidean_d1.html'>open</a></td></tr><tr><td>euclidean d=2</td><td>0.650</td><td>False</td><td>15</td><td>0.83</td><td><a href='gamfit_latent_euclidean_d2.html'>open</a></td></tr><tr><td>euclidean d=3</td><td>1.000</td><td>False</td><td>6.7e+02</td><td>1.2</td><td><a href='gamfit_latent_euclidean_d3.html'>open</a></td></tr><tr><td>circle d=1</td><td>0.682</td><td>False</td><td>2e+03</td><td>0.22</td><td><a href='gamfit_latent_circle_d1.html'>open</a></td></tr><tr><td>torus d=2</td><td>0.981</td><td>False</td><td>5e+02</td><td>0.38</td><td><a href='gamfit_latent_torus_d2.html'>open</a></td></tr><tr><td>sphere d=2</td><td>0.827</td><td>False</td><td>2e+02</td><td>0.98</td><td><a href='gamfit_latent_sphere_d2.html'>open</a></td></tr>
+  </tbody></table>
+  <h2>Direct links</h2>
+  <a href='gamfit_latent_euclidean_d1.html'>gamfit latent euclidean d1</a><a href='gamfit_latent_euclidean_d2.html'>gamfit latent euclidean d2</a><a href='gamfit_latent_euclidean_d3.html'>gamfit latent euclidean d3</a><a href='gamfit_latent_circle_d1.html'>gamfit latent circle d1</a><a href='gamfit_latent_torus_d2.html'>gamfit latent torus d2</a><a href='gamfit_latent_sphere_d2.html'>gamfit latent sphere d2</a>
+</main>
+</body>
+</html>

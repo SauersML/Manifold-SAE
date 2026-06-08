@@ -1,0 +1,80 @@
+[
+  {
+    "ok": true,
+    "manifold": "euclidean",
+    "dim": 1,
+    "latent_dim": 1,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.9946515389552665,
+    "reml": -161.06106510715477,
+    "converged": false,
+    "grad_t_norm": 339.47774355873764,
+    "spread": 0.6178885233831806
+  },
+  {
+    "ok": true,
+    "manifold": "euclidean",
+    "dim": 2,
+    "latent_dim": 2,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.6500698054361174,
+    "reml": 23.328126728325508,
+    "converged": false,
+    "grad_t_norm": 14.911490879535785,
+    "spread": 0.829109695838621
+  },
+  {
+    "ok": true,
+    "manifold": "euclidean",
+    "dim": 3,
+    "latent_dim": 3,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.9999999996866636,
+    "reml": -101.17023708831742,
+    "converged": false,
+    "grad_t_norm": 668.4136692160097,
+    "spread": 1.1625673793074973
+  },
+  {
+    "ok": true,
+    "manifold": "circle",
+    "dim": 1,
+    "latent_dim": 1,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.6820819926865269,
+    "reml": -12.533365203854466,
+    "converged": false,
+    "grad_t_norm": 1971.2392192380005,
+    "spread": 0.2227336971892325
+  },
+  {
+    "ok": true,
+    "manifold": "torus",
+    "dim": 2,
+    "latent_dim": 2,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.9807380165498812,
+    "reml": -256.95872998620644,
+    "converged": false,
+    "grad_t_norm": 499.09970919912644,
+    "spread": 0.37560908850420555
+  },
+  {
+    "ok": true,
+    "manifold": "sphere",
+    "dim": 2,
+    "latent_dim": 3,
+    "t": "<array>",
+    "fitted": "<array>",
+    "r2": 0.8268188283690224,
+    "reml": -44.67304995446127,
+    "converged": false,
+    "grad_t_norm": 203.2931950741137,
+    "spread": 0.9756627426445583
+  }
+]
