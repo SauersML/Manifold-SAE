@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Real gamfit Duchon color fits across training</title>
+<style>
+body { margin:0; background:#080a0f; color:#e5edf8; font:15px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif; }
+main { max-width:1160px; margin:0 auto; padding:32px 28px 60px; }
+h1 { font-size:30px; font-weight:650; margin:0 0 8px; }
+h2 { font-size:18px; font-weight:600; margin:26px 0 10px; color:#f8fafc; }
+p { color:#aeb7c8; max-width:920px; }
+video { width:100%; border:1px solid #1e293b; background:#020617; display:block; }
+code { color:#c4b5fd; }
+.note { border-left:3px solid #f59e0b; padding:10px 14px; background:#111827; color:#d7dfed; }
+table { width:100%; border-collapse:collapse; margin-top:22px; font-size:12px; }
+td, th { border-bottom:1px solid #1e293b; padding:7px 6px; text-align:left; }
+th { color:#93a4bd; font-weight:500; }
+</style>
+<main>
+  <h1>Real gamfit Duchon color fits across training</h1>
+  <p>57 actual checkpoints, explicit chronological sort from pretrain stage 1 through final RL3.1. The videos are stepwise over checkpoints: no interpolated manifolds, no UMAP, no nearest-color or nearest-rep tours.</p>
+  <p class="note">The closed loop uses external hue as the periodic coordinate. The no-forced-order gamfit latent fit is shown separately as a diagnostic curve because gamfit currently reports non-convergence for the latent circle optimizer; see SauersML/gam#879.</p>
+  
+        <section>
+          <h2>hue periodic duchon loop</h2>
+          <video controls preload="metadata" src="hue_periodic_duchon_loop.mp4"></video>
+        </section>
+        
+
+        <section>
+          <h2>learned latent duchon curve</h2>
+          <video controls preload="metadata" src="learned_latent_duchon_curve.mp4"></video>
+        </section>
+        
+  <h2>Checkpoint audit</h2>
+  <table><thead><tr><th>#</th><th>label</th><th>source file</th><th>hue-loop R²</th><th>learned R²</th><th>learned converged</th></tr></thead><tbody><tr><td>1</td><td>pretrain-1 step 0</td><td><code>29__OLMO3_32B_TRAJ__stage1-step0.npz</code></td><td>0.001</td><td>0.9459874429988979</td><td>False</td></tr>
+<tr><td>2</td><td>pretrain-1 step 1000</td><td><code>30__OLMO3_32B_TRAJ__stage1-step1000.npz</code></td><td>0.001</td><td>0.9675096845497055</td><td>False</td></tr>
+<tr><td>3</td><td>pretrain-1 step 2000</td><td><code>33__OLMO3_32B_TRAJ__stage1-step2000.npz</code></td><td>0.003</td><td>0.9594141416826731</td><td>False</td></tr>
+<tr><td>4</td><td>pretrain-1 step 5000</td><td><code>37__OLMO3_32B_TRAJ__stage1-step5000.npz</code></td><td>0.385</td><td>0.9100255048134944</td><td>False</td></tr>
+<tr><td>5</td><td>pretrain-1 step 8000</td><td><code>41__OLMO3_32B_TRAJ__stage1-step8000.npz</code></td><td>0.410</td><td>0.8771283110091977</td><td>False</td></tr>
+<tr><td>6</td><td>pretrain-1 step 16000</td><td><code>32__OLMO3_32B_TRAJ__stage1-step16000.npz</code></td><td>0.544</td><td>0.9543404668175317</td><td>False</td></tr>
+<tr><td>7</td><td>pretrain-1 step 32000</td><td><code>35__OLMO3_32B_TRAJ__stage1-step32000.npz</code></td><td>0.551</td><td>0.8333269233905176</td><td>False</td></tr>
+<tr><td>8</td><td>pretrain-1 step 64000</td><td><code>39__OLMO3_32B_TRAJ__stage1-step64000.npz</code></td><td>0.479</td><td>0.9590175513692555</td><td>False</td></tr>
+<tr><td>9</td><td>pretrain-1 step 128000</td><td><code>31__OLMO3_32B_TRAJ__stage1-step128000.npz</code></td><td>0.615</td><td>0.7493216487133747</td><td>False</td></tr>
+<tr><td>10</td><td>pretrain-1 step 256000</td><td><code>34__OLMO3_32B_TRAJ__stage1-step256000.npz</code></td><td>0.498</td><td>0.8426104356401953</td><td>False</td></tr>
+<tr><td>11</td><td>pretrain-1 step 400000</td><td><code>36__OLMO3_32B_TRAJ__stage1-step400000.npz</code></td><td>0.246</td><td>0.8345050598201313</td><td>False</td></tr>
+<tr><td>12</td><td>pretrain-1 step 512000</td><td><code>38__OLMO3_32B_TRAJ__stage1-step512000.npz</code></td><td>0.615</td><td>0.9216418469646158</td><td>False</td></tr>
+<tr><td>13</td><td>pretrain-1 step 656000</td><td><code>40__OLMO3_32B_TRAJ__stage1-step656000.npz</code></td><td>0.638</td><td>0.8761476135247135</td><td>False</td></tr>
+<tr><td>14</td><td>pretrain-2 step 4000</td><td><code>44__OLMO3_32B_TRAJ__stage2-ingredient1-step4000.npz</code></td><td>0.504</td><td>0.9899931917514034</td><td>False</td></tr>
+<tr><td>15</td><td>pretrain-2 step 12000</td><td><code>42__OLMO3_32B_TRAJ__stage2-ingredient1-step12000.npz</code></td><td>0.596</td><td>0.5850797192705868</td><td>False</td></tr>
+<tr><td>16</td><td>pretrain-2 step 23842</td><td><code>43__OLMO3_32B_TRAJ__stage2-ingredient1-step23842.npz</code></td><td>0.590</td><td>0.7649416910576877</td><td>False</td></tr>
+<tr><td>17</td><td>pretrain-3 step 4000</td><td><code>46__OLMO3_32B_TRAJ__stage3-step4000.npz</code></td><td>0.588</td><td>0.9385651172194178</td><td>False</td></tr>
+<tr><td>18</td><td>pretrain-3 step 11921</td><td><code>45__OLMO3_32B_TRAJ__stage3-step11921.npz</code></td><td>0.471</td><td>0.9233710777717379</td><td>False</td></tr>
+<tr><td>19</td><td>SFT step 1000</td><td><code>47__OLMO3_32B_TRAJ_SFT__5e-5-step1000.npz</code></td><td>0.488</td><td>0.9157099028636675</td><td>False</td></tr>
+<tr><td>20</td><td>SFT step 2000</td><td><code>50__OLMO3_32B_TRAJ_SFT__5e-5-step2000.npz</code></td><td>0.475</td><td>0.7450881222914534</td><td>False</td></tr>
+<tr><td>21</td><td>SFT step 3000</td><td><code>51__OLMO3_32B_TRAJ_SFT__5e-5-step3000.npz</code></td><td>0.474</td><td>0.9264191267123557</td><td>False</td></tr>
+<tr><td>22</td><td>SFT step 4000</td><td><code>52__OLMO3_32B_TRAJ_SFT__5e-5-step4000.npz</code></td><td>0.465</td><td>0.9794350288143389</td><td>False</td></tr>
+<tr><td>23</td><td>SFT step 5000</td><td><code>53__OLMO3_32B_TRAJ_SFT__5e-5-step5000.npz</code></td><td>0.469</td><td>0.8208904930821344</td><td>False</td></tr>
+<tr><td>24</td><td>SFT step 6000</td><td><code>54__OLMO3_32B_TRAJ_SFT__5e-5-step6000.npz</code></td><td>0.470</td><td>0.7909045292501284</td><td>False</td></tr>
+<tr><td>25</td><td>SFT step 7000</td><td><code>55__OLMO3_32B_TRAJ_SFT__5e-5-step7000.npz</code></td><td>0.473</td><td>0.9007024272139778</td><td>False</td></tr>
+<tr><td>26</td><td>SFT step 8000</td><td><code>56__OLMO3_32B_TRAJ_SFT__5e-5-step8000.npz</code></td><td>0.460</td><td>0.8946298130749872</td><td>False</td></tr>
+<tr><td>27</td><td>SFT step 9000</td><td><code>57__OLMO3_32B_TRAJ_SFT__5e-5-step9000.npz</code></td><td>0.472</td><td>0.9057203075314425</td><td>False</td></tr>
+<tr><td>28</td><td>SFT step 10000</td><td><code>48__OLMO3_32B_TRAJ_SFT__5e-5-step10000.npz</code></td><td>0.468</td><td>0.7549455277802395</td><td>False</td></tr>
+<tr><td>29</td><td>SFT step 10790</td><td><code>49__OLMO3_32B_TRAJ_SFT__5e-5-step10790.npz</code></td><td>0.469</td><td>0.8491868788891235</td><td>False</td></tr>
+<tr><td>30</td><td>DPO</td><td><code>01__OLMO3_32B_TRAJ_DPO__main.npz</code></td><td>0.459</td><td>0.9832173480990508</td><td>False</td></tr>
+<tr><td>31</td><td>RL3.0 step 50</td><td><code>02__OLMO3_32B_TRAJ_RL__step_050.npz</code></td><td>0.459</td><td>0.8532500119197768</td><td>False</td></tr>
+<tr><td>32</td><td>RL3.0 step 100</td><td><code>03__OLMO3_32B_TRAJ_RL__step_100.npz</code></td><td>0.459</td><td>0.980746233386711</td><td>False</td></tr>
+<tr><td>33</td><td>RL3.0 step 150</td><td><code>04__OLMO3_32B_TRAJ_RL__step_150.npz</code></td><td>0.460</td><td>0.8574338819958546</td><td>False</td></tr>
+<tr><td>34</td><td>RL3.0 step 200</td><td><code>05__OLMO3_32B_TRAJ_RL__step_200.npz</code></td><td>0.459</td><td>0.8279042588059987</td><td>False</td></tr>
+<tr><td>35</td><td>RL3.0 step 250</td><td><code>06__OLMO3_32B_TRAJ_RL__step_250.npz</code></td><td>0.459</td><td>0.9853372943871063</td><td>False</td></tr>
+<tr><td>36</td><td>RL3.0 step 300</td><td><code>07__OLMO3_32B_TRAJ_RL__step_300.npz</code></td><td>0.460</td><td>0.7728251584091045</td><td>False</td></tr>
+<tr><td>37</td><td>RL3.0 step 350</td><td><code>08__OLMO3_32B_TRAJ_RL__step_350.npz</code></td><td>0.460</td><td>0.8721442452709033</td><td>False</td></tr>
+<tr><td>38</td><td>RL3.0 step 400</td><td><code>09__OLMO3_32B_TRAJ_RL__step_400.npz</code></td><td>0.461</td><td>0.9799360334420547</td><td>False</td></tr>
+<tr><td>39</td><td>RL3.0 step 450</td><td><code>10__OLMO3_32B_TRAJ_RL__step_450.npz</code></td><td>0.460</td><td>0.9760586456043806</td><td>False</td></tr>
+<tr><td>40</td><td>RL3.0 step 500</td><td><code>11__OLMO3_32B_TRAJ_RL__step_500.npz</code></td><td>0.460</td><td>0.9839416146409969</td><td>False</td></tr>
+<tr><td>41</td><td>RL3.0 step 550</td><td><code>12__OLMO3_32B_TRAJ_RL__step_550.npz</code></td><td>0.460</td><td>0.9802368086740576</td><td>False</td></tr>
+<tr><td>42</td><td>RL3.0 step 600</td><td><code>13__OLMO3_32B_TRAJ_RL__step_600.npz</code></td><td>0.460</td><td>0.6760875174409013</td><td>False</td></tr>
+<tr><td>43</td><td>RL3.0 step 650</td><td><code>14__OLMO3_32B_TRAJ_RL__step_650.npz</code></td><td>0.460</td><td>0.9701867332566698</td><td>False</td></tr>
+<tr><td>44</td><td>RL3.0 step 700</td><td><code>15__OLMO3_32B_TRAJ_RL__step_700.npz</code></td><td>0.459</td><td>0.9837271326602106</td><td>False</td></tr>
+<tr><td>45</td><td>RL3.0 step 750</td><td><code>16__OLMO3_32B_TRAJ_RL__step_750.npz</code></td><td>0.459</td><td>0.9209351035743134</td><td>False</td></tr>
+<tr><td>46</td><td>RL3.1 step 50</td><td><code>17__OLMO3_32B_TRAJ_RL31__step_0050.npz</code></td><td>0.459</td><td>0.8532500119197768</td><td>False</td></tr>
+<tr><td>47</td><td>RL3.1 step 250</td><td><code>18__OLMO3_32B_TRAJ_RL31__step_0250.npz</code></td><td>0.459</td><td>0.9853372943871063</td><td>False</td></tr>
+<tr><td>48</td><td>RL3.1 step 450</td><td><code>19__OLMO3_32B_TRAJ_RL31__step_0450.npz</code></td><td>0.460</td><td>0.9760586456043806</td><td>False</td></tr>
+<tr><td>49</td><td>RL3.1 step 650</td><td><code>20__OLMO3_32B_TRAJ_RL31__step_0650.npz</code></td><td>0.460</td><td>0.9701867332566698</td><td>False</td></tr>
+<tr><td>50</td><td>RL3.1 step 850</td><td><code>21__OLMO3_32B_TRAJ_RL31__step_0850.npz</code></td><td>0.459</td><td>0.9806101866521582</td><td>False</td></tr>
+<tr><td>51</td><td>RL3.1 step 1050</td><td><code>22__OLMO3_32B_TRAJ_RL31__step_1050.npz</code></td><td>0.459</td><td>0.9859061935676897</td><td>False</td></tr>
+<tr><td>52</td><td>RL3.1 step 1300</td><td><code>23__OLMO3_32B_TRAJ_RL31__step_1300.npz</code></td><td>0.458</td><td>0.9876025218226809</td><td>False</td></tr>
+<tr><td>53</td><td>RL3.1 step 1500</td><td><code>24__OLMO3_32B_TRAJ_RL31__step_1500.npz</code></td><td>0.458</td><td>0.9837833575967467</td><td>False</td></tr>
+<tr><td>54</td><td>RL3.1 step 1700</td><td><code>25__OLMO3_32B_TRAJ_RL31__step_1700.npz</code></td><td>0.458</td><td>0.9841804336585058</td><td>False</td></tr>
+<tr><td>55</td><td>RL3.1 step 1900</td><td><code>26__OLMO3_32B_TRAJ_RL31__step_1900.npz</code></td><td>0.458</td><td>0.771860804195424</td><td>False</td></tr>
+<tr><td>56</td><td>RL3.1 step 2100</td><td><code>27__OLMO3_32B_TRAJ_RL31__step_2100.npz</code></td><td>0.460</td><td>0.972517258476661</td><td>False</td></tr>
+<tr><td>57</td><td>RL3.1 step 2300</td><td><code>28__OLMO3_32B_TRAJ_RL31__step_2300.npz</code></td><td>0.460</td><td>0.9334520365625664</td><td>False</td></tr></tbody></table>
+</main>

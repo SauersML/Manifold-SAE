@@ -1,0 +1,1148 @@
+[
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "I always go grocery shopping on Monday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "I always go grocery shopping on Tuesday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "I always go grocery shopping on Wednesday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "I always go grocery shopping on Thursday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "I always go grocery shopping on Friday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "I always go grocery shopping on Saturday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "I always go grocery shopping on Sunday after work because the store is quieter.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "Our weekly standup happens every Monday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "Our weekly standup happens every Tuesday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "Our weekly standup happens every Wednesday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "Our weekly standup happens every Thursday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "Our weekly standup happens every Friday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "Our weekly standup happens every Saturday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "Our weekly standup happens every Sunday at 10am sharp without exception.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "She told me she was born on a Monday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "She told me she was born on a Tuesday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "She told me she was born on a Wednesday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "She told me she was born on a Thursday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "She told me she was born on a Friday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "She told me she was born on a Saturday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "She told me she was born on a Sunday during the worst storm that decade.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "The farmers market only opens on Monday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "The farmers market only opens on Tuesday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "The farmers market only opens on Wednesday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "The farmers market only opens on Thursday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "The farmers market only opens on Friday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "The farmers market only opens on Saturday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "The farmers market only opens on Sunday, so plan accordingly if you want fresh produce.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "By Monday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "By Tuesday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "By Wednesday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "By Thursday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "By Friday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "By Saturday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "By Sunday the deadline had already passed and the project was officially overdue.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "He insists that Monday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "He insists that Tuesday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "He insists that Wednesday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "He insists that Thursday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "He insists that Friday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "He insists that Saturday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "He insists that Sunday is the worst day of the week for scheduling meetings.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Monday",
+    "prompt": "Monday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Tuesday",
+    "prompt": "Tuesday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "Wednesday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Thursday",
+    "prompt": "Thursday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Friday",
+    "prompt": "Friday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Saturday",
+    "prompt": "Saturday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Sunday",
+    "prompt": "Sunday is when the recycling truck comes by, so put the bins out the night before.",
+    "target_token_index": -1
+  },
+  {
+    "category": "days",
+    "value": "Wednesday",
+    "prompt": "Hump day, also known as Wednesday, is supposedly the midpoint of the working week.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "January",
+    "prompt": "We always vacation in January because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "February",
+    "prompt": "We always vacation in February because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "March",
+    "prompt": "We always vacation in March because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "April",
+    "prompt": "We always vacation in April because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "May",
+    "prompt": "We always vacation in May because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "June",
+    "prompt": "We always vacation in June because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "July",
+    "prompt": "We always vacation in July because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "August",
+    "prompt": "We always vacation in August because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "September",
+    "prompt": "We always vacation in September because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "October",
+    "prompt": "We always vacation in October because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "November",
+    "prompt": "We always vacation in November because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "December",
+    "prompt": "We always vacation in December because the weather is finally tolerable then.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "January",
+    "prompt": "The fiscal year wraps up at the end of January and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "February",
+    "prompt": "The fiscal year wraps up at the end of February and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "March",
+    "prompt": "The fiscal year wraps up at the end of March and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "April",
+    "prompt": "The fiscal year wraps up at the end of April and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "May",
+    "prompt": "The fiscal year wraps up at the end of May and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "June",
+    "prompt": "The fiscal year wraps up at the end of June and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "July",
+    "prompt": "The fiscal year wraps up at the end of July and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "August",
+    "prompt": "The fiscal year wraps up at the end of August and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "September",
+    "prompt": "The fiscal year wraps up at the end of September and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "October",
+    "prompt": "The fiscal year wraps up at the end of October and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "November",
+    "prompt": "The fiscal year wraps up at the end of November and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "December",
+    "prompt": "The fiscal year wraps up at the end of December and the auditors arrive shortly after.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "January",
+    "prompt": "Tomatoes from the garden peak in January, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "February",
+    "prompt": "Tomatoes from the garden peak in February, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "March",
+    "prompt": "Tomatoes from the garden peak in March, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "April",
+    "prompt": "Tomatoes from the garden peak in April, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "May",
+    "prompt": "Tomatoes from the garden peak in May, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "June",
+    "prompt": "Tomatoes from the garden peak in June, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "July",
+    "prompt": "Tomatoes from the garden peak in July, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "August",
+    "prompt": "Tomatoes from the garden peak in August, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "September",
+    "prompt": "Tomatoes from the garden peak in September, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "October",
+    "prompt": "Tomatoes from the garden peak in October, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "November",
+    "prompt": "Tomatoes from the garden peak in November, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "December",
+    "prompt": "Tomatoes from the garden peak in December, and after that they get mealy and sad.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "January",
+    "prompt": "She was born in January during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "February",
+    "prompt": "She was born in February during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "March",
+    "prompt": "She was born in March during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "April",
+    "prompt": "She was born in April during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "May",
+    "prompt": "She was born in May during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "June",
+    "prompt": "She was born in June during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "July",
+    "prompt": "She was born in July during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "August",
+    "prompt": "She was born in August during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "September",
+    "prompt": "She was born in September during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "October",
+    "prompt": "She was born in October during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "November",
+    "prompt": "She was born in November during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "December",
+    "prompt": "She was born in December during a remarkable cold snap that locals still talk about.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "July",
+    "prompt": "Fireworks in July light up the entire neighborhood every single year.",
+    "target_token_index": -1
+  },
+  {
+    "category": "months",
+    "value": "December",
+    "prompt": "By late December the snow is usually piled three feet deep in the driveway.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "A",
+    "prompt": "His last name starts with the letter A, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "B",
+    "prompt": "His last name starts with the letter B, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "C",
+    "prompt": "His last name starts with the letter C, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "D",
+    "prompt": "His last name starts with the letter D, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "E",
+    "prompt": "His last name starts with the letter E, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "F",
+    "prompt": "His last name starts with the letter F, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "G",
+    "prompt": "His last name starts with the letter G, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "H",
+    "prompt": "His last name starts with the letter H, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "I",
+    "prompt": "His last name starts with the letter I, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "J",
+    "prompt": "His last name starts with the letter J, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "K",
+    "prompt": "His last name starts with the letter K, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "L",
+    "prompt": "His last name starts with the letter L, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "M",
+    "prompt": "His last name starts with the letter M, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "N",
+    "prompt": "His last name starts with the letter N, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "O",
+    "prompt": "His last name starts with the letter O, which always confused the substitute teachers.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "A",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group A.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "B",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group B.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "C",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group C.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "D",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group D.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "E",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group E.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "F",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group F.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "G",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group G.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "H",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group H.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "I",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group I.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "J",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group J.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "K",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group K.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "L",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group L.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "M",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group M.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "N",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group N.",
+    "target_token_index": -1
+  },
+  {
+    "category": "letters",
+    "value": "O",
+    "prompt": "The classroom was divided into groups labeled by letter, and I was placed in group O.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "3",
+    "prompt": "My nephew just turned 3 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "7",
+    "prompt": "My nephew just turned 7 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "12",
+    "prompt": "My nephew just turned 12 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "18",
+    "prompt": "My nephew just turned 18 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "25",
+    "prompt": "My nephew just turned 25 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "33",
+    "prompt": "My nephew just turned 33 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "42",
+    "prompt": "My nephew just turned 42 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "50",
+    "prompt": "My nephew just turned 50 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "65",
+    "prompt": "My nephew just turned 65 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "77",
+    "prompt": "My nephew just turned 77 and is already taller than his father.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "3",
+    "prompt": "There were exactly 3 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "7",
+    "prompt": "There were exactly 7 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "12",
+    "prompt": "There were exactly 12 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "18",
+    "prompt": "There were exactly 18 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "25",
+    "prompt": "There were exactly 25 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "33",
+    "prompt": "There were exactly 33 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "42",
+    "prompt": "There were exactly 42 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "50",
+    "prompt": "There were exactly 50 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "65",
+    "prompt": "There were exactly 65 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "77",
+    "prompt": "There were exactly 77 people in the waiting room when I finally got called in.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "3",
+    "prompt": "She finished the race in position 3, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "7",
+    "prompt": "She finished the race in position 7, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "12",
+    "prompt": "She finished the race in position 12, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "18",
+    "prompt": "She finished the race in position 18, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "25",
+    "prompt": "She finished the race in position 25, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "33",
+    "prompt": "She finished the race in position 33, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "42",
+    "prompt": "She finished the race in position 42, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "50",
+    "prompt": "She finished the race in position 50, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "65",
+    "prompt": "She finished the race in position 65, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "numbers",
+    "value": "77",
+    "prompt": "She finished the race in position 77, just barely missing the podium.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "North",
+    "prompt": "We drove North for three hours before stopping at a roadside diner for breakfast.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "East",
+    "prompt": "We drove East for three hours before stopping at a roadside diner for breakfast.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "South",
+    "prompt": "We drove South for three hours before stopping at a roadside diner for breakfast.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "West",
+    "prompt": "We drove West for three hours before stopping at a roadside diner for breakfast.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "North",
+    "prompt": "The cabin faces North, which means the porch gets sun all afternoon.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "East",
+    "prompt": "The cabin faces East, which means the porch gets sun all afternoon.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "South",
+    "prompt": "The cabin faces South, which means the porch gets sun all afternoon.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "West",
+    "prompt": "The cabin faces West, which means the porch gets sun all afternoon.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "North",
+    "prompt": "Strong winds from the North have been battering the coast since Tuesday.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "East",
+    "prompt": "Strong winds from the East have been battering the coast since Tuesday.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "South",
+    "prompt": "Strong winds from the South have been battering the coast since Tuesday.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "West",
+    "prompt": "Strong winds from the West have been battering the coast since Tuesday.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "North",
+    "prompt": "Head North until you see the old red barn, then take the next left.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "East",
+    "prompt": "Head East until you see the old red barn, then take the next left.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "South",
+    "prompt": "Head South until you see the old red barn, then take the next left.",
+    "target_token_index": -1
+  },
+  {
+    "category": "directions",
+    "value": "West",
+    "prompt": "Head West until you see the old red barn, then take the next left.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "do",
+    "prompt": "The choir warmed up by holding a long do until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "re",
+    "prompt": "The choir warmed up by holding a long re until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "mi",
+    "prompt": "The choir warmed up by holding a long mi until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "fa",
+    "prompt": "The choir warmed up by holding a long fa until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "sol",
+    "prompt": "The choir warmed up by holding a long sol until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "la",
+    "prompt": "The choir warmed up by holding a long la until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "ti",
+    "prompt": "The choir warmed up by holding a long ti until everyone was breathing together.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "do",
+    "prompt": "She nailed the high do in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "re",
+    "prompt": "She nailed the high re in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "mi",
+    "prompt": "She nailed the high mi in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "fa",
+    "prompt": "She nailed the high fa in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "sol",
+    "prompt": "She nailed the high sol in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "la",
+    "prompt": "She nailed the high la in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "ti",
+    "prompt": "She nailed the high ti in the second verse and the whole hall went quiet.",
+    "target_token_index": -1
+  },
+  {
+    "category": "notes",
+    "value": "do",
+    "prompt": "Every scale begins on do and climbs upward through the familiar seven steps.",
+    "target_token_index": -1
+  }
+]

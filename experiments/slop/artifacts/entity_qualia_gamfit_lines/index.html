@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Entity and qualia Duchon lines</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; background:#080a0f; color:#edf2ff; font:15px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif; }
+    header { padding:34px 38px 12px; max-width:980px; }
+    h1 { font-size:40px; line-height:1.04; margin:0 0 12px; }
+    p { color:#b8c1d6; max-width:880px; }
+    code { background:rgba(255,255,255,.08); color:white; padding:2px 5px; border-radius:5px; }
+    table { margin-top:20px; border-collapse:collapse; width:100%; max-width:760px; }
+    th,td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.12); text-align:left; }
+    section { padding:22px 26px 44px; border-top:1px solid rgba(255,255,255,.11); }
+    section h2 { margin:0 0 6px 12px; font-size:22px; }
+    iframe { display:block; width:100%; height:760px; border:0; border-radius:10px; background:#080a0f; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Entity and qualia gamfit lines</h1>
+    <p>Actual 1-D Duchon decoder lines, with smoothing selected by gamfit REML. The entity line uses
+    exp/noexp pair midpoints before kind aggregation; the qualia line uses the anchor-relative qualia coordinate.
+    Line color encodes qualia coordinate.</p>
+    <table><thead><tr><th>fit</th><th>n</th><th>R²</th><th>EDF</th><th>λ</th></tr></thead><tbody>
+      <tr><td>entity</td><td>34</td><td>0.541</td><td>10.6</td><td>507</td></tr>
+      <tr><td>qualia</td><td>508</td><td>0.351</td><td>3.7</td><td>0.221</td></tr>
+    </tbody></table>
+  </header>
+  <section><h2>Entity manifold</h2><iframe src="entity_duchon_line.html" loading="lazy"></iframe></section>
+  <section><h2>Qualia manifold</h2><iframe src="qualia_duchon_line.html" loading="lazy"></iframe></section>
+</body>
+</html>

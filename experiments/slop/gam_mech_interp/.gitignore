@@ -1,0 +1,14 @@
+# Local virtualenv + Rust build output — env-specific
+venv/
+target/
+
+# Large captured artifacts (regenerable by re-running the pipeline)
+data/profile.json
+data/tok/activations.npz
+data/tok/events_meta.npz
+data/tok/stream.npz
+data/tok/lm.pt
+data/tok/sae.pt
+
+# Per-run logs
+data/*.log

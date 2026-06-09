@@ -1,0 +1,180 @@
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 0, "prompt": "Consider the color red", "id": 0}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 1, "prompt": "Think carefully about the color red", "id": 1}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 2, "prompt": "On the screen a patch of pure red appeared and held steady", "id": 2}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 3, "prompt": "From the set of paints she chose red and studied it closely", "id": 3}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 4, "prompt": "The label on the sample read red, plain and clear", "id": 4}
+{"role": "color", "color": "red", "hex": "#e50000", "rgb": [229, 0, 0], "frame": 5, "prompt": "Of all the shades on the chart, the one called red drew the eye", "id": 5}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 0, "prompt": "Consider the color orange", "id": 6}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 1, "prompt": "Think carefully about the color orange", "id": 7}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 2, "prompt": "On the screen a patch of pure orange appeared and held steady", "id": 8}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 3, "prompt": "From the set of paints she chose orange and studied it closely", "id": 9}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 4, "prompt": "The label on the sample read orange, plain and clear", "id": 10}
+{"role": "color", "color": "orange", "hex": "#f97306", "rgb": [249, 115, 6], "frame": 5, "prompt": "Of all the shades on the chart, the one called orange drew the eye", "id": 11}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 0, "prompt": "Consider the color yellow", "id": 12}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 1, "prompt": "Think carefully about the color yellow", "id": 13}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 2, "prompt": "On the screen a patch of pure yellow appeared and held steady", "id": 14}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 3, "prompt": "From the set of paints she chose yellow and studied it closely", "id": 15}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 4, "prompt": "The label on the sample read yellow, plain and clear", "id": 16}
+{"role": "color", "color": "yellow", "hex": "#ffff14", "rgb": [255, 255, 20], "frame": 5, "prompt": "Of all the shades on the chart, the one called yellow drew the eye", "id": 17}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 0, "prompt": "Consider the color green", "id": 18}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 1, "prompt": "Think carefully about the color green", "id": 19}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 2, "prompt": "On the screen a patch of pure green appeared and held steady", "id": 20}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 3, "prompt": "From the set of paints she chose green and studied it closely", "id": 21}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 4, "prompt": "The label on the sample read green, plain and clear", "id": 22}
+{"role": "color", "color": "green", "hex": "#15b01a", "rgb": [21, 176, 26], "frame": 5, "prompt": "Of all the shades on the chart, the one called green drew the eye", "id": 23}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 0, "prompt": "Consider the color blue", "id": 24}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 1, "prompt": "Think carefully about the color blue", "id": 25}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 2, "prompt": "On the screen a patch of pure blue appeared and held steady", "id": 26}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 3, "prompt": "From the set of paints she chose blue and studied it closely", "id": 27}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 4, "prompt": "The label on the sample read blue, plain and clear", "id": 28}
+{"role": "color", "color": "blue", "hex": "#0343df", "rgb": [3, 67, 223], "frame": 5, "prompt": "Of all the shades on the chart, the one called blue drew the eye", "id": 29}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 0, "prompt": "Consider the color purple", "id": 30}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 1, "prompt": "Think carefully about the color purple", "id": 31}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 2, "prompt": "On the screen a patch of pure purple appeared and held steady", "id": 32}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 3, "prompt": "From the set of paints she chose purple and studied it closely", "id": 33}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 4, "prompt": "The label on the sample read purple, plain and clear", "id": 34}
+{"role": "color", "color": "purple", "hex": "#7e1e9c", "rgb": [126, 30, 156], "frame": 5, "prompt": "Of all the shades on the chart, the one called purple drew the eye", "id": 35}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 0, "prompt": "Consider the color pink", "id": 36}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 1, "prompt": "Think carefully about the color pink", "id": 37}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 2, "prompt": "On the screen a patch of pure pink appeared and held steady", "id": 38}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 3, "prompt": "From the set of paints she chose pink and studied it closely", "id": 39}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 4, "prompt": "The label on the sample read pink, plain and clear", "id": 40}
+{"role": "color", "color": "pink", "hex": "#ff81c0", "rgb": [255, 129, 192], "frame": 5, "prompt": "Of all the shades on the chart, the one called pink drew the eye", "id": 41}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 0, "prompt": "Consider the color brown", "id": 42}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 1, "prompt": "Think carefully about the color brown", "id": 43}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 2, "prompt": "On the screen a patch of pure brown appeared and held steady", "id": 44}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 3, "prompt": "From the set of paints she chose brown and studied it closely", "id": 45}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 4, "prompt": "The label on the sample read brown, plain and clear", "id": 46}
+{"role": "color", "color": "brown", "hex": "#653700", "rgb": [101, 55, 0], "frame": 5, "prompt": "Of all the shades on the chart, the one called brown drew the eye", "id": 47}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 0, "prompt": "Consider the color black", "id": 48}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 1, "prompt": "Think carefully about the color black", "id": 49}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 2, "prompt": "On the screen a patch of pure black appeared and held steady", "id": 50}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 3, "prompt": "From the set of paints she chose black and studied it closely", "id": 51}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 4, "prompt": "The label on the sample read black, plain and clear", "id": 52}
+{"role": "color", "color": "black", "hex": "#000000", "rgb": [0, 0, 0], "frame": 5, "prompt": "Of all the shades on the chart, the one called black drew the eye", "id": 53}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 0, "prompt": "Consider the color white", "id": 54}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 1, "prompt": "Think carefully about the color white", "id": 55}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 2, "prompt": "On the screen a patch of pure white appeared and held steady", "id": 56}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 3, "prompt": "From the set of paints she chose white and studied it closely", "id": 57}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 4, "prompt": "The label on the sample read white, plain and clear", "id": 58}
+{"role": "color", "color": "white", "hex": "#ffffff", "rgb": [255, 255, 255], "frame": 5, "prompt": "Of all the shades on the chart, the one called white drew the eye", "id": 59}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 0, "prompt": "Consider the color grey", "id": 60}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 1, "prompt": "Think carefully about the color grey", "id": 61}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 2, "prompt": "On the screen a patch of pure grey appeared and held steady", "id": 62}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 3, "prompt": "From the set of paints she chose grey and studied it closely", "id": 63}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 4, "prompt": "The label on the sample read grey, plain and clear", "id": 64}
+{"role": "color", "color": "grey", "hex": "#929591", "rgb": [146, 149, 145], "frame": 5, "prompt": "Of all the shades on the chart, the one called grey drew the eye", "id": 65}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 0, "prompt": "Consider the color cyan", "id": 66}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 1, "prompt": "Think carefully about the color cyan", "id": 67}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 2, "prompt": "On the screen a patch of pure cyan appeared and held steady", "id": 68}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 3, "prompt": "From the set of paints she chose cyan and studied it closely", "id": 69}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 4, "prompt": "The label on the sample read cyan, plain and clear", "id": 70}
+{"role": "color", "color": "cyan", "hex": "#00ffff", "rgb": [0, 255, 255], "frame": 5, "prompt": "Of all the shades on the chart, the one called cyan drew the eye", "id": 71}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 0, "prompt": "Consider the color magenta", "id": 72}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 1, "prompt": "Think carefully about the color magenta", "id": 73}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 2, "prompt": "On the screen a patch of pure magenta appeared and held steady", "id": 74}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 3, "prompt": "From the set of paints she chose magenta and studied it closely", "id": 75}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 4, "prompt": "The label on the sample read magenta, plain and clear", "id": 76}
+{"role": "color", "color": "magenta", "hex": "#c20078", "rgb": [194, 0, 120], "frame": 5, "prompt": "Of all the shades on the chart, the one called magenta drew the eye", "id": 77}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 0, "prompt": "Consider the color teal", "id": 78}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 1, "prompt": "Think carefully about the color teal", "id": 79}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 2, "prompt": "On the screen a patch of pure teal appeared and held steady", "id": 80}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 3, "prompt": "From the set of paints she chose teal and studied it closely", "id": 81}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 4, "prompt": "The label on the sample read teal, plain and clear", "id": 82}
+{"role": "color", "color": "teal", "hex": "#029386", "rgb": [2, 147, 134], "frame": 5, "prompt": "Of all the shades on the chart, the one called teal drew the eye", "id": 83}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 0, "prompt": "Consider the color maroon", "id": 84}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 1, "prompt": "Think carefully about the color maroon", "id": 85}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 2, "prompt": "On the screen a patch of pure maroon appeared and held steady", "id": 86}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 3, "prompt": "From the set of paints she chose maroon and studied it closely", "id": 87}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 4, "prompt": "The label on the sample read maroon, plain and clear", "id": 88}
+{"role": "color", "color": "maroon", "hex": "#650021", "rgb": [101, 0, 33], "frame": 5, "prompt": "Of all the shades on the chart, the one called maroon drew the eye", "id": 89}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 0, "prompt": "Consider the color navy", "id": 90}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 1, "prompt": "Think carefully about the color navy", "id": 91}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 2, "prompt": "On the screen a patch of pure navy appeared and held steady", "id": 92}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 3, "prompt": "From the set of paints she chose navy and studied it closely", "id": 93}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 4, "prompt": "The label on the sample read navy, plain and clear", "id": 94}
+{"role": "color", "color": "navy", "hex": "#01153e", "rgb": [1, 21, 62], "frame": 5, "prompt": "Of all the shades on the chart, the one called navy drew the eye", "id": 95}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 0, "prompt": "Consider the color olive", "id": 96}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 1, "prompt": "Think carefully about the color olive", "id": 97}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 2, "prompt": "On the screen a patch of pure olive appeared and held steady", "id": 98}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 3, "prompt": "From the set of paints she chose olive and studied it closely", "id": 99}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 4, "prompt": "The label on the sample read olive, plain and clear", "id": 100}
+{"role": "color", "color": "olive", "hex": "#6e750e", "rgb": [110, 117, 14], "frame": 5, "prompt": "Of all the shades on the chart, the one called olive drew the eye", "id": 101}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 0, "prompt": "Consider the color beige", "id": 102}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 1, "prompt": "Think carefully about the color beige", "id": 103}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 2, "prompt": "On the screen a patch of pure beige appeared and held steady", "id": 104}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 3, "prompt": "From the set of paints she chose beige and studied it closely", "id": 105}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 4, "prompt": "The label on the sample read beige, plain and clear", "id": 106}
+{"role": "color", "color": "beige", "hex": "#e6daa6", "rgb": [230, 218, 166], "frame": 5, "prompt": "Of all the shades on the chart, the one called beige drew the eye", "id": 107}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 0, "prompt": "Consider the color turquoise", "id": 108}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 1, "prompt": "Think carefully about the color turquoise", "id": 109}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 2, "prompt": "On the screen a patch of pure turquoise appeared and held steady", "id": 110}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 3, "prompt": "From the set of paints she chose turquoise and studied it closely", "id": 111}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 4, "prompt": "The label on the sample read turquoise, plain and clear", "id": 112}
+{"role": "color", "color": "turquoise", "hex": "#06c2ac", "rgb": [6, 194, 172], "frame": 5, "prompt": "Of all the shades on the chart, the one called turquoise drew the eye", "id": 113}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 0, "prompt": "Consider the color lavender", "id": 114}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 1, "prompt": "Think carefully about the color lavender", "id": 115}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 2, "prompt": "On the screen a patch of pure lavender appeared and held steady", "id": 116}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 3, "prompt": "From the set of paints she chose lavender and studied it closely", "id": 117}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 4, "prompt": "The label on the sample read lavender, plain and clear", "id": 118}
+{"role": "color", "color": "lavender", "hex": "#c79fef", "rgb": [199, 159, 239], "frame": 5, "prompt": "Of all the shades on the chart, the one called lavender drew the eye", "id": 119}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 0, "prompt": "Consider the color gold", "id": 120}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 1, "prompt": "Think carefully about the color gold", "id": 121}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 2, "prompt": "On the screen a patch of pure gold appeared and held steady", "id": 122}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 3, "prompt": "From the set of paints she chose gold and studied it closely", "id": 123}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 4, "prompt": "The label on the sample read gold, plain and clear", "id": 124}
+{"role": "color", "color": "gold", "hex": "#dbb40c", "rgb": [219, 180, 12], "frame": 5, "prompt": "Of all the shades on the chart, the one called gold drew the eye", "id": 125}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 0, "prompt": "Consider the color violet", "id": 126}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 1, "prompt": "Think carefully about the color violet", "id": 127}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 2, "prompt": "On the screen a patch of pure violet appeared and held steady", "id": 128}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 3, "prompt": "From the set of paints she chose violet and studied it closely", "id": 129}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 4, "prompt": "The label on the sample read violet, plain and clear", "id": 130}
+{"role": "color", "color": "violet", "hex": "#9a0eea", "rgb": [154, 14, 234], "frame": 5, "prompt": "Of all the shades on the chart, the one called violet drew the eye", "id": 131}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 0, "prompt": "Consider the color tan", "id": 132}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 1, "prompt": "Think carefully about the color tan", "id": 133}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 2, "prompt": "On the screen a patch of pure tan appeared and held steady", "id": 134}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 3, "prompt": "From the set of paints she chose tan and studied it closely", "id": 135}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 4, "prompt": "The label on the sample read tan, plain and clear", "id": 136}
+{"role": "color", "color": "tan", "hex": "#d1b26f", "rgb": [209, 178, 111], "frame": 5, "prompt": "Of all the shades on the chart, the one called tan drew the eye", "id": 137}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 0, "prompt": "Consider the color coral", "id": 138}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 1, "prompt": "Think carefully about the color coral", "id": 139}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 2, "prompt": "On the screen a patch of pure coral appeared and held steady", "id": 140}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 3, "prompt": "From the set of paints she chose coral and studied it closely", "id": 141}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 4, "prompt": "The label on the sample read coral, plain and clear", "id": 142}
+{"role": "color", "color": "coral", "hex": "#fc5a50", "rgb": [252, 90, 80], "frame": 5, "prompt": "Of all the shades on the chart, the one called coral drew the eye", "id": 143}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 0, "prompt": "Consider the color salmon", "id": 144}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 1, "prompt": "Think carefully about the color salmon", "id": 145}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 2, "prompt": "On the screen a patch of pure salmon appeared and held steady", "id": 146}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 3, "prompt": "From the set of paints she chose salmon and studied it closely", "id": 147}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 4, "prompt": "The label on the sample read salmon, plain and clear", "id": 148}
+{"role": "color", "color": "salmon", "hex": "#ff796c", "rgb": [255, 121, 108], "frame": 5, "prompt": "Of all the shades on the chart, the one called salmon drew the eye", "id": 149}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 0, "prompt": "Consider the color mint", "id": 150}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 1, "prompt": "Think carefully about the color mint", "id": 151}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 2, "prompt": "On the screen a patch of pure mint appeared and held steady", "id": 152}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 3, "prompt": "From the set of paints she chose mint and studied it closely", "id": 153}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 4, "prompt": "The label on the sample read mint, plain and clear", "id": 154}
+{"role": "color", "color": "mint", "hex": "#9ffeb0", "rgb": [159, 254, 176], "frame": 5, "prompt": "Of all the shades on the chart, the one called mint drew the eye", "id": 155}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 0, "prompt": "Consider the color peach", "id": 156}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 1, "prompt": "Think carefully about the color peach", "id": 157}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 2, "prompt": "On the screen a patch of pure peach appeared and held steady", "id": 158}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 3, "prompt": "From the set of paints she chose peach and studied it closely", "id": 159}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 4, "prompt": "The label on the sample read peach, plain and clear", "id": 160}
+{"role": "color", "color": "peach", "hex": "#ffb07c", "rgb": [255, 176, 124], "frame": 5, "prompt": "Of all the shades on the chart, the one called peach drew the eye", "id": 161}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 0, "prompt": "Consider the color indigo", "id": 162}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 1, "prompt": "Think carefully about the color indigo", "id": 163}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 2, "prompt": "On the screen a patch of pure indigo appeared and held steady", "id": 164}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 3, "prompt": "From the set of paints she chose indigo and studied it closely", "id": 165}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 4, "prompt": "The label on the sample read indigo, plain and clear", "id": 166}
+{"role": "color", "color": "indigo", "hex": "#380282", "rgb": [56, 2, 130], "frame": 5, "prompt": "Of all the shades on the chart, the one called indigo drew the eye", "id": 167}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 0, "prompt": "Consider the color crimson", "id": 168}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 1, "prompt": "Think carefully about the color crimson", "id": 169}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 2, "prompt": "On the screen a patch of pure crimson appeared and held steady", "id": 170}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 3, "prompt": "From the set of paints she chose crimson and studied it closely", "id": 171}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 4, "prompt": "The label on the sample read crimson, plain and clear", "id": 172}
+{"role": "color", "color": "crimson", "hex": "#8c000f", "rgb": [140, 0, 15], "frame": 5, "prompt": "Of all the shades on the chart, the one called crimson drew the eye", "id": 173}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 0, "prompt": "Consider the color lime", "id": 174}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 1, "prompt": "Think carefully about the color lime", "id": 175}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 2, "prompt": "On the screen a patch of pure lime appeared and held steady", "id": 176}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 3, "prompt": "From the set of paints she chose lime and studied it closely", "id": 177}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 4, "prompt": "The label on the sample read lime, plain and clear", "id": 178}
+{"role": "color", "color": "lime", "hex": "#aaff32", "rgb": [170, 255, 50], "frame": 5, "prompt": "Of all the shades on the chart, the one called lime drew the eye", "id": 179}
