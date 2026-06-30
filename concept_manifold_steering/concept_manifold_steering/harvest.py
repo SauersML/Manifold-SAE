@@ -3,7 +3,7 @@
 Loads any decoder-only ``AutoModelForCausalLM`` checkpoint and returns
 mean-pooled hidden states at a chosen layer for a list of prompts.  This
 mirrors the cogito-L40 harvest (see Manifold-SAE
-``experiments/steerability/harvest_hex.py``) but is generic over model and
+``experiments/slop/steerability/harvest_hex.py``) but is generic over model and
 aggregation strategy.
 
 For *remote* models exposed via an OpenAI-compatible vLLM server with a

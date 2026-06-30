@@ -20,6 +20,12 @@ Contents:
   `multi_axis_*`/`analyze_*` one-offs, `manifold_recovery`/`manifold_falsifier`,
   and their `.csv`/`.jsonl`/`.json` data sidecars. Bulk media render outputs
   (the Duchon training video frames + logs) live under `artifacts/`.
+- **Third sweep (2026-06-30)** — the two self-contained subsystems that the
+  prior sweep left behind as a judgment call: `steerability/` (the steering
+  benchmark with harvested `.npz` axes + `run_all.sh`) and `bank_additions/`
+  (the self-qualia bank `.jsonl` data store + `SCHEMA.md`). Neither is imported
+  by real code. `concept_manifold_steering`'s `harvest.py` docstring pointer was
+  repointed to `slop/steerability/harvest_hex.py`.
 
 Notes:
 - `manifold_sae/diffusion/cross_modality_atlas.py` still imports two helpers
@@ -32,9 +38,3 @@ Kept in `experiments/` (NOT slop): shared infra (`_pca_basis`,
 real `manifold_sae`/`scripts` code — `color_manifold_gam`, `xkcd_colors.txt`),
 imported scripts (`llm_probe`, `llm_sweep`), the `pure_curve_benchmark` demo,
 and the `AUTO_EXP_PLAN.md` / `DATA_README.md` docs.
-
-Two self-contained subsystems were left in `experiments/` as a judgment call
-rather than swept: `steerability/` (a steering benchmark with harvested `.npz`
-axes + `run_all.sh`) and `bank_additions/` (the self-qualia bank `.jsonl` data
-store + `SCHEMA.md`). Neither is imported by real code; move them too if you
-consider them slop.

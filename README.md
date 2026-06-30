@@ -155,12 +155,9 @@ manifold_sae/                 Library code
                               Per-batch gamfit REML in forward; lock-and-cache via
                               update_snapshot(); inference_mode for feedforward decode.
   encoder.py                  Per-feature MLP encoder (toy scale)
-  encoder_linear.py           Shared 2-layer MLP encoder (LLM scale; H=4·D fixed)
   losses.py                   MSE + sparsity + identification priors; REML score
                               available in output struct for diagnostics
-  metrics.py                  Hungarian-matched per-feature Chamfer + diagnostics
   data_synthetic.py           Planted-curve synthetic dataset
-  data_activations.py         LLM activation harvest helpers
   train.py                    Adam training loop with device handling
   diagnostics.py              Position-collapse / dead-feature / grad-ratio probes
 
