@@ -196,6 +196,15 @@ def main():
             _basis = os.environ.get("MVE_ATOM_BASIS")
             if _basis:
                 mkw["atom_basis"] = _basis  # open 1-D spline: e.g. "duchon"/"bspline"
+            if os.environ.get("MVE_RECON_MODE") == "1":
+                # Maximize reconstruction EV: drop the interpretability/identifiability
+                # penalties that suppress it (they're the reason it "loses" on EV).
+                mkw.update(isometry_weight=float(os.environ.get("MVE_ISOMETRY", "0.0")),
+                           nuclear_norm_weight=float(os.environ.get("MVE_NUCLEAR", "0.0")),
+                           decoder_incoherence_weight=float(os.environ.get("MVE_INCOH", "0.0")),
+                           smoothness_weight=float(os.environ.get("MVE_SMOOTH", "0.05")),
+                           ard_per_atom=(os.environ.get("MVE_ARD", "0") == "1"),
+                           sparsity_weight=float(os.environ.get("MVE_SPARSITY", "0.1")))
             fit = _fdq(gamfit.sae_manifold_fit, train, **mkw)
             row["manifold_ev_train"] = float(fit.reconstruction_r2)
             row["manifold_ev_test"] = _ev(test, np.asarray(fit.reconstruct(test)))
