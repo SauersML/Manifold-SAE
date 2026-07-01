@@ -156,6 +156,37 @@ def _ext_sae_ev(train, test, K, steps, l1):
     return _ev(test, rec), l0, _ev(test, rec1)
 
 
+def _torch_manifold_ev(train, test, K, n_basis, steps):
+    """gamfit.torch.ManifoldSAE via BACKPROP (robust; no REML seed crash) with
+    flexible high-harmonic circle atoms. Returns held-out EV + used_gpu."""
+    import torch
+    from gamfit.torch import ManifoldSAE, ManifoldSAEConfig
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    D = train.shape[1]
+    cfg = ManifoldSAEConfig(
+        input_dim=D, n_atoms=int(K), intrinsic_rank=1, atom_manifold="circle",
+        atom_basis="fourier", n_basis_per_atom=int(n_basis),
+        sparsity={"kind": "softmax_topk", "target_k": 1, "tau_start": 4.0, "tau_min": 1.0, "tau_steps": steps},
+        dtype=torch.float64,
+    )
+    sae = ManifoldSAE(cfg).to(dev)
+    x = torch.tensor(train, dtype=torch.float64, device=dev)
+    xt = torch.tensor(test, dtype=torch.float64, device=dev)
+    opt = torch.optim.Adam(sae.parameters(), lr=3e-3)
+    sae.train()
+    bs = min(4096, len(x))
+    for step in range(steps):
+        idx = torch.randint(0, len(x), (bs,), device=dev)
+        xb = x[idx]
+        out = sae(xb)
+        loss = ((out.x_hat - xb) ** 2).mean() + 1e-4 * sae.sparsity_penalty(out.gate)
+        opt.zero_grad(); loss.backward(); opt.step(); sae.sparsity.advance_temperature()
+    sae.eval()
+    with torch.no_grad():
+        rec = sae(xt).x_hat.cpu().numpy()
+    return _ev(test, rec), (dev == "cuda")
+
+
 def main():
     import numpy as np, gamfit
     from gamfit._sae_manifold import wager_verdict  # noqa: F401 (kept for parity)
@@ -191,24 +222,32 @@ def main():
         row = {"K": K}
         # 1) gamfit manifold SAE
         try:
-            mkw = dict(K=K, d_atom=d_atom, atom_topology=topo,
-                       assignment="ibp_map", n_iter=n_iter)
-            _basis = os.environ.get("MVE_ATOM_BASIS")
-            if _basis:
-                mkw["atom_basis"] = _basis  # open 1-D spline: e.g. "duchon"/"bspline"
-            if os.environ.get("MVE_RECON_MODE") == "1":
-                # Maximize reconstruction EV: drop the interpretability/identifiability
-                # penalties that suppress it (they're the reason it "loses" on EV).
-                mkw.update(isometry_weight=float(os.environ.get("MVE_ISOMETRY", "0.0")),
-                           nuclear_norm_weight=float(os.environ.get("MVE_NUCLEAR", "0.0")),
-                           decoder_incoherence_weight=float(os.environ.get("MVE_INCOH", "0.0")),
-                           smoothness_weight=float(os.environ.get("MVE_SMOOTH", "0.05")),
-                           ard_per_atom=(os.environ.get("MVE_ARD", "0") == "1"),
-                           sparsity_weight=float(os.environ.get("MVE_SPARSITY", "0.1")))
-            fit = _fdq(gamfit.sae_manifold_fit, train, **mkw)
-            row["manifold_ev_train"] = float(fit.reconstruction_r2)
-            row["manifold_ev_test"] = _ev(test, np.asarray(fit.reconstruct(test)))
-            row["manifold_used_gpu"] = bool(getattr(fit, "used_device", False))
+            if os.environ.get("MVE_METHOD") == "torch":
+                ev_t, gpu_t = _torch_manifold_ev(
+                    train, test, K,
+                    n_basis=int(os.environ.get("MVE_NBASIS", "32")),
+                    steps=int(os.environ.get("MVE_TORCH_STEPS", "400")))
+                row["manifold_ev_test"] = ev_t
+                row["manifold_used_gpu"] = gpu_t
+            else:
+                mkw = dict(K=K, d_atom=d_atom, atom_topology=topo,
+                           assignment="ibp_map", n_iter=n_iter)
+                _basis = os.environ.get("MVE_ATOM_BASIS")
+                if _basis:
+                    mkw["atom_basis"] = _basis  # open 1-D spline: e.g. "duchon"/"bspline"
+                if os.environ.get("MVE_RECON_MODE") == "1":
+                    # Maximize reconstruction EV: drop the interpretability/identifiability
+                    # penalties that suppress it (they're the reason it "loses" on EV).
+                    mkw.update(isometry_weight=float(os.environ.get("MVE_ISOMETRY", "0.0")),
+                               nuclear_norm_weight=float(os.environ.get("MVE_NUCLEAR", "0.0")),
+                               decoder_incoherence_weight=float(os.environ.get("MVE_INCOH", "0.0")),
+                               smoothness_weight=float(os.environ.get("MVE_SMOOTH", "0.05")),
+                               ard_per_atom=(os.environ.get("MVE_ARD", "0") == "1"),
+                               sparsity_weight=float(os.environ.get("MVE_SPARSITY", "0.1")))
+                fit = _fdq(gamfit.sae_manifold_fit, train, **mkw)
+                row["manifold_ev_train"] = float(fit.reconstruction_r2)
+                row["manifold_ev_test"] = _ev(test, np.asarray(fit.reconstruct(test)))
+                row["manifold_used_gpu"] = bool(getattr(fit, "used_device", False))
         except Exception as e:
             row["manifold_error"] = f"{type(e).__name__}: {str(e).splitlines()[0][:70]}"
         # 2) gamfit linear dictionary
