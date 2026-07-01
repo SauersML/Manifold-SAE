@@ -163,7 +163,7 @@ def _torch_manifold_ev(train, test, K, n_basis, steps):
     Configurable via MVE_MANIFOLD / MVE_RANK / MVE_TBASIS. Returns EV + used_gpu."""
     import torch
     from gamfit.torch import ManifoldSAE, ManifoldSAEConfig
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    dev = "cpu"  # gamfit ManifoldSAE runs its numerics on CPU (Rust); cuda causes device mismatch
     D = train.shape[1]
     manifold = os.environ.get("MVE_MANIFOLD", "product")
     rank = int(os.environ.get("MVE_RANK", "2"))
