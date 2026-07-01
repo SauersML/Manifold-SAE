@@ -194,7 +194,6 @@ def _torch_manifold_ev(train, test, K, n_basis, steps):
 
 def main():
     import numpy as np, gamfit
-    from gamfit._sae_manifold import wager_verdict  # noqa: F401 (kept for parity)
 
     _guard()
     X, src = _load()
