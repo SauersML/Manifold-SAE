@@ -4,12 +4,15 @@ The training objective under the gamfit-native :class:`gamfit.torch.ManifoldSAE`
 is reconstruction plus the module's own Rust-backed regularizers:
 
     MSE(x_hat, x)                          — SAE reconstruction in ambient R^D
-  + mean(z)                                — activation sparsity surrogate
+  + sae.sparsity_penalty(gate)             — Rust-backed structural sparsity
   + sae.decoder_ortho_penalty()            — per-atom decoder block orthogonality
   + sae.decoder_monotonicity_penalty()     — per-atom curve monotonicity prior
   + light coverage prior                   — firing positions span the manifold
 
 What changed in the cutover:
+  - The hand-rolled L1 surrogate ``mean(|z|)`` is GONE. Sparsity is now the
+    module's own Rust-backed ``sae.sparsity_penalty(out.gate)`` (respects the
+    configured ``SparsityConfig`` kind: ibp_gumbel / softmax_topk / jumprelu).
   - There is no explicit ``-reml_score`` loss term. REML now drives the
     closed-form ``sae.fit()`` solve, not a backprop loss (the old term had a
     degenerate maximum at all-zero amplitudes).
@@ -17,6 +20,8 @@ What changed in the cutover:
   - ``ortho_loss`` / ``monotonicity_loss`` are no longer fields of the output;
     they are *methods on the module* and are queried here when the module is
     passed in.
+  - The coverage prior (``_position_coverage_loss``) has NO gamfit primitive in
+    0.1.241, so it stays hand-rolled as an identification prior.
 
 Signature note: ``total_loss(output, target, sae)`` REQUIRES the SAE *module*
 as its third argument so it can call ``decoder_ortho_penalty()`` /
@@ -88,8 +93,8 @@ def total_loss(
             f"(to read decoder penalties), got {type(sae).__name__}"
         )
     mse = torch.mean((output.x_hat - target) ** 2)
-    # Activation-magnitude sparsity surrogate (z = assignments * amplitudes).
-    sparsity = output.z.abs().mean()
+    # Rust-backed structural sparsity on the gate logits (no hand-rolled L1).
+    sparsity = sae.sparsity_penalty(output.gate)
     coverage = _position_coverage_loss(output.positions, output.amplitudes)
 
     ortho = sae.decoder_ortho_penalty()

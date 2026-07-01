@@ -1,18 +1,42 @@
-"""Per-feature parallel MLP encoder."""
+"""Thin adapter over gamfit's built-in ManifoldSAE encoder (gamfit >= 0.1.241).
+
+The hand-rolled per-feature GELU-MLP encoder has been deleted. ``gamfit.torch.ManifoldSAE``
+already ships a built-in encoder (linear when ``encoder_hidden=0``, GELU-MLP otherwise), and
+gamfit exposes an amortized/distilled encoder path (``fit.distill_encoder(X)`` +
+``gamfit.distill``) for the high-level facade. ``ManifoldEncoder`` is now a light adapter that
+constructs that built-in encoder and re-exposes a compatible
+``forward(x, y_proj) -> (z_raw, mask_soft, mask_binary)`` triple for the few callers that
+import it. Behavior differs from the old bespoke encoder — this is a cutover shim, not a
+drop-in numeric replica.
+"""
 
 from __future__ import annotations
 
 import torch
 from torch import nn
 
+from gamfit.torch import ManifoldSAE, ManifoldSAEConfig
+
+
+def _manifold_for_rank(rank: int) -> tuple[str, int]:
+    """Pick a gamfit ``atom_manifold`` compatible with ``rank``.
+
+    gamfit enforces circle⇒rank 1, sphere⇒rank 2, product⇒rank ≥ 2.
+    """
+    if rank <= 1:
+        return "circle", 1
+    if rank == 2:
+        return "sphere", 2
+    return "product", rank
+
 
 class ManifoldEncoder(nn.Module):
-    """Per-feature parallel MLP. Each feature's MLP receives x augmented with
-    the per-feature subspace energy ``||x @ W_k||`` — a strong scalar signal
-    of "does this token live in feature k's ambient subspace?" Without this,
-    multiple features that look similar to a black-box-on-raw-x encoder
-    (e.g., all monotone-in-some-direction curves) end up multiplexed onto
-    one SAE feature.
+    """Adapter exposing gamfit's built-in ManifoldSAE encoder.
+
+    The underlying encoder maps ``x`` (N, input_dim) to per-feature coordinate +
+    gate logits, shaped (N, (rank + 1) * n_features). We split that into a scalar
+    coordinate ``z_raw`` and a gate logit per feature and apply the same
+    straight-through TopK gating contract the old encoder used.
     """
 
     def __init__(
@@ -25,62 +49,52 @@ class ManifoldEncoder(nn.Module):
         shared_encoder: bool = False,
     ) -> None:
         super().__init__()
-        self.intrinsic_rank = intrinsic_rank
-        self.n_features = n_features
-        self.input_dim = input_dim
+        self.intrinsic_rank = int(intrinsic_rank)
+        self.n_features = int(n_features)
+        self.input_dim = int(input_dim)
         self.top_k = top_k
         self.shared_encoder = bool(shared_encoder)
-        # Default H caps at 256: the per-feature `(F, in_dim, H)` weight is F× bigger
-        # than a shared encoder. Old default max(4*D, 8*F) silently OOMs at D=7168, F=512.
-        H = hidden_dim if hidden_dim is not None else min(256, max(64, 8 * n_features))
-        self.hidden_dim = H
-
-        D = input_dim
-        F = n_features
-        R = intrinsic_rank
-        self.norm = nn.LayerNorm(D) if D >= 4 else nn.Identity()
-        # Input is concat([x_normalized (D), y_proj_k (R)]) — per-feature
-        # MLP sees its own R-dim subspace projection as extra signal.
-        in_dim = D + R
-        if self.shared_encoder:
-            # Shared-trunk + F-head encoder. The trunk consumes only x (D),
-            # the per-feature y_proj_k (R) is injected at the head as a
-            # lightweight 1×R linear contribution. Memory: O(D·H + H·F·2 + F·R·2)
-            # vs the per-feature O(F·D·H + F·H·2) — at D=7168, F=512, H=256 the
-            # difference is 0.94 GB (shared) vs 7.3 GB (per-feature) for fc1
-            # alone (the old "210 GB" trap was at H = max(4·D, 8·F) = 28672).
-            self.trunk_fc1 = nn.Linear(D, H)
-            self.head_w = nn.Parameter(torch.randn(F, H, 2) / max(H, 1) ** 0.5)
-            self.head_b = nn.Parameter(torch.zeros(F, 2))
-            self.head_y = nn.Parameter(torch.randn(F, R, 2) / max(R, 1) ** 0.5)
+        # encoder_hidden=0 ⇒ linear; otherwise GELU-MLP width. Preserve the old
+        # cap so wide residual streams don't allocate an oversized trunk.
+        if hidden_dim is None:
+            encoder_hidden = min(256, max(64, 8 * self.n_features))
         else:
-            self.fc1_w = nn.Parameter(torch.randn(F, in_dim, H) / max(in_dim, 1) ** 0.5)
-            self.fc1_b = nn.Parameter(torch.zeros(F, H))
-            self.fc2_w = nn.Parameter(torch.randn(F, H, 2) / max(H, 1) ** 0.5)
-            self.fc2_b = nn.Parameter(torch.zeros(F, 2))
-        self.act = nn.GELU()
+            encoder_hidden = int(hidden_dim)
+        self.hidden_dim = encoder_hidden
 
-    def forward(self, x: torch.Tensor, y_proj: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """x: (B, D). y_proj: (B, F, R), per-feature subspace projection."""
-        x_n = self.norm(x)
-        B = x_n.shape[0]
-        F = y_proj.shape[1]
-        if self.shared_encoder:
-            # Shared trunk: one (B, D) → (B, H) MLP, broadcast across F.
-            h_shared = self.act(self.trunk_fc1(x_n))                 # (B, H)
-            h_b = h_shared.unsqueeze(1).expand(B, F, h_shared.shape[-1])
-            # Per-feature head + y_proj contribution.
-            out = torch.einsum("bfh,fho->bfo", h_b, self.head_w) + self.head_b.unsqueeze(0)
-            out = out + torch.einsum("bfr,fro->bfo", y_proj, self.head_y)
-        else:
-            x_n_b = x_n.unsqueeze(1).expand(B, F, x_n.shape[-1])     # (B, F, D)
-            input_per_feature = torch.cat([x_n_b, y_proj], dim=-1)   # (B, F, D+R)
-            h = torch.einsum("bfi,fih->bfh", input_per_feature, self.fc1_w) + self.fc1_b.unsqueeze(0)
-            h = self.act(h)
-            out = torch.einsum("bfh,fho->bfo", h, self.fc2_w) + self.fc2_b.unsqueeze(0)
-        z_raw = torch.nan_to_num(out[:, :, 0], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
-        amp_logits = torch.nan_to_num(out[:, :, 1], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
+        atom_manifold, rank = _manifold_for_rank(self.intrinsic_rank)
+        self._rank = rank
+        cfg = ManifoldSAEConfig(
+            input_dim=self.input_dim,
+            n_atoms=self.n_features,
+            intrinsic_rank=rank,
+            atom_manifold=atom_manifold,
+            encoder_hidden=encoder_hidden,
+        )
+        # gamfit's ManifoldSAE owns the encoder numerics; we only borrow the
+        # encoder submodule (built-in linear / GELU-MLP) and drop the rest so we
+        # don't register the decoder/basis params as our own.
+        self.encoder = ManifoldSAE(cfg).encoder
+
+    def forward(
+        self, x: torch.Tensor, y_proj: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """x: (B, D). ``y_proj`` is accepted for signature compatibility and ignored
+        (gamfit's built-in encoder consumes only ``x``).
+
+        Returns ``(z_raw, mask_soft, mask_binary)`` — the same triple shape the old
+        encoder produced.
+        """
+        # gamfit's default dtype is float64; its encoder rejects a dtype mismatch.
+        enc_dtype = next(self.encoder.parameters()).dtype
+        raw = self.encoder(x.to(dtype=enc_dtype))  # (B, (rank+1)*F)
+        B = raw.shape[0]
+        F = self.n_features
+        per_feat = raw.reshape(B, F, self._rank + 1)
+        z_raw = torch.nan_to_num(per_feat[:, :, 0], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
+        amp_logits = torch.nan_to_num(per_feat[:, :, -1], nan=0.0, posinf=10.0, neginf=-10.0).clamp(-10.0, 10.0)
         mask_soft = torch.sigmoid(amp_logits)
+
         if getattr(self, "continuous_amp", False):
             amp_cont = torch.nn.functional.softplus(amp_logits)
             if self.top_k is not None and self.top_k < self.n_features:
@@ -91,8 +105,8 @@ class ManifoldEncoder(nn.Module):
             else:
                 amp_out = amp_cont
             return z_raw, mask_soft, amp_out
-        # Binary straight-through TopK: closes the (amp, curve) gauge by
-        # forbidding amplitude from carrying magnitude. Curves absorb it.
+
+        # Binary straight-through TopK gate (curves absorb magnitude, gate is 0/1).
         if self.top_k is not None and self.top_k < self.n_features:
             _vals, idx = torch.topk(mask_soft, self.top_k, dim=1)
             hard_mask = torch.zeros_like(mask_soft)

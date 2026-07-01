@@ -1,47 +1,38 @@
 # slop/
 
-Repo-wide throwaway / non-load-bearing scratch, swept out of the live tree to
-declutter. All moves are `git mv` — nothing deleted, history preserved, paths
-mirror the original location (`slop/scripts/...`, `slop/runs/...`, etc.) so
-anything here can be moved straight back.
+Repo-wide throwaway / non-core scratch, swept out of the live tree to keep the
+shipped `manifold_sae` package focused. All moves are `git mv` (history
+preserved); paths mirror the original location so anything here can be moved
+straight back. Sibling of `experiments/slop/` (experiment scripts); this drawer
+holds package-internal slop.
 
-This is the sibling of `experiments/slop/` (which holds experiment-script
-scratch specifically). This top-level drawer holds slop swept from the rest of
-the repo.
+## SAE-variant sweep — 2026-06-30
 
-## Sweep — 2026-06-30
+Goal: a **focused, gamfit-0.1.241-native manifold SAE that beats the linear
+baseline** — not a drawer of 17 half-finished SAE variants that gamfit already
+implements natively (and better). Swept the experimental variant zoo out of
+`manifold_sae/`. Verified before moving: every remaining reference to these from
+the kept package was a comment/docstring — **no live imports**, so the core
+package still imports clean (19/19 modules + subpackages) and the core tests pass.
 
-Nothing here is imported by the shipped `manifold_sae` package, exercised by
-`tests/`, or referenced by CI (`steering_server`) — verified by grep before each
-move.
+Moved to `slop/manifold_sae/` (19 variant modules + the everything-leaderboard):
+- SAE variants: `das_sae`, `crosscoder`, `transcoder`, `hyperbolic_sae`,
+  `cylinder_sae`(+`_shared`), `sindy_sae`(+`_static`), `wasserstein_sae`,
+  `equivariant`, `sheaf`, `matryoshka`, `crm`, `identifiable`,
+  `adaptive_k`(+`_v2`), `amortized_manifold_sae`, `circuit_trace`, `integration`.
+  (gamfit 0.1.241 provides native equivalents for most: `InterchangeSwapDecoder`,
+  `crosscoder.Crosscoder`, `skip_transcoder`, `PoincareAtoms`, `SheafConsistencyPenalty`,
+  `AdaptiveTopK`, etc. `matryoshka`/`sindy_sae` have no public gamfit primitive.)
+- `eval/leaderboard_v2.py` — the "run every variant" leaderboard.
+- Their `tests/test_*.py` (12) and `scripts/` drivers (14).
 
-- **`scripts/`** — orphaned one-off / superseded training & plotting scripts and
-  Azure launcher shell scripts that nothing imports or invokes
-  (`train_matryoshka`, `train_sae_f65k*`, `train_equivariant`,
-  `train_cylinder_shared`, `train_manifold_f_sweep`, `train_behavioral_probes`,
-  `crosscoder_hsv_corr_only`, `gamfit_periodic_repro`, `run_llm_autointerp`,
-  `plot_ground_truth_fit`, `plot_duchon_diagnostics`, `plot_residuals_vs_t`,
-  `phase0_substrate` + `phase0_notes.md`, the three `run_self_qualia_*_azure*.sh`).
-  The ~23 scripts still imported by experiments/tests stayed in `scripts/`.
-- **`distributed_manifold_sae/`** — the K=1M distributed-training scaffold. Its
-  own `__init__.py`/README mark it "scaffolding … not run end-to-end"; no tests,
-  nothing imports it.
-- **`runs/`** — the force-added tracked artifacts from a `.gitignore`d output
-  dir (diagnostic PNGs, run logs, metrics JSON, cached `.npy`). All regenerable.
-- **`results/a100_runs/`** — cluster (A100) job outputs: run logs, cached
-  activations, metrics dumps, and one-off in-run analysis scripts. The recent
-  `results/color_gamfit_*` / `color_orderfree_gallery` showcase galleries were
-  KEPT in `results/`.
-- **`docs/`** — dated / superseded session logs and one-off reports:
-  `cluster_session_2026_05_21.md` (self-marked historical/retracted),
-  `a100_results_2026_06_03.md`, `MANIFOLD_SAE_UPGRADE_REPORT.md`, and
-  `results.md` (superseded by `docs/findings.md`, which it points to).
-- **`manifold_sae/`** — four documented-but-unused package modules that nothing
-  imports (`_normalize.py`, `encoder_linear.py`, `data_activations.py`,
-  `metrics.py`). The README repository-layout block was updated to drop them.
+Kept in `manifold_sae/` (the core + applied mech-interp tooling): `sae` (thin
+wrapper over `gamfit.torch.ManifoldSAE`), `encoder`, `losses`, `train`,
+`diagnostics`, `data_synthetic`, `scale`, `_cluster_bridge`, and the subpackages
+`eval` (harness/registry/baselines — the linear-vs-manifold "beats linear"
+evidence path), `atlas`, `autointerp`, `behavioral`, `cross_llm`, `diffusion`,
+`kernels`.
 
-Kept in the live tree (NOT slop): the `manifold_sae` package proper,
-`steering_server/`, the `dashboard/` / `cross_llm_platform/` /
-`concept_manifold_steering/` subsystems (finished, tested), `tools/`,
-`heimdall_jobs/`, `benchmarks/`, the ~23 imported `scripts/`, the recent
-`results/color_*` galleries, and the 12 core `docs/`.
+Note: also in this sweep the gamfit pin moved to `>=0.1.241` and the four core
+hubs (`sae`/`encoder`/`losses`/`diagnostics`) were cut over to gamfit-native.
+</content>

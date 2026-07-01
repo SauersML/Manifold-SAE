@@ -130,10 +130,15 @@ class HyperbolicSAE(nn.Module):
         self.W_dec_out = nn.Linear(d, D, bias=True)
 
         # gamfit JumpReLU prior on the gate vector (smoothed-L0 surrogate).
+        # Match the atom/gate dtype (PoincareAtoms defaults to float32) so the
+        # whole module moves cleanly under ``.to(device)`` — MPS/other accels
+        # reject float64 buffers, which the paired training script relies on.
         if jumprelu_threshold > 0.0:
             self.jumprelu = JumpReLUPenalty(
                 thresholds=torch.full(
-                    (F,), float(jumprelu_threshold), dtype=torch.float64
+                    (F,),
+                    float(jumprelu_threshold),
+                    dtype=self.atoms_dict.atoms.dtype,
                 ),
                 weight=1.0,
                 smoothing_eps=1e-3,

@@ -42,7 +42,7 @@ Training objective::
       + λ_intv · ||swap_decode(z_b, z_a, hue_bool) − target_swap||²
       + λ_gate · ||gate||_1                          (small hue subset)
       + λ_gate_entropy · binary_entropy(gate)        (push gate → {0, 1})
-      + λ_l1   · ||z||_1                             (standard SAE sparsity)
+      + λ_l1   · JumpReLU(z)                          (gamfit smoothed-L0 sparsity)
 
 target_swap is built in the data layer using the HSV-supervised subspace
 (auto_exp_38): x_target = x_b + (hue_a - hue_b) * v_hue / ||v_hue||².
@@ -82,7 +82,7 @@ class DASSAEConfig:
     init_gate: float = 0.12           # initial value of decoder.gate
     init_scale: float = 0.02          # decoder W_dec init std (primitive default)
     normalize_decoder: bool = True
-    jumprelu_threshold: float = 0.0   # >0 ⇒ swap hand-rolled L1 for gamfit JumpReLU
+    jumprelu_threshold: float = 0.05  # gamfit JumpReLU (smoothed-L0) latent prior; always on
 
 
 @dataclass
@@ -140,15 +140,16 @@ class DASSAE(nn.Module):
         # Pre-encoder offset. Decoder post-offset lives in ``decoder.bias``.
         self.b_dec = nn.Parameter(torch.zeros(D))
 
-        # Optional gamfit JumpReLU prior on the SAE latent (smoothed-L0).
-        if getattr(config, "jumprelu_threshold", 0.0) > 0.0:
-            self.jumprelu = JumpReLUPenalty(
-                thresholds=torch.full((F,), float(config.jumprelu_threshold), dtype=torch.float64),
-                weight=1.0,
-                smoothing_eps=1e-3,
-            )
-        else:
-            self.jumprelu = None
+        # gamfit JumpReLU prior on the SAE latent (smoothed-L0). Always on:
+        # the hand-rolled ``||z||_1`` sparsity path has been deleted in favour
+        # of this gamfit primitive.
+        self.jumprelu = JumpReLUPenalty(
+            thresholds=torch.full(
+                (F,), float(config.jumprelu_threshold), dtype=torch.float64
+            ),
+            weight=1.0,
+            smoothing_eps=1e-3,
+        )
 
     # ----- accessors -----------------------------------------------------
     def encoder_weight(self) -> torch.Tensor:
@@ -276,13 +277,10 @@ class DASSAE(nn.Module):
             + (1 - gate_clamped) * (1 - gate_clamped + 1e-8).log()
         ).mean()
 
-        if self.jumprelu is not None:
-            # gamfit smoothed-L0 prior (sum over (B,F)); normalize to mean
-            # element-wise so lambda_l1 has the same scale as the L1 path.
-            denom = float(out_a.z.numel())
-            l1_loss = (self.jumprelu(out_a.z) + self.jumprelu(out_b.z)) / denom
-        else:
-            l1_loss = (out_a.z.abs().mean() + out_b.z.abs().mean())
+        # gamfit smoothed-L0 prior (sum over (B,F)); normalize to per-element
+        # mean so ``lambda_l1`` keeps a stable scale across batch/feature sizes.
+        denom = float(out_a.z.numel())
+        l1_loss = (self.jumprelu(out_a.z) + self.jumprelu(out_b.z)) / denom
 
         total = (
             recon_loss
