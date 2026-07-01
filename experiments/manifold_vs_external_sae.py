@@ -87,13 +87,22 @@ def _load():
 
 
 def _split_prep(X, test_frac=0.2):
+    """Train-only PCA-reduce + scale. Reducing ambient dim (2048 -> MVE_PCA) is
+    essential: the manifold SAE's per-atom decoder is D-dimensional, so fitting in
+    full 2048-dim is brutally slow. All three methods fit in the SAME reduced space
+    -> fair. MVE_PCA=0 keeps full dim."""
     import numpy as np
+    n_pca = int(os.environ.get("MVE_PCA", "128"))
     rng = np.random.default_rng(0)
     X = X[rng.permutation(len(X))]
     nt = max(1, int(len(X) * test_frac))
     test, train = X[:nt], X[nt:]
     mu = train.mean(0)
     tr, te = train - mu, test - mu
+    if n_pca and n_pca < tr.shape[1]:
+        _, _, Vt = np.linalg.svd(tr, full_matrices=False)
+        Vt = Vt[:n_pca]
+        tr, te = tr @ Vt.T, te @ Vt.T
     # scale to unit average norm (same transform for every method — fair)
     s = np.sqrt((tr**2).sum(1).mean()) + 1e-8
     return tr / s, te / s
