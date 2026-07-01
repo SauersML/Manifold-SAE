@@ -157,15 +157,20 @@ def _ext_sae_ev(train, test, K, steps, l1):
 
 
 def _torch_manifold_ev(train, test, K, n_basis, steps):
-    """gamfit.torch.ManifoldSAE via BACKPROP (robust; no REML seed crash) with
-    flexible high-harmonic circle atoms. Returns held-out EV + used_gpu."""
+    """gamfit.torch.ManifoldSAE via BACKPROP (robust; no REML seed crash).
+    Default = non-periodic flat 'product' patches (intrinsic_rank=2, duchon) —
+    2 reconstruction DOF/atom vs linear's 1 -> should beat linear at matched K.
+    Configurable via MVE_MANIFOLD / MVE_RANK / MVE_TBASIS. Returns EV + used_gpu."""
     import torch
     from gamfit.torch import ManifoldSAE, ManifoldSAEConfig
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     D = train.shape[1]
+    manifold = os.environ.get("MVE_MANIFOLD", "product")
+    rank = int(os.environ.get("MVE_RANK", "2"))
+    tbasis = os.environ.get("MVE_TBASIS", "duchon")
     cfg = ManifoldSAEConfig(
-        input_dim=D, n_atoms=int(K), intrinsic_rank=1, atom_manifold="circle",
-        atom_basis="fourier", n_basis_per_atom=int(n_basis),
+        input_dim=D, n_atoms=int(K), intrinsic_rank=rank, atom_manifold=manifold,
+        atom_basis=tbasis, n_basis_per_atom=int(n_basis),
         sparsity={"kind": "softmax_topk", "target_k": 1, "tau_start": 4.0, "tau_min": 1.0, "tau_steps": steps},
         dtype=torch.float64,
     )
