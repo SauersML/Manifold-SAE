@@ -145,9 +145,15 @@ def _ext_sae_ev(train, test, K, steps, l1):
     ae.eval()
     with torch.no_grad():
         Xte = torch.tensor(test, dtype=torch.float32, device=dev)
-        f = ae.encode(Xte); rec = ae.decode(f).cpu().numpy()
+        f = ae.encode(Xte)
+        rec = ae.decode(f).cpu().numpy()
         l0 = float((f > 1e-6).float().sum(-1).mean().item())
-    return _ev(test, rec), l0
+        # matched-sparsity: reconstruct from top-1 active feature only (like manifold/linear ~1 active)
+        top1 = torch.zeros_like(f)
+        idx = f.argmax(-1, keepdim=True)
+        top1.scatter_(1, idx, f.gather(1, idx))
+        rec1 = ae.decode(top1).cpu().numpy()
+    return _ev(test, rec), l0, _ev(test, rec1)
 
 
 def main():
@@ -185,8 +191,12 @@ def main():
         row = {"K": K}
         # 1) gamfit manifold SAE
         try:
-            fit = _fdq(gamfit.sae_manifold_fit, train, K=K, d_atom=d_atom,
-                       atom_topology=topo, assignment="ibp_map", n_iter=n_iter)
+            mkw = dict(K=K, d_atom=d_atom, atom_topology=topo,
+                       assignment="ibp_map", n_iter=n_iter)
+            _basis = os.environ.get("MVE_ATOM_BASIS")
+            if _basis:
+                mkw["atom_basis"] = _basis  # open 1-D spline: e.g. "duchon"/"bspline"
+            fit = _fdq(gamfit.sae_manifold_fit, train, **mkw)
             row["manifold_ev_train"] = float(fit.reconstruction_r2)
             row["manifold_ev_test"] = _ev(test, np.asarray(fit.reconstruct(test)))
             row["manifold_used_gpu"] = bool(getattr(fit, "used_device", False))
@@ -205,9 +215,10 @@ def main():
             row["gamlinear_error"] = f"{type(e).__name__}: {str(e).splitlines()[0][:70]}"
         # 3) external standard SAE
         try:
-            ev_ext, l0 = _ext_sae_ev(train, test, K, ext_steps, ext_l1)
+            ev_ext, l0, ev_ext1 = _ext_sae_ev(train, test, K, ext_steps, ext_l1)
             row["external_ev_test"] = ev_ext
             row["external_L0"] = l0
+            row["external_ev_top1"] = ev_ext1  # matched ~1-active sparsity
         except Exception as e:
             row["external_error"] = f"{type(e).__name__}: {str(e).splitlines()[0][:70]}"
         print("[K=%d] %s" % (K, json.dumps({k: v for k, v in row.items() if k != "K"})), flush=True)
@@ -218,13 +229,15 @@ def main():
     with open(os.path.join(out, "results.json"), "w") as fh:
         json.dump(payload, fh, indent=2)
     # markdown
-    lines = ["| K | manifold EV(test) | gamfit-linear EV | external SAE EV | ext L0 | manifold GPU |",
-             "|---:|---:|---:|---:|---:|:--:|"]
+    lines = ["_All ~1-active columns are sparsity-matched; external EV(nativeL0) is denser (unmatched)._",
+             "",
+             "| K | manifold EV | gamfit-linear EV | external EV(top1) | external EV(nativeL0) | ext L0 |",
+             "|---:|---:|---:|---:|---:|---:|"]
     for r in rows:
         lines.append("| %d | %s | %s | %s | %s | %s |" % (
             r["K"], _fmt(r.get("manifold_ev_test")), _fmt(r.get("gamlinear_ev_test")),
-            _fmt(r.get("external_ev_test")), _fmt(r.get("external_L0"), 1),
-            "✓" if r.get("manifold_used_gpu") else "·"))
+            _fmt(r.get("external_ev_top1")), _fmt(r.get("external_ev_test")),
+            _fmt(r.get("external_L0"), 1)))
     md = "\n".join(lines)
     with open(os.path.join(out, "report.md"), "w") as fh:
         fh.write(md + "\n")
