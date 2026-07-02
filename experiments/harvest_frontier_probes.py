@@ -165,6 +165,9 @@ def main() -> None:
     with open(os.path.join(args.out_root, f"{args.tag}_PROBES_SUMMARY.json"), "w") as f:
         json.dump(written, f, indent=2)
     print("[probe] DONE", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)  # avoid pyarrow/torch teardown abort; outputs already flushed
 
 
 if __name__ == "__main__":

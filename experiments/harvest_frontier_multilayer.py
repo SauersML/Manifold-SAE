@@ -248,6 +248,13 @@ def main() -> None:
                    "per_layer": summary,
                    "elapsed_s": time.time() - t_start}, f, indent=2)
     print("[harvest] DONE", flush=True)
+    # All shards/manifests are flushed to disk above. Skip interpreter
+    # finalization: datasets/pyarrow + torch background threads abort with a
+    # PyGILState_Release fatal error at teardown on this stack. os._exit avoids
+    # it without risking the (already-written) outputs.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":
