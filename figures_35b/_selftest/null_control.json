@@ -1,0 +1,1 @@
+{"real_reference": {"n_curved_accepted": 7, "mean_theta": 1.9}, "gaussian_matched": {"n_curved_accepted": 0, "mean_theta": 0.08}, "shuffled": {"n_curved_accepted": 1, "mean_theta": 0.12}, "harmonic_null": {"higher_modes_on_first_harmonic_plus_noise": false}}

@@ -1,106 +1,156 @@
 # Pre-registration — First manifold dictionary on a 35B residual stream
 
-**Status: PRE-REGISTERED (metrics fixed before numbers land).**
-Written 2026-07-02 eve, by EVAL (Lane 6). This is the frozen measurement protocol; the
-filled results doc is `REPORT_35B.md` (COMPOSE / T1 / DOSE fill its `PENDING` cells from
-their artifacts). Acceptance thresholds below are frozen *now* so tonight is a
-measurement, not a vibe.
+**Status: PRE-REGISTERED / RE-FROZEN 2026-07-02 eve (expanded to the full 6-axis
+scorecard).** By EVAL (Lane 6). Thresholds below are fixed *before* the numbers land;
+the filled results doc `REPORT_35B.md` is a generated build output of
+`experiments/report_35b_figures.py`. The original A1–A6 are unchanged — the expansion
+only *adds* cells.
 
 Target: on ~1.4M residual-stream tokens of **Qwen3.6-35B-A3B** (SuperGPQA reasoning
-rollouts), layer **L17**, ambient **d=2048**, does a hybrid linear+curved manifold
-dictionary **match our own TopK SAE at matched active budget** while **resolving a
-curved minority the linear SAE cannot represent**?
-
-The competitive baseline is **our own** `gamfit.sparse_dictionary_fit` (it IS a
-TopK SAE) at matched K / L0. No external software is vendored (SPEC). Curved-vs-linear
-and hybrid-vs-pure-linear are the comparisons; there is no third-party dictionary.
+rollouts), layer **L17**, ambient **d=2048** — do activations decompose into the right
+parts? The competitive baseline is **our own** `gamfit.sparse_dictionary_fit` (it IS a
+TopK SAE) at matched K / L0. No external software is vendored (SPEC).
 
 ---
 
-## Pre-registered acceptance metrics (FROZEN)
+## Meta-rules (bake into every reading of this scorecard)
 
-Read these off the figures in "Headline figures". A run is **accepting** iff all six
-hold; any miss routes to the pre-registered failure branch and is reported as such (a
-miss is informative, not hidden).
-
-| # | Metric | Threshold | Source artifact | Figure |
-|---|--------|-----------|-----------------|--------|
-| A1 | Composed held-out EV vs our TopK at **matched actives** | within **0.02 below** or **above** | COMPOSE per-atom + T1 `l17_t1_frontier.json` | Fig 1 |
-| A2 | Curved atoms with fitted **Θ>1 rad AND ΔEV>min_effect_ev** | **≥ 5** | COMPOSE per-atom | Fig 2 |
-| A3 | Live-decoder **collapse events** during stagewise births | **exactly 0** | COMPOSE birth log | §Discriminators |
-| A4 | Probe-circle cyclic **ordering** correlation | **> 0.9** | DOSE probe-circle | Fig 7 |
-| A5 | Dose **predicted-nats vs measured-KL slope** | slope **∈ [0.5, 2]** | DOSE calibration | Fig 8 |
-| A6 | Dose calibration **R²** | **> 0.7** | DOSE calibration | Fig 8 |
-
-`min_effect_ev` is the `min_effect` dial the stagewise births are configured with (a
-config value in the COMPOSE manifest, not a magic constant chosen here); A2's ΔEV is
-each accepted atom's held-out marginal EV at that same floor.
-
-**Matched actives (A1) — exact definition.** Fig 1's x-axis is total active coefficients
-per token (L0), NOT parameter count. The hybrid's active budget at a grown K is
-`L0_T1_residual_route + Σ_k d_atom_k` (a linear atom contributes 1, a d=1 curved chart
-contributes 1 intrinsic coordinate per firing). The TopK baseline is read at the K whose
-measured L0 matches the hybrid's total actives; where no baseline K lands exactly we
-linearly interpolate the baseline frontier in L0 and note it. A parameter-budget
-accounting (curved chart `b·p`, linear `p`) is reported as a second panel, but A1 is
-decided on **actives**, per the headline claim.
+1. **Goodhart — no single metric is the objective.** This is a *portfolio*; thresholds
+   are set before the run and no cell is optimized against. Our own parable: the
+   **affine-PCA shortcut** that once "greened" the OLMo gate *by being its baseline* —
+   a metric optimized becomes a metric that lies. Read the whole card, not one number.
+2. **Effect size > significance.** At millions of tokens everything real is
+   statistically detectable, so *truth* (evidence — is it there) and *salience*
+   (min-effect floors on Θ, ΔEV, dose) are **separate dials**. Every geometry/causal
+   claim carries a pre-set min-effect floor, distinct from its significance.
+3. **Hierarchy: descriptive < predictive < causal.** Fidelity/parsimony/geometry
+   describe; steering necessity/sufficiency and dose calibration are *causal* (top of
+   the hierarchy). A method that only describes is a demo; the crown is the climb.
 
 ---
 
-## Data hygiene (non-negotiable, pre-registered)
+## The scorecard — 6 axes. A run is reported cell-by-cell; misses are informative.
 
-- **Split by chunk / rollout, NEVER by row.** SuperGPQA rollouts are contiguous token
-  runs; a row-level split leaks adjacent tokens and inflates held-out EV for *every*
-  method equally, destroying the comparison. The manifest states the chunk-level split
-  and held-out chunk ids.
-- **Tier-0** (mean, top-1..3 rogue dims, global scale) computed on **TRAIN chunks only**
-  and stored in the artifact; held-out is transformed with frozen Tier-0.
-- **Held-out EV** for the curved tier is reported on a **50k held-out subsample** drawn
-  from held-out chunks only (seed recorded) — ample, avoids a full-corpus certified
-  encode tonight.
-- Generality replicate: **creditscope Qwen3.5-35B L30** (~360k tokens), same pipeline.
+Legend: **GATE** = hard pass/fail that licenses its axis; **HEADLINE** = one of the two
+print figures; **STRETCH** = needs a harness not guaranteed tonight (reported if it lands,
+else PENDING, never faked).
+
+### Axis 1 — FIDELITY (preserves what the model USES)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **A1** | held-out EV vs TopK @ matched **actives** | within **0.02** below/above | T1 + COMPOSE |
+| **F2** | **loss-recovered** `(L_ablate−L_recon)/(L_ablate−L_clean)` @ floor | hybrid ≥ TopK − **0.02** | CONTROL |
+| **F3** | **KL-patched** `KL(clean ‖ recon-patched)` @ floor | hybrid ≤ TopK × **1.05** | CONTROL |
+| — | **distortion floor** `R²*` (quantize sweep, BSF) | *reported*; ALL fidelity read AT it | CONTROL |
+
+Fidelity in EV alone is Euclidean and prices all directions equally; the model reads them
+unequally (rogue dims = huge variance, ~0 leverage). F2/F3 are fidelity in the *model's
+currency* and are the deciding fidelity cells — hence Tier-0 removes the top rogue dims.
+
+### Axis 2 — PARSIMONY (simpler than the thing)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **P1** | **L0** (mean active latents/token) | *reported*; matched-actives named (a d-chart = d actives + gate) | T1 + COMPOSE |
+| **P2** | **MDL bits @ distortion-floor δ** (#2085 surface) | ≥ **5** curved atoms with finite `f*` AND actual firings ≥ `f*` (chart pays) | COMPOSE mdl |
+
+MDL = support bits + value bits (water-filled ½log₂(var/δ)) + residual + amortized
+dictionary; our REML evidence IS this up to constants. A necessary *filter*, never the
+objective (compression ≠ comprehension). Read at the floor — precision above δ is wasted.
+
+### Axis 3 — IDENTITY (one atom = one thing)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **I1** | **shatter count** — # linear latents to match ONE curved atom at fixed fidelity | analytic **median ≥ 2** over accepted curved atoms (ε=0.1), analytic≈empirical (≤2×) where empirical lands | Θ (analytic) + COMPOSE/T1 (empirical, STRETCH) |
+| **I2** | absorption rate + one of SCR/TPP + sparse-probing | **STRETCH** (SAEBench harness) — PENDING | — |
+| **I3** | chart-interp: is the coordinate ordering *nameable* (Mon→Sun, dim→bright) | qualitative; nameable iff A4 ordering > 0.9 on a named probe | DOSE |
+
+Shatter law: a linear SAE needs ~`Θ/(2√(2ε))` atoms to match a curve at rel-err ε. I1
+converts "identity" into a number a linear SAE scores on too — the honest cross-method axis.
+
+### Axis 4 — GEOMETRIC CORRECTNESS (our axis; licensed by the null gate)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **G0** | **HALLUCINATED-STRUCTURE CONTROL** — full pipeline on (i) Gaussian noise matched to real mean+cov, (ii) shuffled real data | **GATE**: accepted curved atoms ≤ **1** (target 0) AND mean Θ < **0.5** on BOTH nulls; harmonic matched-null shows no spurious higher modes | CONTROL |
+| **A2** | **(Θ, ΔEV) scatter** — the discriminating figure | ≥ **5** atoms Θ>1 rad & ΔEV>min_effect | COMPOSE |
+| **A4** | coordinate fidelity: circular corr(fitted t, true cyclic) / ordering | > **0.9** | DOSE |
+| **G_wrap** | **wraparound**: Sun adjacent to Mon on the chart (a line's ends are maximally far) | **pass** (cyclic first/last-probe adjacency) | DOSE |
+| **G_band** | **band coverage**: 95% band contains fraction of held-out on-atom points | coverage ∈ **[0.90, 0.98]** (target 0.95) | COMPOSE |
+| **G_util** | **stable rank** `(Σλ)²/Σλ²` of within-atom code cov ≈ d (ARD prunes idle) | median ≤ **d + 0.5** (d=1 chart ⇒ ≤ 1.5) | COMPOSE |
+
+**G0 is the most important negative control we owe** precisely because we add a richer
+prior: a method that finds circles in noise is DISQUALIFIED regardless of every other
+score. Passing G0 *licenses* the whole axis. Θ = ∫|κ|ds (reparam-invariant; line 0,
+circle 2π); high-ΔEV@Θ≈0 = linear in a curved costume, high-ΔEV@high-Θ = genuine curved
+minority. G_band is calibration (decoration vs real UQ): far above = vague, far below =
+overconfident.
+
+### Axis 5 — CAUSAL VALIDITY (top of the hierarchy)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **A5** | **dose slope** — regress measured-KL on predicted-nats (Fisher-integrated along chart) | slope ∈ **[0.5, 2]** | DOSE |
+| **A6** | **dose R²** | > **0.7** | DOSE |
+| **C_steer** | on-target effect at **matched coherence** (fair vs direction-steering) | **STRETCH** (steering_bench) — reported if it lands | DOSE/steer |
+
+Dose calibration is **the crown, ours alone**: slope≈1 + high R² ⇒ the coordinate system
+is *metrically* true — the reliability diagram of interpretability. No direction/block
+system can produce it (no coordinate to integrate along).
+
+### Axis 6 — RELIABILITY (believe us twice)
+| ID | Metric | Threshold | Source |
+|----|--------|-----------|--------|
+| **R1** | **seed stability, two resolutions** | subspace **principal-angle overlap > 0.9**; Hungarian latent-match reported *honestly* alongside (SAEs famously 15–50%) | STABILITY |
+| **R2** | **cross-distribution replication** — creditscope Qwen3.5-35B L30 | ≥ **3** curved atoms recur (report which) — PENDING if arm not run | DATA/COMPOSE |
+| **R3** | **split hygiene + matched budget** stated in advance | **pass**: chunk-level split + Tier-0 train-only + matched-currency (actives) named | DATA manifest |
 
 ---
 
-## Headline figures (`figures_35b/`)
+## THE TWO HEADLINE FIGURES (print these)
+1. **Pareto frontier** — held-out EV (and F2 loss-recovered on a twin panel) vs L0:
+   hybrid vs pure-linear T1 vs our TopK, at matched actives. Tie/beat the field on ITS
+   own axis. (Fig 1)
+2. **Dose-calibration scatter** — predicted nats vs measured KL, slope + R². The field
+   has NO axis here. (Fig 8)
 
-Regenerated by `experiments/report_35b_figures.py` from landed artifacts; each a real
-chart (no PCA-hue where a real coordinate exists). Design per the `dataviz` skill.
-
-1. **Frontier — held-out EV vs active budget.** hybrid (COMPOSE) vs pure-linear T1 vs our
-   TopK baseline at matched K/L0. THE parity figure; A1 read here.
-2. **(Θ, ΔEV) scatter, colored by atom type.** curved minority made visible; A2 count =
-   upper-right quadrant (Θ>1 & ΔEV>min_effect).
-3. **Curved-atom gallery (3–5).** decoded chart curve + posterior band + activations
-   colored by the fitted **intrinsic coordinate** (real chart coord, not PCA hue).
-4. **MDL bits/token.** #2085 description-length surface (`mdl_ladder/mdl.py score_json`)
-   on landed featurizer JSON — chart-vs-block crossover `f*` + Δbits/token. Zero extra
-   compute.
-5. **Stable-rank + utilization column per atom.** commensurable with the block-sparse
-   featurizer paper; sorted by ΔEV.
-6. **Held-out EV of the curved tier on the 50k subsample** vs linear-only baseline.
-7. **(DOSE) probe-circle ordering** — A4.
-8. **(DOSE) dose calibration** predicted-nats vs measured-KL, slope + R² — A5/A6.
+Supporting figures: (Θ,ΔEV) scatter, curved-atom gallery, MDL bits/token, stable-rank +
+utilization, curved-tier EV lift, probe ordering, and the **hallucination-null control bar**
+(accepted curved atoms: real vs Gaussian-null vs shuffled-null — G0 made visible).
 
 ---
 
-## Discriminators (log lines inside the composed run)
+## Data hygiene (non-negotiable, pre-registered) — R3
+- **Split by chunk / rollout, NEVER by row.** SuperGPQA rollouts are contiguous; a row
+  split leaks adjacent tokens and inflates held-out EV for *every* method equally — the
+  one way to fake tonight. Manifest states the chunk-level split + held-out chunk ids.
+- **Tier-0** (mean, top-1..3 rogue dims, global scale) on **TRAIN chunks only**, stored;
+  held-out transformed with the frozen Tier-0.
+- **Held-out EV / geometry** on a **50k held-out subsample** from held-out chunks (seed
+  recorded). Fidelity currency (F2/F3) read AT the distortion floor.
+- **Matched budget names its currency**: actives (compute/token) is the headline;
+  bits@δ (information) and params (capacity) are reported as separate panels — mixing
+  them is misleading.
 
-- per-birth EV increment (monotone up);
-- **collapse events** with live decoders — must be 0 (A3); the old W6 co-collapse
-  question on the real 35B target;
-- Θ + ΔEV per accepted atom (feeds Fig 2);
-- extension-vs-new-atom race outcome per birth;
-- optional guarded joint-fit arm at grown K → free grown-vs-joint EV delta.
+---
+
+## Producing-lane artifacts (drop into `results/run_35b/`)
+| Lane | File | Feeds |
+|------|------|-------|
+| T1 | `l17_t1_frontier.json` | A1, P1 frontier + baseline |
+| COMPOSE | `compose_per_atom.json` | A2, I1(empirical), G_band, G_util, P2(firings), curved gallery |
+| COMPOSE | `compose_mdl.json` | P2 (MDL bits @ δ) |
+| **CONTROL** | `fidelity_currency.json` | **F2, F3, distortion floor** |
+| **CONTROL** | `null_control.json` | **G0 gate** |
+| DOSE | `dose_calibration.json` | A4, A5, A6, G_wrap, I3 |
+| STABILITY | `stability.json` | R1 |
+| DATA | `manifest.json` | R3 attestation |
 
 ---
 
 ## Pre-registered failure branches (all informative, all reported)
-
 - Full-width p=2048 births stall past the 30-min/birth guard → PCA-512 twin carries the
   headline, stall reported as the perf datum.
-- 35B won't load for DOSE → Qwen3-8B carries the crown (A4–A6 on 8B), stated as such.
-- A joint-fit arm collapses where stagewise does not → strongest architecture evidence,
-  published as the headline.
-- A1 misses parity → reported honestly: curved minority resolves structure linear cannot
-  (A2) but does not yet reach TopK parity at matched actives; the ΔEV/Θ evidence stands.
+- 35B won't load for DOSE → Qwen3-8B carries the crown (A4–A6, wraparound on 8B), stated.
+- A joint-fit arm collapses where stagewise does not → strongest architecture evidence.
+- **G0 fails** (machinery finds curved structure in matched noise/shuffle) → axis-4
+  claims are VOID and reported as such; this is the single disqualifying outcome.
+- A1/F2 miss parity → reported honestly: curved minority resolves structure linear cannot
+  (A2, I1) but does not yet reach TopK parity at matched actives; ΔEV/Θ evidence stands.

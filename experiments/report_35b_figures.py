@@ -319,8 +319,25 @@ def fig4_mdl(mdl: dict | None, out: Path) -> dict:
     ax.invert_yaxis()
     _style(ax, "Description length per featurizer (chart=blue, block=yellow)",
            "bits / token", "")
-    cross = scored.get("crossover", {})
-    return {"status": "OK", "crossover": cross, "figure": _save(fig, out)}
+    # P2 verdict — how many curved charts PAY in MDL: pair each chart to its block
+    # (chart_name/block_name) and count crossovers where actual firings ≥ f* (finite).
+    feat_objs = {f["name"]: mdl_mod.featurizer_from_json(f) for f in payload["featurizers"]}
+    delta2 = scored.get("delta2")
+    n_pay = 0
+    n_pairs = 0
+    for f in payload["featurizers"]:
+        bn, cn = f.get("block_name"), f.get("chart_name")
+        if bn in feat_objs and cn in feat_objs and f.get("kind") == "chart":
+            n_pairs += 1
+            cx = mdl_mod.crossover_firings(feat_objs[bn], feat_objs[cn], delta2)
+            fstar = cx.get("f_star")
+            if fstar is not None and math.isfinite(float(fstar)) and float(fstar) >= 0 \
+                    and cx.get("chart_wins_at_actual_f"):
+                n_pay += 1
+    p2_status = ("ACCEPT" if n_pay >= 5 else "MISS") if n_pairs else "PENDING"
+    return {"status": p2_status, "n_curved_paying_mdl": n_pay, "n_pairs": n_pairs,
+            "crossover": scored.get("crossover", {}), "threshold": ">=5 pay",
+            "figure": _save(fig, out)}
 
 
 # ---------------------------------------------------------------------------------
@@ -399,6 +416,28 @@ def fig78_dose(dose: dict | None, out7: Path, out8: Path) -> dict:
     res["ordering_corr"] = ordering
     res["A4_status"] = ("ACCEPT" if ordering is not None and float(ordering) > 0.9
                         else ("MISS" if ordering is not None else "PENDING"))
+    res["model"] = _get(dose, "model", default="Qwen3.6-35B")  # 8B fallback labels itself
+    # G_wrap — wraparound: first/last probe adjacent on the chart (a line can't do this).
+    wrap = _get(dose, "wraparound", "wraparound_pass", default=None)
+    if wrap is None and probe_ang is not None and probe_true is not None:
+        pa = np.asarray(probe_ang, dtype=float)
+        order = np.argsort(np.asarray(probe_true, dtype=float))
+        ring = pa[order]
+        if ring.size >= 3:
+            # cyclic gaps between consecutive-in-true-order probes; the first↔last gap
+            # must be comparable to the others (not the maximal one a ranking forces).
+            two_pi = 2 * math.pi
+            gaps = np.abs(np.diff(np.r_[ring, ring[0] + two_pi]))
+            gaps = np.minimum(gaps % two_pi, two_pi - (gaps % two_pi))
+            close_gap = gaps[-1]  # last→first
+            wrap = bool(close_gap <= 1.5 * float(np.median(gaps[:-1]) + 1e-9))
+    res["wraparound_pass"] = wrap
+    res["Gwrap_status"] = ("ACCEPT" if wrap is True else ("MISS" if wrap is False else "PENDING"))
+    # I3 — chart-interp: coordinate ordering nameable iff ordering clears the bar on a
+    # named probe (weekday/month). Named-ness is qualitative; the gate is A4.
+    res["I3_nameable"] = _get(dose, "chart_interp_name", "probe_name", default=None)
+    res["I3_status"] = ("ACCEPT" if ordering is not None and float(ordering) > 0.9
+                        else ("MISS" if ordering is not None else "PENDING"))
     # Fig 8 — dose calibration
     pn = _get(dose, "predicted_nats", default=None)
     kl = _get(dose, "measured_kl", default=None)
@@ -445,6 +484,216 @@ def a3_collapse(compose: dict | None) -> dict:
             "ev_monotone_in_births": bool(monotone), "threshold": "exactly 0"}
 
 
+def _accepted_curved(compose: dict) -> list[dict]:
+    """Curved atoms that pay rent: circle topology, Θ>1, ΔEV>min_effect."""
+    min_eff = float(_get(compose, "min_effect_ev", "min_effect", default=0.0))
+    out = []
+    for a in _get(compose, "atoms", default=[]):
+        if str(_get(a, "topology", "kind", default="")).lower() != "circle":
+            continue
+        th = _get(a, "theta", "turning")
+        de = _get(a, "delta_ev", "dev", "loao_delta_ev")
+        if th is None or de is None:
+            continue
+        if float(th) > 1.0 and float(de) > min_eff:
+            out.append(a)
+    return out
+
+
+# ---------------------------------------------------------------------------------
+# Axis 1 — FIDELITY currency (F2 loss-recovered, F3 KL-patched, distortion floor).
+# ---------------------------------------------------------------------------------
+def fidelity_currency(fc: dict | None) -> dict:
+    if not fc:
+        return {"F2_status": "PENDING", "F3_status": "PENDING",
+                "reason": "CONTROL fidelity_currency.json not landed"}
+    hyb = _get(fc, "hybrid", default={})
+    topk = _get(fc, "topk", default={})
+    floor = _get(fc, "distortion_floor_r2", "distortion_floor", default=None)
+    res: dict[str, Any] = {"distortion_floor_r2": floor}
+    lr_h, lr_t = _get(hyb, "loss_recovered"), _get(topk, "loss_recovered")
+    if lr_h is not None and lr_t is not None:
+        res["loss_recovered_hybrid"] = float(lr_h)
+        res["loss_recovered_topk"] = float(lr_t)
+        res["F2_status"] = "ACCEPT" if float(lr_h) >= float(lr_t) - 0.02 else "MISS"
+    else:
+        res["F2_status"] = "PENDING"
+    kl_h, kl_t = _get(hyb, "kl_patched"), _get(topk, "kl_patched")
+    if kl_h is not None and kl_t is not None:
+        res["kl_patched_hybrid"] = float(kl_h)
+        res["kl_patched_topk"] = float(kl_t)
+        res["F3_status"] = "ACCEPT" if float(kl_h) <= float(kl_t) * 1.05 else "MISS"
+    else:
+        res["F3_status"] = "PENDING"
+    return res
+
+
+# ---------------------------------------------------------------------------------
+# Axis 4 GATE — G0 hallucinated-structure control (real vs Gaussian-null vs shuffle).
+# ---------------------------------------------------------------------------------
+def g0_null_gate(nc: dict | None, out: Path) -> dict:
+    if not nc:
+        return {"status": "PENDING", "reason": "CONTROL null_control.json not landed"}
+    arms = {"gaussian_matched": "Gaussian null", "shuffled": "shuffled null"}
+    real = _get(nc, "real_reference", default=None)
+    passes = True
+    detail = {}
+    for key in arms:
+        a = _get(nc, key, default=None)
+        if a is None:
+            return {"status": "PENDING", "reason": f"null arm '{key}' missing"}
+        n_curved = int(_get(a, "n_curved_accepted", "n_curved", default=0))
+        mean_th = float(_get(a, "mean_theta", default=0.0))
+        arm_pass = (n_curved <= 1) and (mean_th < 0.5)
+        passes = passes and arm_pass
+        detail[key] = {"n_curved_accepted": n_curved, "mean_theta": mean_th, "pass": arm_pass}
+    harmonic_ok = _get(nc, "harmonic_null", default={})
+    higher = _get(harmonic_ok, "higher_modes_on_first_harmonic_plus_noise", default=False)
+    if higher:
+        passes = False
+    detail["harmonic_spurious_higher_modes"] = bool(higher)
+
+    # Figure 9 — the null gate made visible: accepted curved atoms per arm.
+    labels, counts, colors = [], [], []
+    if real is not None:
+        labels.append("real L17")
+        counts.append(int(_get(real, "n_curved_accepted", "n_curved", default=0)))
+        colors.append(C_HYBRID)
+    for key, name in arms.items():
+        labels.append(name)
+        counts.append(detail[key]["n_curved_accepted"])
+        colors.append(CAT["red"])
+    fig, ax = _newfig(w=5.6, h=4.2)
+    bars = ax.bar(labels, counts, color=colors, width=0.6)
+    for b, v in zip(bars, counts):
+        ax.annotate(str(v), (b.get_x() + b.get_width() / 2, v), textcoords="offset points",
+                    xytext=(0, 4), ha="center", color=INK, fontsize=10)
+    ax.axhline(1.5, color=INK2, lw=1, ls="--", alpha=0.7)
+    _style(ax, f"Hallucination-null control (GATE: {'PASS' if passes else 'FAIL'})",
+           "", "accepted curved atoms")
+    return {"status": "PASS" if passes else "FAIL", "detail": detail,
+            "figure": _save(fig, out)}
+
+
+# ---------------------------------------------------------------------------------
+# Axis 3 — I1 shatter count (analytic from Θ; empirical if COMPOSE provides it).
+# ---------------------------------------------------------------------------------
+def i1_shatter(compose: dict | None, eps: float = 0.1) -> dict:
+    if not compose:
+        return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
+    atoms = _accepted_curved(compose)
+    if not atoms:
+        return {"status": "PENDING", "reason": "no accepted curved atoms"}
+    # shatter law: n ~ Θ / (2*sqrt(2*eps)) linear atoms to match one curve at rel-err eps
+    denom = 2.0 * math.sqrt(2.0 * eps)
+    analytic = [float(_get(a, "theta", "turning")) / denom for a in atoms]
+    med = float(np.median(analytic))
+    emp = [float(_get(a, "shatter_empirical")) for a in atoms
+           if _get(a, "shatter_empirical") is not None]
+    res = {"analytic_median": round(med, 2), "eps": eps, "n_atoms": len(atoms),
+           "status": "ACCEPT" if med >= 2.0 else "MISS", "threshold": "median >= 2"}
+    if emp:
+        emp_med = float(np.median(emp))
+        res["empirical_median"] = round(emp_med, 2)
+        ratio = med / emp_med if emp_med else float("inf")
+        res["analytic_vs_empirical_ratio"] = round(ratio, 2)
+        res["law_holds"] = bool(0.5 <= ratio <= 2.0)
+    return res
+
+
+# ---------------------------------------------------------------------------------
+# Axis 4 — G_band coverage + G_util stable rank.
+# ---------------------------------------------------------------------------------
+def _band_coverage_one(atom: dict) -> float | None:
+    """Fraction of held-out on-atom activations inside the 95% band. Prefer the
+    lane-computed value; else approximate from decoded curve + perp half-width band."""
+    v = _get(atom, "band_coverage")
+    if v is not None:
+        return float(v)
+    curve = _get(atom, "chart_curve")
+    acts = _get(atom, "activation_proj")
+    band = _get(atom, "band")
+    if curve is None or acts is None or band is None:
+        return None
+    curve = np.asarray(curve, float)
+    acts = np.asarray(acts, float)
+    band = np.asarray(band, float)
+    if acts.size == 0 or curve.shape[0] == 0:
+        return None
+    hw = band[:, 0] if band.ndim == 2 else band  # perp half-width per curve point
+    # nearest curve point per activation, compare distance to that point's half-width
+    d = np.linalg.norm(acts[:, None, :] - curve[None, :, :], axis=2)  # (n_act, n_curve)
+    j = np.argmin(d, axis=1)
+    inside = d[np.arange(acts.shape[0]), j] <= hw[j]
+    return float(inside.mean())
+
+
+def g_band(compose: dict | None) -> dict:
+    if not compose:
+        return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
+    atoms = _accepted_curved(compose)
+    covs = [c for a in atoms if (c := _band_coverage_one(a)) is not None]
+    if not covs:
+        return {"status": "PENDING", "reason": "no band coverage available"}
+    med = float(np.median(covs))
+    return {"status": "ACCEPT" if 0.90 <= med <= 0.98 else "MISS",
+            "median_coverage": round(med, 3), "n_atoms": len(covs),
+            "threshold": "coverage in [0.90, 0.98]"}
+
+
+def g_util(compose: dict | None) -> dict:
+    if not compose:
+        return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
+    atoms = _accepted_curved(compose)
+    srs, ds = [], []
+    for a in atoms:
+        sr = _get(a, "stable_rank")
+        if sr is None:
+            continue
+        srs.append(float(sr))
+        ds.append(int(_get(a, "d_atom", "d", default=1)))
+    if not srs:
+        return {"status": "PENDING", "reason": "no stable_rank on accepted curved atoms"}
+    med_sr = float(np.median(srs))
+    d = int(np.median(ds)) if ds else 1
+    return {"status": "ACCEPT" if med_sr <= d + 0.5 else "MISS",
+            "median_stable_rank": round(med_sr, 3), "d": d,
+            "threshold": "median stable rank <= d + 0.5"}
+
+
+# ---------------------------------------------------------------------------------
+# Axis 6 — R1 seed stability, R2 cross-corpus, R3 hygiene attestation.
+# ---------------------------------------------------------------------------------
+def r1_stability(stab: dict | None) -> dict:
+    if not stab:
+        return {"status": "PENDING", "reason": "STABILITY stability.json not landed"}
+    pa = _get(stab, "principal_angle_overlap", "subspace_overlap", default=None)
+    hm = _get(stab, "hungarian_latent_match", "latent_match", default=None)
+    res = {"principal_angle_overlap": pa, "hungarian_latent_match": hm}
+    res["status"] = ("ACCEPT" if pa is not None and float(pa) > 0.9
+                     else ("MISS" if pa is not None else "PENDING"))
+    return res
+
+
+def r2_cross_corpus(cross: dict | None) -> dict:
+    if not cross:
+        return {"status": "PENDING", "reason": "creditscope L30 arm not landed"}
+    n = int(_get(cross, "n_curved_recurring", "n_recur", default=0))
+    return {"status": "ACCEPT" if n >= 3 else "MISS", "n_curved_recurring": n,
+            "threshold": ">= 3 recur"}
+
+
+def r3_hygiene(manifest: dict | None) -> dict:
+    if not manifest:
+        return {"status": "PENDING", "reason": "DATA manifest.json not landed"}
+    chunk = bool(_get(manifest, "chunk_level_split", "split_by_chunk", default=False))
+    tier0 = bool(_get(manifest, "tier0_train_only", default=False))
+    currency = _get(manifest, "matched_currency", default=None)
+    ok = chunk and tier0 and (currency is not None)
+    return {"status": "PASS" if ok else "MISS", "chunk_level_split": chunk,
+            "tier0_train_only": tier0, "matched_currency": currency}
+
+
 # ---------------------------------------------------------------------------------
 # Report assembly (generated build output, filled from artifacts + frozen prereg).
 # ---------------------------------------------------------------------------------
@@ -452,58 +701,123 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     def cell(v):
         return v if v is not None else "PENDING"
 
-    a1 = results["fig1"]
-    a2 = results["fig2"]
-    a3 = results["a3"]
-    dose = results["dose"]
+    a1, a2, a3 = results["fig1"], results["fig2"], results["a3"]
+    dose, fc, g0 = results["dose"], results["fidelity"], results["g0"]
+    i1, gband, gutil = results["i1"], results["g_band"], results["g_util"]
+    r1, r2, r3 = results["r1"], results["r2"], results["r3"]
+    p2 = results["fig4"]
     lines = []
     A = lines.append
     A("# REPORT_35B — First manifold dictionary on a 35B residual stream")
     A("")
-    A("*Generated by `experiments/report_35b_figures.py` from landed artifacts. "
-      "Acceptance thresholds are frozen in `experiments/prereg_35b.md` (pre-registered). "
-      "`PENDING` = artifact not yet landed.*")
+    A("*Generated by `experiments/report_35b_figures.py` from landed artifacts. The "
+      "full 6-axis scorecard is frozen in `experiments/prereg_35b.md` (pre-registered "
+      "before numbers land). `PENDING` = artifact not yet landed; nothing here is faked.*")
+    A("")
+    A("**Meta-rules** (how to read this): (1) **Goodhart** — this is a portfolio, no cell "
+      "is the objective; our own parable is the affine-PCA shortcut that once greened the "
+      "OLMo gate by *being* its baseline. (2) **Effect size > significance** — at millions "
+      "of tokens everything real is detectable, so evidence and salience (min-effect floors "
+      "on Θ/ΔEV/dose) are separate dials. (3) **Hierarchy descriptive < predictive < "
+      "causal** — dose calibration is the causal crown, not another EV number.")
     A("")
     A(f"Artifacts scanned: `{artifacts_dir}`  |  figures: `{FIGDIR}`")
     A("")
-    A("## Acceptance scoreboard")
+    # --- GATE first: G0 licenses the whole geometry axis ---
+    A("## GATE — Hallucinated-structure control (G0)")
     A("")
-    A("| # | Metric | Threshold | Result | Value |")
-    A("|---|--------|-----------|--------|-------|")
-    A(f"| A1 | composed held-out EV vs TopK @ matched actives | within 0.02 | "
-      f"{cell(a1.get('status'))} | gap {cell(a1.get('gap'))} |")
-    A(f"| A2 | curved atoms Θ>1 & ΔEV>min_effect | ≥5 | "
-      f"{cell(a2.get('status'))} | {cell(a2.get('curved_atoms_theta_gt1_and_paying'))} |")
-    A(f"| A3 | live-decoder collapse events | 0 | "
-      f"{cell(a3.get('status'))} | {cell(a3.get('collapse_events'))} |")
-    A(f"| A4 | probe-circle ordering | >0.9 | "
-      f"{cell(dose.get('A4_status'))} | {cell(dose.get('ordering_corr'))} |")
-    A(f"| A5 | dose slope | ∈[0.5,2] | "
-      f"{cell(dose.get('A5_status'))} | {cell(dose.get('slope'))} |")
-    A(f"| A6 | dose R² | >0.7 | "
-      f"{cell(dose.get('A6_status'))} | {cell(dose.get('r2'))} |")
+    A(f"**{cell(g0.get('status'))}** — accepted curved atoms on Gaussian-matched-noise and "
+      "shuffled data must be ≤1 with Θ→0. A method that finds circles in noise is "
+      "DISQUALIFIED on axis 4 regardless of every other score; passing LICENSES the "
+      "geometry axis.")
+    if g0.get("detail"):
+        A("")
+        A(f"```json\n{json.dumps(g0['detail'], indent=1)}\n```")
     A("")
-    accepts = [a1.get("status"), a2.get("status"), a3.get("status"),
-               dose.get("A4_status"), dose.get("A5_status"), dose.get("A6_status")]
-    if all(s == "ACCEPT" for s in accepts):
-        overall = "ALL SIX ACCEPT — headline holds."
-    elif any(s == "MISS" for s in accepts):
-        overall = "AT LEAST ONE MISS — see the pre-registered failure branch for that metric."
+
+    def row(idn, metric, thr, status, val):
+        A(f"| {idn} | {metric} | {thr} | {cell(status)} | {cell(val)} |")
+
+    A("## Scorecard — 6 axes")
+    A("")
+    A("| ID | Metric | Threshold | Result | Value |")
+    A("|----|--------|-----------|--------|-------|")
+    A("| | **Axis 1 — FIDELITY** | | | |")
+    row("A1", "held-out EV vs TopK @ matched actives", "within 0.02", a1.get("status"),
+        f"gap {cell(a1.get('gap'))}")
+    row("F2", "loss-recovered @ floor (model's currency)", "≥ TopK−0.02", fc.get("F2_status"),
+        cell(fc.get("loss_recovered_hybrid")))
+    row("F3", "KL-patched @ floor", "≤ TopK×1.05", fc.get("F3_status"),
+        cell(fc.get("kl_patched_hybrid")))
+    row("—", "distortion floor R²* (read point)", "reported", "—",
+        cell(fc.get("distortion_floor_r2")))
+    A("| | **Axis 2 — PARSIMONY** | | | |")
+    row("P1", "L0 (mean actives/token)", "reported, matched", a1.get("status"),
+        f"L0 {cell(a1.get('hybrid_l0'))}")
+    row("P2", "MDL bits @ δ, curved tier pays (#2085)", "≥5 pay", p2.get("status"),
+        f"{cell(p2.get('n_curved_paying_mdl'))} pay")
+    A("| | **Axis 3 — IDENTITY** | | | |")
+    row("I1", "shatter count (linear atoms / curve)", "median ≥2", i1.get("status"),
+        cell(i1.get("analytic_median")))
+    row("I2", "absorption / SCR / TPP", "STRETCH", "PENDING", "SAEBench harness")
+    row("I3", "chart-interp nameable ordering", "ordering>0.9", dose.get("I3_status"),
+        cell(dose.get("ordering_corr")))
+    A("| | **Axis 4 — GEOMETRY** (licensed by G0) | | | |")
+    row("G0", "hallucinated-structure GATE", "≤1 curved on nulls", g0.get("status"),
+        cell((g0.get("detail") or {}).get("gaussian_matched", {}).get("n_curved_accepted")))
+    row("A2", "(Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect", "≥5", a2.get("status"),
+        cell(a2.get("curved_atoms_theta_gt1_and_paying")))
+    row("A4", "coordinate fidelity (circular corr/ordering)", ">0.9", dose.get("A4_status"),
+        cell(dose.get("ordering_corr")))
+    row("G_wrap", "wraparound (Sun adjacent to Mon)", "pass", dose.get("Gwrap_status"),
+        cell(dose.get("wraparound_pass")))
+    row("G_band", "95% band coverage of held-out on-atom pts", "∈[0.90,0.98]",
+        gband.get("status"), cell(gband.get("median_coverage")))
+    row("G_util", "stable rank ≈ d (ARD prunes idle)", "≤ d+0.5", gutil.get("status"),
+        cell(gutil.get("median_stable_rank")))
+    A("| | **Axis 5 — CAUSAL** (the crown) | | | |")
+    row("A5", "dose slope (measured-KL on predicted-nats)", "∈[0.5,2]", dose.get("A5_status"),
+        cell(dose.get("slope")))
+    row("A6", "dose R²", ">0.7", dose.get("A6_status"), cell(dose.get("r2")))
+    row("C_steer", "on-target effect @ matched coherence", "STRETCH", "PENDING",
+        "steering_bench")
+    A("| | **Axis 6 — RELIABILITY** | | | |")
+    row("R1", "seed stability (principal angles; latent-match too)", ">0.9 subspace",
+        r1.get("status"), cell(r1.get("principal_angle_overlap")))
+    row("R2", "cross-corpus replicate (creditscope L30)", "≥3 recur", r2.get("status"),
+        cell(r2.get("n_curved_recurring")))
+    row("R3", "split hygiene + matched budget stated", "pass", r3.get("status"),
+        cell(r3.get("matched_currency")))
+    A("| | **Discriminator** | | | |")
+    row("A3", "live-decoder collapse events", "0", a3.get("status"),
+        cell(a3.get("collapse_events")))
+    A("")
+    # overall verdict
+    hard = [a1.get("status"), a2.get("status"), a3.get("status"), dose.get("A4_status"),
+            dose.get("A5_status"), dose.get("A6_status")]
+    if g0.get("status") == "FAIL":
+        overall = "GATE FAILED (G0) — geometry-axis claims are VOID. See failure branch."
+    elif all(s == "ACCEPT" for s in hard) and g0.get("status") == "PASS":
+        overall = "GATE PASSED and all six frozen A-metrics ACCEPT — headline holds."
+    elif any(s == "MISS" for s in hard):
+        overall = "AT LEAST ONE A-METRIC MISS — see the pre-registered failure branch."
     else:
-        overall = "IN PROGRESS — some metrics still PENDING."
+        overall = "IN PROGRESS — metrics still PENDING."
     A(f"**Overall:** {overall}")
     A("")
-    A("## Figures")
+    A("## Headline figures")
     A("")
     figmap = [
-        ("1 Frontier (EV vs active budget)", a1.get("figure")),
-        ("2 (Θ, ΔEV) scatter by atom type", a2.get("figure")),
-        ("3 Curved-atom gallery", results["fig3"].get("figure")),
-        ("4 MDL bits/token", results["fig4"].get("figure")),
-        ("5 Stable-rank + utilization", results["fig5"].get("figure")),
-        ("6 Curved-tier held-out EV lift", results["fig6"].get("figure")),
-        ("7 Probe-circle ordering (crown)", dose.get("fig7")),
-        ("8 Dose calibration (crown)", dose.get("fig8")),
+        ("1 — Pareto frontier: held-out EV vs L0 (HEADLINE)", a1.get("figure")),
+        ("8 — Dose calibration: predicted nats vs measured KL (HEADLINE, ours alone)",
+         dose.get("fig8")),
+        ("2 — (Θ, ΔEV) scatter by atom type", a2.get("figure")),
+        ("3 — Curved-atom gallery", results["fig3"].get("figure")),
+        ("4 — MDL bits/token @ δ", p2.get("figure")),
+        ("5 — Stable-rank + utilization", results["fig5"].get("figure")),
+        ("6 — Curved-tier held-out EV lift", results["fig6"].get("figure")),
+        ("7 — Probe cyclic ordering", dose.get("fig7")),
+        ("9 — Hallucination-null control (G0 made visible)", g0.get("figure")),
     ]
     for name, fpath in figmap:
         if fpath:
@@ -512,13 +826,6 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
             A(f"  ![{name}]({rel})")
         else:
             A(f"- **Fig {name}** — PENDING")
-    A("")
-    A("## Discriminators (log lines from the composed run)")
-    A("")
-    A(f"- collapse events: {cell(a3.get('collapse_events'))} "
-      f"(target 0) — {cell(a3.get('status'))}")
-    A(f"- EV monotone in births: {cell(a3.get('ev_monotone_in_births'))}")
-    A(f"- births: {cell(a3.get('n_births'))}")
     A("")
     A("## Raw verdict payloads")
     A("")
@@ -529,12 +836,17 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     out.write_text("\n".join(lines))
 
 
-def run(artifacts_dir: Path) -> dict:
+def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     FIGDIR.mkdir(parents=True, exist_ok=True)
     t1 = _load(artifacts_dir / "l17_t1_frontier.json")
     compose = _load(artifacts_dir / "compose_per_atom.json")
     mdl = _load(artifacts_dir / "compose_mdl.json")
     dose = _load(artifacts_dir / "dose_calibration.json")
+    fc = _load(artifacts_dir / "fidelity_currency.json")
+    nc = _load(artifacts_dir / "null_control.json")
+    stab = _load(artifacts_dir / "stability.json")
+    cross = _load(artifacts_dir / "creditscope_l30.json")
+    manifest = _load(artifacts_dir / "manifest.json")
     results = {
         "fig1": fig1_frontier(t1, compose, FIGDIR / "fig1_frontier.png"),
         "fig2": fig2_theta_dev(compose, FIGDIR / "fig2_theta_dev.png"),
@@ -545,8 +857,16 @@ def run(artifacts_dir: Path) -> dict:
         "a3": a3_collapse(compose),
         "dose": fig78_dose(dose, FIGDIR / "fig7_probe_ordering.png",
                            FIGDIR / "fig8_dose_calibration.png"),
+        "fidelity": fidelity_currency(fc),
+        "g0": g0_null_gate(nc, FIGDIR / "fig9_null_control.png"),
+        "i1": i1_shatter(compose),
+        "g_band": g_band(compose),
+        "g_util": g_util(compose),
+        "r1": r1_stability(stab),
+        "r2": r2_cross_corpus(cross),
+        "r3": r3_hygiene(manifest),
     }
-    write_report(results, artifacts_dir, REPO / "REPORT_35B.md")
+    write_report(results, artifacts_dir, report_path or (REPO / "REPORT_35B.md"))
     return results
 
 
@@ -574,12 +894,14 @@ def selftest() -> dict:
             [np.cos(t[rng.integers(0, 80, 300)]), np.sin(t[rng.integers(0, 80, 300)])], axis=1) * (1 + 0.1 * i)
         coord = np.arctan2(ap[:, 1], ap[:, 0])
         atoms.append({"idx": i, "topology": "circle", "theta": th, "delta_ev": de,
-                      "stable_rank": float(rng.uniform(1.5, 4.0)),
+                      "d_atom": 1,
+                      "stable_rank": float(rng.uniform(1.0, 1.4)),  # d=1 chart ⇒ ~1
                       "utilization": float(rng.uniform(0.1, 0.9)),
                       "chart_curve": curve.tolist(),
-                      "band": np.c_[np.full(80, 0.12), np.full(80, 0.12)].tolist(),
+                      "band": np.c_[np.full(80, 0.30), np.full(80, 0.30)].tolist(),
                       "activation_proj": ap.tolist(),
-                      "activation_coord": coord.tolist()})
+                      "activation_coord": coord.tolist(),
+                      "band_coverage": float(rng.uniform(0.93, 0.97))})
     for i in range(3):
         atoms.append({"idx": 100 + i, "topology": "linear",
                       "theta": float(rng.uniform(0, 0.4)),
@@ -592,25 +914,48 @@ def selftest() -> dict:
         "atoms": atoms,
         "births": [{"ev": 0.80 + 0.01 * i, "collapse_events": 0} for i in range(8)],
     }
-    dose = {"probe_order": list(range(12)),
-            "probe_angles": list(np.sort(rng.uniform(0, 2 * math.pi, 12))),
-            "ordering_corr": 0.96,
+    # probe angles that respect cyclic order (so wraparound passes): evenly spaced ring
+    ring = np.linspace(0, 2 * math.pi, 13)[:12] + rng.normal(0, 0.05, 12)
+    dose = {"probe_order": list(range(12)), "probe_angles": list(ring),
+            "ordering_corr": 0.96, "model": "Qwen3.6-35B", "chart_interp_name": "weekday",
             "predicted_nats": list(np.linspace(0, 2, 20)),
             "measured_kl": list(np.linspace(0, 2, 20) * 1.1 + rng.normal(0, 0.1, 20)),
             "slope": 1.08, "r2": 0.94}
+    # CONTROL artifacts: fidelity currency + hallucination null (both PASS)
+    fc = {"distortion_floor_r2": 0.92,
+          "hybrid": {"loss_recovered": 0.91, "kl_patched": 0.08, "at_actives": 40},
+          "topk": {"loss_recovered": 0.90, "kl_patched": 0.085, "at_actives": 40}}
+    nc = {"real_reference": {"n_curved_accepted": 7, "mean_theta": 1.9},
+          "gaussian_matched": {"n_curved_accepted": 0, "mean_theta": 0.08},
+          "shuffled": {"n_curved_accepted": 1, "mean_theta": 0.12},
+          "harmonic_null": {"higher_modes_on_first_harmonic_plus_noise": False}}
+    stab = {"principal_angle_overlap": 0.93, "hungarian_latent_match": 0.42}
+    cross = {"n_curved_recurring": 4}
+    manifest = {"chunk_level_split": True, "tier0_train_only": True, "matched_currency": "actives"}
+    # dump artifacts and drive the real production run() path (honest end-to-end proof)
+    for name, payload in [("l17_t1_frontier.json", t1), ("compose_per_atom.json", compose),
+                          ("dose_calibration.json", dose), ("fidelity_currency.json", fc),
+                          ("null_control.json", nc), ("stability.json", stab),
+                          ("creditscope_l30.json", cross), ("manifest.json", manifest)]:
+        (st / name).write_text(json.dumps(payload))
+    # a realistic MDL featurizer set (chart captures 85% on one intrinsic coord)
+    feats = []
+    for g in range(5):
+        tv = float(rng.uniform(0.5, 3.0)); b = 8
+        cv = sorted(np.abs(rng.normal(size=b)) * tv / b, reverse=True)
+        f = int(rng.integers(200, 5000))
+        feats.append({"name": f"blk{g}-linear", "kind": "block", "total_var": tv,
+                      "n_tokens": 50000, "n_firings": f, "n_params": b * 512,
+                      "coded_var": [float(v) for v in cv], "g_dict": 5, "k_active": 2})
+        feats.append({"name": f"blk{g}-chart", "kind": "chart", "total_var": tv,
+                      "n_tokens": 50000, "n_firings": f, "n_params": 4 * 512,
+                      "coded_var": [0.85 * tv], "ev": 0.85, "g_dict": 5, "k_active": 2,
+                      "block_name": f"blk{g}-linear", "chart_name": f"blk{g}-chart"})
+    (st / "compose_mdl.json").write_text(json.dumps(
+        {"mdl_featurizers": feats, "block_name": "blk0-linear", "chart_name": "blk0-chart"}))
     global FIGDIR
     FIGDIR = st
-    results = {
-        "fig1": fig1_frontier(t1, compose, st / "fig1_frontier.png"),
-        "fig2": fig2_theta_dev(compose, st / "fig2_theta_dev.png"),
-        "fig3": fig3_gallery(compose, st / "fig3_gallery.png"),
-        "fig4": {"status": "SKIP", "reason": "MDL needs real featurizer JSON"},
-        "fig5": fig5_stable_rank(compose, st / "fig5_stable_rank.png"),
-        "fig6": fig6_curved_tier_ev(compose, st / "fig6_curved_tier_ev.png"),
-        "a3": a3_collapse(compose),
-        "dose": fig78_dose(dose, st / "fig7_probe_ordering.png", st / "fig8_dose_calibration.png"),
-    }
-    return results
+    return run(st, report_path=st / "REPORT_35B_selftest.md")
 
 
 def main() -> None:
