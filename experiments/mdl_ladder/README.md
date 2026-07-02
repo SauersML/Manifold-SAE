@@ -84,10 +84,13 @@ of your ladder; the scorer returns bits/token and the crossover. **You do not ne
     }
   ],
   "crossover": {                          // present iff block_name & chart_name resolve
-    "delta_code_bits_per_firing": 0.096,  // (b - d_i) * r, per-firing rate the chart frees
+    "delta_code_bits_per_firing": 0.096,  // FULL per-firing bits the chart frees = coeff + selection
+    "delta_coeff_bits_per_firing": 0.096, // coefficient part only, (b - d_i) * r
+    "selection_bits_delta": 0.0,          // sel_block - sel_chart = log2C(G_b,k_b) - log2C(G_c,k_c)
+    "selection_asymmetric": false,        // true if block & chart use different (G, k)
     "phi_extra_params": 32,               // Phi = P_chart - P_block (the curvature harmonics)
     "f_star": 121.6,                      // firings above which the chart's DL is shorter
-    "f_star_matched_simple": 32.0,        // SNR-independent Phi/(m_block - m_chart)
+    "f_star_matched_simple": 32.0,        // SNR-independent Phi/(m_block-m_chart); valid only when (G,k) shared
     "chart_wins_at_actual_f": false,      // n_firings >= f_star ?
     "actual_firings": 35
   }
@@ -107,6 +110,15 @@ of your ladder; the scorer returns bits/token and the crossover. **You do not ne
   rung is excluded from a fair matched-distortion comparison.
 - **The floor `delta2` is task-derived.** Default = the best chart's residual, i.e. "reach the
   fidelity a single curved coordinate achieves." Override with your task's MSE budget.
+- **Selection bits `log2 C(G,k)` are handled per rung and in the crossover.** `score()` adds
+  them to each rung's `code_bits_per_firing`. `crossover_firings` now includes the *selection
+  delta* `sel_block - sel_chart` in `delta_code_bits_per_firing`, so `f*` is correct even when
+  the block and chart use **different (G, k)** — e.g. a chart routed in a larger dictionary or
+  with more active atoms pays extra selection bits per firing, which can push the crossover out
+  or to infinity. Check `selection_asymmetric` in the response: if `true`, the SNR-independent
+  shortcut `f_star_matched_simple = Phi/(m_block - m_chart)` no longer applies (it assumes equal
+  (G, k)); rely on `f_star`, which accounts for the difference. When you pass matching `g_dict`
+  and `k_active` for both rungs (the usual case), the delta is 0 and nothing changes.
 
 ### Programmatic use
 

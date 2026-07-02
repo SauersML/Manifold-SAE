@@ -176,15 +176,24 @@ def crossover_firings(block: Featurizer, chart: Featurizer, delta2: float,
                       l_param_bits: float | None = None) -> dict[str, Any]:
     """f*: the firing count at which the chart's total DL drops below the block's.
 
-    L_chart(f) - L_block(f) = f*(code_c - code_b) + (P_c - P_b)*L_param.
-    Chart wins when f*(code_b - code_c) > (P_c - P_b)*L_param = Phi*L_param, i.e.
-        f*  =  Phi * L_param / ( (b - d_i) * r )
-    with Phi = P_c - P_b the extra dictionary scalars, r the per-freed-coordinate
-    code rate. Under distortion-matched precision (L_param = r) this collapses to
-    the SNR-independent  f* = Phi / (m_block - m_chart)."""
+    L_chart(f) - L_block(f) = f*((code_c + sel_c) - (code_b + sel_b)) + (P_c - P_b)*L_param.
+    Chart wins when f*·ΔL_per_firing > Phi*L_param, with ΔL_per_firing the FULL per-firing
+    saving = (code_b + sel_b) - (code_c + sel_c) [coefficients + selection], i.e.
+        f*  =  Phi * L_param / ΔL_per_firing
+    with Phi = P_c - P_b the extra dictionary scalars.
+
+    Selection bits (log2 C(G,k)) are INCLUDED in ΔL_per_firing, so this is correct even
+    when the block and chart use different (G, k). When they share (G, k) the selection
+    delta is 0 and ΔL_per_firing reduces to the coefficient rate (b - d_i)*r, recovering
+    the SNR-independent matched-precision form f* = Phi / (m_block - m_chart). The
+    `selection_asymmetric` flag records whether the two rungs differ in (G, k)."""
     code_b = sum(scalar_rate_bits(v, delta2) for v in block.coded_var)
     code_c = sum(scalar_rate_bits(v, delta2) for v in chart.coded_var)
-    dcode = code_b - code_c                       # (b - d_i) * r, bits/firing freed
+    sel_b = selection_bits(block.g_dict, block.k_active)
+    sel_c = selection_bits(chart.g_dict, chart.k_active)
+    dcode_coeff = code_b - code_c                  # (b - d_i) * r, coefficient part only
+    dsel = sel_b - sel_c                            # selection-bits delta (0 if (G,k) shared)
+    dcode = dcode_coeff + dsel                      # FULL per-firing bits the chart frees
     phi = chart.n_params - block.n_params          # extra dictionary scalars
     r_per_coord = code_b / block.m if block.m else float("nan")
     if l_param_bits is None:
@@ -193,15 +202,17 @@ def crossover_firings(block: Featurizer, chart: Featurizer, delta2: float,
     return {
         "block": block.name,
         "chart": chart.name,
-        "delta_code_bits_per_firing": round(dcode, 4),
+        "delta_code_bits_per_firing": round(dcode, 4),       # coefficients + selection
+        "delta_coeff_bits_per_firing": round(dcode_coeff, 4),
+        "selection_bits_delta": round(dsel, 4),
+        "selection_asymmetric": bool((block.g_dict, block.k_active)
+                                     != (chart.g_dict, chart.k_active)),
         "phi_extra_params": phi,
         "r_per_freed_coord_bits": round(r_per_coord, 4),
         "l_param_bits": round(l_param_bits, 4),
         "f_star": round(fstar, 2),
-        "f_star_matched_precision": round(phi / dcode * (code_b / block.m), 2)
-        if dcode > 0 else float("inf"),
         "f_star_matched_simple": round(phi / (block.m - chart.m), 2)
-        if block.m != chart.m else float("inf"),
+        if block.m != chart.m else float("inf"),   # valid only when (G,k) shared
         "chart_wins_at_actual_f": bool(chart.n_firings >= fstar),
         "actual_firings": chart.n_firings,
     }
