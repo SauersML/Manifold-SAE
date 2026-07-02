@@ -4,6 +4,37 @@ Reviewer for the block-sparse + curved-chart featurizer fleet. Repos polled:
 `/Users/user/gam` (main) and `/Users/user/Manifold-SAE` (main). I edit nothing
 but this file.
 
+## RED-TREE ATTRIBUTION TRIAGE (~17 gam-sae failures) — in progress
+Method: read failing assertion TYPE + which commit changed the exercised math (no
+shared-tree checkout; scratch-copy A/B where needed). Full-suite run capturing
+magnitudes is in flight (b287m4uce); preliminary attribution from assertion-type +
+diff-ownership:
+
+KEY CORRECTION to the lead's suspects: **e09e6956c is EXONERATED** for the FD/adjoint/
+gradient/trace cluster — its entire diff is `signed_log_sum_exp` (numerical stability),
+LogLog/Cauchit link legality, and `reachable_dictionary_rank` (a rank COUNT). It touches
+NO derivative/trace/EFS math (grep confirms zero hits). The real derivative-math change
+is **8950ee951** ("M-agent math fixes: ARD/EFS") which reworked "Every derivative /
+trace / EFS / IFT-RHS" assembly (per-atom cursor walk → shared-ARD pooling; EFS
+numerator/denominator summation), plus **acfb8718e** ("shared-ARD EFS pooling +
+frame-rank smoothing FS numerator C1/C4").
+
+| test cluster | assertion TYPE | suspect | prelim verdict |
+|---|---|---|---|
+| tests_deflation_traces_780 | LIVE central-FD of log|H| vs analytic prior+data trace (tol 1e-6) | 8950ee951 (ARD/EFS/trace rework) | CODE BUG — analytic trace inconsistent w/ objective FD |
+| tests_pen_fd_780 (assembled-grad FD) | LIVE assembled-gradient vs central-FD of penalized objective | 8950ee951 / acfb8718e | CODE BUG (derivative inconsistency) |
+| tests_logdet_adjoint_780 ×4 | analytic adjoint on fixed oracle H vs numerical | 8950ee951 (or oracle-stale) | LIKELY CODE BUG — confirm vs magnitude |
+| gpu_kernels encode 1d/2d | encode parity | 2fc0fba3b (amplitude-aware routing) | encode-lane (bug or test-update) |
+| tests_olmo ×3 | fast/warm encode parity (#2083 family) | 2fc0fba3b | encode-lane (same as fast_encode red) |
+| exact_hessian ibp_cross_row_woodbury; step2_beta_gradient; sae_1026_separable_superposition; ibp_capacity; structured_residual; row_jet batch4 | TBD (need assertions from suite run) | 8950ee951 (ARD/EFS) most likely | TBD |
+
+Because the _780 tests are LIVE FD-vs-analytic (FD recomputed from the current objective
+at test time — no hardcoded oracle), a failure means the ANALYTIC derivative no longer
+matches the objective it differentiates → these are CODE BUGS (derivative regressions),
+NOT tests-need-update. FIX LANE recommended targeting the 8950ee951/acfb8718e shared-ARD
+derivative/trace/EFS assembly. Final magnitudes + the TBD cluster to follow once the
+suite run completes.
+
 ## EXECUTIVE SUMMARY (final) — per-lane verdict + publication safety
 
 | lane | verdict | safe to publish |
