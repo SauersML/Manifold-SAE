@@ -226,3 +226,67 @@ ISSUES:
     no separately-stored code to rotate), assert gate+loss identical, AND include
     the negative control (a norm-changing map must change loss) or it won't bite.
     Also assert frames stay orthonormal after refresh_frames.
+
+### P-null — commit 5fd1465 (VERDICT: SOUND, one honesty caveat on weekday)
+matched_null.py — genuinely careful; catches its own subtle traps.
+- N2 label-perm null is CORRECT where a naive version would be broken:
+  `cyclic_adjacency_accuracy(angle, order)` relabels BOTH adjacency sets when
+  `order` is permuted (permuting order = no-op), so the null instead randomises the
+  recovered ORDERING (_adj_null_sample, l.205). Verified numerically: null adj mean
+  0.33 (n=7) / 0.18 (n=12); perfect circle p=0.0028/0.0002; null-mean→p≈0.4. The
+  p-machinery bites and is well-calibrated.
+- N3 matched-spectrum preserves the per-PC eigenspectrum (red is PCA coords → indep
+  Gaussian reproduces the covariance); primary statistic is fit-quality-normalised
+  gap-closed (cev−l1)/(l2−l1). Matched. (Caveat: if a lane passes a NON-PCA
+  fitted_basis, red.std drops cross-covariance — degrades the match. Not triggered
+  by the W7 CLI path, which uses PCA.)
+- N4 phase-scramble: HONESTLY gated — a pure fundamental-mode circle is invariant to
+  per-column phase scrambling, so they compute fundamental_mode_fraction and only
+  let phase-scramble count toward the verdict when applicable (FMF<0.9). Exactly
+  right; a lesser version would falsely pass/fail here.
+- Empirical p uses (hits+1)/(B+1), never 0. B: n_perm=5000 (min p 2e-4),
+  n_gauss=128 (min p 7.7e-3) — enough for the α=0.05 verdicts.
+- NO PEEKING: observed-in-battery stats recomputed at the SAME single-seed/600-step
+  budget as the nulls; the best-of-2 headline is recorded as `canonical` for
+  reference ONLY, not used for p. Correct discipline.
+- Subprocess-isolated retried CLI; reuses torch-backend curved_fit, NOT REML
+  sae_manifold_fit (OOM/segfault-safe). Consistent with house rules.
+CAVEAT [MED, honesty]: weekday C2 (cyclic order) is MARGINAL — adjacency 0.71 at
+n=7 gives p≈0.039 against this null (and the battery's single-seed budget may score
+BELOW the best-of-2 headline 0.71, pushing p up further). Publish weekday cyclic
+order as "marginal (p≈.04)", not a strong result. Month (n=12, adj 0.83) is robust.
+C1 EV-parity and the month cyclic claim are safe.
+
+### N-nursery — commits f797213, 2a4834a (VERDICT: design VALID w/ caveats; NO RESULTS YET)
+block_nursery.py reviewed against the 4 experimental-validity checks. The committed
+result JSONs (synthetic_results.json / real_results.json) contain ONLY the initial
+data stub — `arms` is empty — so the arms have NOT run; there are no N-nursery
+headline numbers to validate yet, only the design.
+- Control arm (joint K≥2) HONEST: REML joint attempted in a capped (120s) subprocess
+  and recorded as TIMEOUT_BLOCKED/OOM even on failure (reml_joint_isolated l.228);
+  torch joint (target_k=K, additive) run + recorded with per-circle recovery; plus an
+  over-complete K=2·ncirc arm. Bounded and recorded. GOOD.
+- NO planted-leak in the honest arm: the DISCOVERED arm (discover_blocks l.258) uses
+  NO labels/planes — sparse_dictionary_fit on X + coactivation-affinity clustering.
+  `theta` (true angles) enters run_nursery ONLY for scoring (best_planted_circle_corr,
+  l.375), NEVER the fit (fit is on Z=Xc@Q). The ORACLE arm DOES use planted planes
+  (oracle_blocks l.333) but is explicitly labeled the "factorization upper bound" and
+  reported separately from the discovered arm. Clean separation. GOOD — publish the
+  DISCOVERED arm as the result, oracle as ceiling.
+- Subprocess isolation on EVERY curved fit AND the REML fit (fit_curved_isolated /
+  reml_joint_isolated both subprocess.run with timeout; workers reset sys.excepthook).
+  sparse_dictionary_fit runs in-process, which is FINE — it's the stable linear lane,
+  not the OOM-prone sae_manifold_fit. GOOD.
+- EV consistency: ALL arms use IN-SAMPLE ev() on the same X (no held-out split). This
+  is CONSISTENT across arms (joint in-sample vs nursery in-sample = fair comparison),
+  but it is NOT a generalization number — especially real (N=95, P=16, charts can
+  overfit). Report as in-sample factorization EV, not held-out.
+CAVEATS to enforce on any eventual N-nursery headline:
+  [HIGH] The co-collapse is demonstrated on a TORCH proxy fitter, not REML. REML —
+    the production fitter the hypothesis "is really about" — is recorded BLOCKED. So
+    "nursery cures co-collapse" is a torch-joint-vs-torch-nursery result; transfer to
+    the REML fitter is UNESTABLISHED. State this explicitly.
+  [MED] Real Arm B headline uses SET-membership-supervised 2-planes (each set's top-2
+    PCs) as blocks; fully-unsupervised discover_blocks is only a side cross-check
+    there. Set identity is legit metadata (not the cyclic answer), but say so.
+  [MED] All EVs in-sample (above).
