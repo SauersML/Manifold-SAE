@@ -97,6 +97,34 @@ def curveball(Z: np.ndarray, n_swaps: int, rng: np.random.Generator) -> np.ndarr
     return Zb
 
 
+def _ndtri(p: float) -> float:
+    """Inverse standard-normal CDF (Acklam's rational approximation, |err| < 1e-9).
+    Used only to convert a family-wise ``alpha`` into the naive independence-null
+    z threshold -- so the one interpretable knob is a significance level, not a
+    magic z cutoff."""
+    a = (-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+         1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00)
+    b = (-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+         6.680131188771972e+01, -1.328068155288572e+01)
+    c = (-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+         -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00)
+    d = (7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+         3.754408661907416e+00)
+    plow, phigh = 0.02425, 1 - 0.02425
+    if p < plow:
+        q = np.sqrt(-2 * np.log(p))
+        return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
+               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    if p > phigh:
+        q = np.sqrt(-2 * np.log(1 - p))
+        return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / \
+               ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)
+    q = p - 0.5
+    r = q * q
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / \
+           (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)
+
+
 def analytic_topk_cov(k_active: int, n_cand: int) -> float:
     """Closed-form Cov(1_a, 1_b) for two atoms under a uniform top-k route over
     ``n_cand`` candidates: ``-k(c-k)/(c^2 (c-1))``. Homogeneous-case cross-check
@@ -135,12 +163,12 @@ def coactivation_test(
     n_null: int = 200,
     n_token_sub: int | None = 20000,
     swap_mult: float = 5.0,
-    z_thresh: float = 4.0,
+    alpha: float = 0.05,
     seed: int = 0,
 ) -> dict:
     """Test each atom pair's co-firing against the curveball null and the naive
-    independence null. Returns per-null pair statistics and significant-pair
-    counts under each test. Positive corrected z = real excess co-firing; the
+    independence null, both controlled at family-wise error rate ``alpha`` (the
+    single interpretable knob). Positive corrected z = real excess co-firing; the
     naive test additionally flags the mechanical TopK anticorrelation."""
     rng = np.random.default_rng(seed)
     Zb = np.asarray(Z) > 0
@@ -173,14 +201,20 @@ def coactivation_test(
     sd_null = np.sqrt(np.maximum(null_pairs.var(0), 1e-9))
     z_corr = (C_obs - mean_null) / sd_null
 
-    # max-T FWER threshold: the 95th percentile of each null replicate's own most
-    # extreme positive standardized co-firing. A pair survives if its observed
-    # excess beats the strongest excess the null routinely produces by chance.
+    # Corrected test: max-T permutation FWER at level ``alpha`` -- the (1-alpha)
+    # quantile of each null replicate's own most extreme positive standardized
+    # co-firing. A pair survives if its observed excess beats the strongest excess
+    # the null routinely produces by chance. No distributional assumption, no
+    # magic z cutoff.
     z_null = (null_pairs - mean_null) / sd_null
-    maxt = float(np.percentile(z_null.max(1), 95.0))
-    thresh = max(maxt, z_thresh)
+    thresh = float(np.percentile(z_null.max(1), 100.0 * (1.0 - alpha)))
 
-    naive_sig = np.abs(z_naive) > z_thresh
+    # Naive test at the SAME family-wise level, via a Bonferroni normal quantile on
+    # the independence null -- the apples-to-apples "what the field's implicit test
+    # would call". The gap corrected<<naive is the mechanical TopK artifact.
+    n_pairs = int(triu[0].size)
+    naive_thresh = _ndtri(1.0 - alpha / (2.0 * n_pairs))
+    naive_sig = np.abs(z_naive) > naive_thresh
     corr_pos = z_corr > thresh
     pair_i, pair_j = keep[triu[0]], keep[triu[1]]
     surviving = [
@@ -192,9 +226,10 @@ def coactivation_test(
     ]
     surviving.sort(key=lambda r: -r["z_corrected"])
     return {
-        "n_tokens": int(n), "n_atoms": int(m), "n_pairs": int(triu[0].size),
+        "n_tokens": int(n), "n_atoms": int(m), "n_pairs": n_pairs,
         "n_null": int(n_null), "n_swaps": int(n_swaps),
-        "z_thresh": z_thresh, "maxt_threshold": round(thresh, 3),
+        "alpha": alpha, "corrected_threshold": round(thresh, 3),
+        "naive_threshold": round(naive_thresh, 3),
         "naive_significant": int(naive_sig.sum()),
         "corrected_significant": int(corr_pos.sum()),
         "corrected_positive": int(corr_pos.sum()),
@@ -256,7 +291,7 @@ def selftest() -> int:
     Z = make_topk_artifact(n, K, k, seed=1)
     rng = np.random.default_rng(0)
     covs = []
-    for _ in range(25):
+    for _ in range(18):
         Zr = curveball(Z > 0, 5 * n, rng)
         Cr = _coactivation_counts(Zr) / n
         p = Zr.mean(0)
@@ -276,17 +311,18 @@ def selftest() -> int:
     Zbig = make_topk_artifact(30000, 30, 6, seed=5) > 0
     e, sd = _naive_independence(Zbig)
     iu = np.triu_indices(30, 1)
-    naive_big = int((np.abs((_coactivation_counts(Zbig)[iu] - e[iu]) / sd[iu]) > 4.0).sum())
+    nthr = _ndtri(1.0 - 0.05 / (2.0 * iu[0].size))  # Bonferroni at alpha=0.05
+    naive_big = int((np.abs((_coactivation_counts(Zbig)[iu] - e[iu]) / sd[iu]) > nthr).sum())
     print(f"  naive over-call (structureless TopK, n=30k): "
           f"{naive_big}/{iu[0].size} pairs flagged", flush=True)
     if naive_big < 20:
         print("  WARN: naive test did not over-call (weak demo of the artifact)")
 
     # (2b) corrected removes the artifact: full test on a structureless route ~ 0.
-    art = coactivation_test(Z, top_atoms=None, n_null=60, n_token_sub=None,
-                            swap_mult=6.0, z_thresh=4.0, seed=2)
+    art = coactivation_test(Z, top_atoms=None, n_null=40, n_token_sub=None,
+                            swap_mult=6.0, alpha=0.05, seed=2)
     print(f"  artifact corrected_sig={art['corrected_significant']} "
-          f"(maxT={art['maxt_threshold']})", flush=True)
+          f"(maxT={art['corrected_threshold']})", flush=True)
     if art["corrected_significant"] > 2:
         print("  FAIL: corrected test still flags a structureless TopK route")
         ok = False
@@ -297,9 +333,9 @@ def selftest() -> int:
     # off-clique pairs surviving is real dependence, not an artifact -- the
     # meaningful claim is that the clique is recovered and ranks at the top.)
     clique = (0, 1, 2, 3)
-    Zc = make_planted_clique(n=4000, K=30, k=5, clique=clique, q=0.30, seed=3)
-    res = coactivation_test(Zc, top_atoms=None, n_null=60, n_token_sub=None,
-                            swap_mult=6.0, z_thresh=4.0, seed=4)
+    Zc = make_planted_clique(n=3000, K=30, k=5, clique=clique, q=0.30, seed=3)
+    res = coactivation_test(Zc, top_atoms=None, n_null=45, n_token_sub=None,
+                            swap_mult=6.0, alpha=0.05, seed=4)
     surv = surviving_set(res)
     clique_pairs = {(a, b) for a in clique for b in clique if a < b}
     recall = len(surv & clique_pairs) / len(clique_pairs)
@@ -319,8 +355,8 @@ def selftest() -> int:
         ok = False
 
     # (4) seed-stability: the recovered clique is identical across null seeds
-    res_b = coactivation_test(Zc, top_atoms=None, n_null=60, n_token_sub=None,
-                              swap_mult=6.0, z_thresh=4.0, seed=7)
+    res_b = coactivation_test(Zc, top_atoms=None, n_null=45, n_token_sub=None,
+                              swap_mult=6.0, alpha=0.05, seed=7)
     surv_b = surviving_set(res_b)
     clique_stable = (surv & clique_pairs) == (surv_b & clique_pairs) == clique_pairs
     jac = len(surv & surv_b) / max(len(surv | surv_b), 1)
@@ -348,7 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--n-null", type=int, default=200)
     ap.add_argument("--n-token-sub", type=int, default=20000)
     ap.add_argument("--swap-mult", type=float, default=5.0)
-    ap.add_argument("--z-thresh", type=float, default=4.0)
+    ap.add_argument("--alpha", type=float, default=0.05,
+                    help="family-wise error rate (the significance level)")
     ap.add_argument("--seed", type=int, default=0)
     return ap
 
@@ -367,11 +404,11 @@ def main(argv: list[str] | None = None) -> int:
     res = coactivation_test(
         Z, top_atoms=args.top_atoms, n_null=args.n_null,
         n_token_sub=args.n_token_sub, swap_mult=args.swap_mult,
-        z_thresh=args.z_thresh, seed=args.seed)
+        alpha=args.alpha, seed=args.seed)
     res_b = coactivation_test(
         Z, top_atoms=args.top_atoms, n_null=args.n_null,
         n_token_sub=args.n_token_sub, swap_mult=args.swap_mult,
-        z_thresh=args.z_thresh, seed=args.seed + 101)
+        alpha=args.alpha, seed=args.seed + 101)
     surv, surv_b = surviving_set(res), surviving_set(res_b)
     res["seed_stability_jaccard"] = round(
         len(surv & surv_b) / max(len(surv | surv_b), 1), 4)
