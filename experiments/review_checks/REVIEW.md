@@ -106,9 +106,28 @@ Tests whether a circle chart is a FEATURE property vs a PROMPT-DISTRIBUTION arti
 TEMPLATE-level held-out (fit chart+PCA+linear baseline on fit-templates, eval on held-out
 templates; LOTO CV; per-template demean within boundary = no cross-boundary leak; rank/token
 labels used only for eval, not fit). Fair fight: chart-1-coord vs linear-2-PC.
+UPDATE — the lane RE-RAN on a 14-template harvest (committed e5662ec) and self-corrected
+its verdict to match my adjudication (8930bd6 "align verdict with R-review adjudication
+(EV-transfer NULL)"). Revised split verdict on the 14-template data:
+- COORDINATE CONSISTENCY (the load-bearing "chart is a feature property" claim): SUPPORTED.
+  Median LOTO circ-corr 0.95 (weekday) / 0.81 (month) (means 0.78/0.71). The same token
+  gets a consistent recovered angle across held-out templates — this a linear SAE cannot
+  even express (no intrinsic coordinate). Legitimate, defensible.
+- EV-TRANSFER over the 2-PC linear PLANE: NULL/mixed. weekday chart_ev 0.263 < lin2 0.429
+  (loses); month chart_ev 0.124 > lin2 0.045 (wins). The chart DOES beat linear-1 (the
+  fair 1-coord fight) by a wide margin both sets. So "chart transfers better than the
+  plane on EV" is NOT supported (weekday), partial (month).
+- NUANCE honestly reported: outlier templates break transfer (36–50% of folds below 0.9
+  consistency; month template 9 at 0.04). "Strong tendency, not a law."
+NET: publishable as "the chart COORDINATE is largely a feature property (median consistency
+0.95/0.81), beating a single linear direction by a wide margin; it does NOT beat the 2-PC
+linear plane on raw EV, but the plane has no coordinate to make the invariance claim." The
+lane's "SUPPORTED with nuance" verdict is defensible with that split. [My initial NULL below
+was from the superseded 5-template run — corrected here.]
+
 Methodology is SOUND (proper template split, no leak, honest fair comparison, explicitly
-allows a publishable null). RESULT (5-template LOTO): chart does NOT transfer better than
-the linear plane —
+allows a publishable null). SUPERSEDED 5-template LOTO result (kept for history): chart did
+NOT transfer better than the linear plane —
   weekday: chart_ev_eval 0.542 vs linear2 0.794 → chart1−linear2 = −0.252; coord_consistency
     0.579; adjacency_eval 0.429 (≈chance).
   month: chart_ev_eval 0.469 vs linear2 0.543 → chart1−linear2 = −0.074; coord_consistency
