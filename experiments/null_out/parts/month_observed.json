@@ -1,0 +1,26 @@
+{
+  "observed": {
+    "curved_ev": 0.5975875388748115,
+    "linear_L1": 0.31612642221095855,
+    "linear_L2": 0.586001672510143,
+    "adjacency": 0.8333333333333334,
+    "circ_corr": 0.5968376535255429,
+    "pca2d_adjacency": 1.0
+  },
+  "canonical": {
+    "layer": 8,
+    "curved_ev_insample": 0.5975875388748115,
+    "linear_L1_insample": 0.31612642221095855,
+    "linear_L2_insample": 0.586001672510143,
+    "cyclic_adjacency": 0.8333333333333334,
+    "pca2d_adjacency": 1.0
+  },
+  "n_labels": 12,
+  "cyclic": true,
+  "reduce_dim": 16,
+  "n_samples": 60,
+  "fit_budget": {
+    "steps": 600,
+    "n_seeds": 2
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "observed": {
+    "curved_ev": 0.8231012404950508,
+    "linear_L1": 0.7522065730321801,
+    "linear_L2": 0.8231697574460848,
+    "adjacency": 0.125,
+    "circ_corr": 0.4976835836823794,
+    "pca2d_adjacency": 0.125
+  },
+  "canonical": {
+    "layer": 11,
+    "note": "color-name Qwen probe; layer by linear PCA diagnostic (no W7 headline to match)"
+  },
+  "n_labels": 8,
+  "cyclic": true,
+  "reduce_dim": 16,
+  "n_samples": 40,
+  "fit_budget": {
+    "steps": 600,
+    "n_seeds": 2
+  }
+}

@@ -64,9 +64,12 @@ plus `pareto.png`, `alive.png`, `curves.png`, `positions.png`,
 Replaces the earlier `cyclic_concepts.py` (which tried to train an SAE
 from scratch on 49 weekday prompts — far too little data). Loads a
 pre-trained SAE (one trained on wikitext at the target layer) and
-probes whether any of its atoms encode the cyclic weekday/month
-structure that Engels et al. 2024 and Wurgaft et al. 2026 recover
-post-hoc via cubic-spline fit through centroids.
+probes whether any of its atoms encode cyclic weekday/month structure
+that Engels et al. 2024 and Wurgaft et al. 2026 recover post-hoc via
+cubic-spline fit through centroids. In this repo's current reporting,
+weekday should be treated as a fragile probe; month/null-robust claims
+need the template-transfer and null checks documented in the chart
+transfer report.
 
 Reports Mardia circular Spearman correlation between atom positions
 and the cyclic GT result-class index. Plot: per-class centroids in

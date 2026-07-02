@@ -231,11 +231,11 @@ Two subtleties, both handled in `mdl.py` rather than hidden:
    comparably strong (clean-circle / high-SNR regime — synthetic and frontier).
 
    This is not a defeat of the claim, it is its precise scope: **a curved chart wins once
-   the feature fires more than `f* = Θ(p)` times at the task fidelity.** A real cyclic
-   feature (weekday, month, hue) fires on *every* date/color mention across a corpus —
-   millions of firings, `f ≫ f*` in any regime — so charts win at deployment scale. The
-   probe's 35–60 firings straddle the crossover, which is exactly why we report `f*` rather
-   than a single-`f` verdict.
+   the feature fires more than `f* = Θ(p)` times at the task fidelity.** Deployment-scale
+   firing counts are not measured in this repo yet, so the deployment conclusion is blocked
+   pending a corpus or activation stream. The probe's 35–60 firings straddle the crossover,
+   which is exactly why we report `f*` rather than a single-`f` verdict. The current status
+   writer is `experiments/mdl_ladder/deployment_firing_counts.py`.
 
 ---
 

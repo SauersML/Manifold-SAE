@@ -1,0 +1,9 @@
+{
+  "status": "blocked",
+  "reason": "No deployment corpus was supplied. The MDL probe has 35 weekday and 60 month firings, but the deployment-scale claim requires a corpus-level weekday/month firing count.",
+  "required_input": "Pass --corpus path/to/corpus.txt or a JSONL file with text fields.",
+  "probe_firings": {
+    "weekday": 35,
+    "month": 60
+  }
+}

@@ -38,6 +38,41 @@
         "auc_all": 0.999446027223805,
         "auc_weak_vs_absent": 0.9988567695574065,
         "auc_strong_vs_absent": 1.0
+      },
+      "unsupervised_energy_mixture": {
+        "target_block": 5,
+        "train_steps": 800,
+        "detector": "unsupervised_directional_energy_mixture",
+        "fit_uses_presence_labels": false,
+        "score": "posterior_high_mean_component",
+        "direction": [
+          -0.881785476208695,
+          -0.26320808837740267,
+          0.2287913054990839,
+          0.31753805234671223
+        ],
+        "mixture": {
+          "weights": [
+            0.6520814192286415,
+            0.3479185807713595
+          ],
+          "means": [
+            -0.019948656870013508,
+            1.6297597240780075
+          ],
+          "variances": [
+            0.045987331511019525,
+            0.050588749131275486
+          ],
+          "posterior_0_5_energy_threshold": 0.8050370050737741
+        },
+        "heldout": {
+          "auc_all": 0.9791864514086737,
+          "auc_weak_vs_absent": 0.9570471990854157,
+          "auc_strong_vs_absent": 1.0,
+          "hard_accuracy_at_threshold": 0.6729166666666667,
+          "hard_positive_rate_at_threshold": 0.34791666666666665
+        }
       }
     }
   },

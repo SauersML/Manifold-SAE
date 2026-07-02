@@ -67,25 +67,27 @@ fidelity no linear code of ≤2 dims reaches (direction and even the 2-block are
 infeasible there).
 
 **Scope, stated honestly.** The claim is not "charts always win" — it is "charts win above
-`f* = Θ(p)` firings at the task fidelity." A real cyclic feature fires on *every* date/month/
-color mention across a corpus (millions of firings, `f ≫ f*` in any regime), so charts win at
-deployment scale; the probe's 35–60 firings straddle the crossover, which is why we report
-`f*` rather than a single-`f` verdict.
+`f* = Θ(p)` firings at the task fidelity." The probe's 35–60 firings straddle the crossover,
+which is why we report `f*` rather than a single-`f` verdict. Deployment-scale firing counts
+are not measured in this repo yet; run
+`python3 experiments/mdl_ladder/deployment_firing_counts.py` to emit the current blocked
+status, or pass `--corpus` to record a corpus-level weekday/month mention proxy.
 
 ## 4. The ladder, one table
 
 Best description length per rung, matched-precision crossover `f* = Φ/(b−d_i)`:
 
-| regime | direction | 2-block | circle-chart | crossover f* | who wins at f≫f* |
+| regime | direction | 2-block | circle-chart | crossover f* | status beyond f* |
 |---|---|---|---|---:|---|
-| frontier (p=9, SNR high) | infeasible | feasible | **shortest past f≈11** | ≈9–11 | **chart** |
-| synthetic month (p=16, SNR high) | infeasible | 10.27 | **9.42** | 32–37 | **chart** |
-| real weekday/month (p=16, SNR≈1) | infeasible | shortest at f=35–60 | past f≈100 | 96–122 | **chart** |
+| frontier (p=9, SNR high) | infeasible | feasible | **shortest past f≈11** | ≈9–11 | measured past crossover |
+| synthetic month (p=16, SNR high) | infeasible | 10.27 | **9.42** | 32–37 | measured past crossover |
+| real weekday/month (p=16, SNR≈1) | infeasible | shortest at f=35–60 | past f≈100 | 96–122 | deployment count blocked |
 | year / any line (control) | infeasible | **shortest** | never | ∞ | block |
 
 `f*` grows with `p` (ambient dim) and with the dictionary/code precision ratio, and → ∞ for
-non-curved features. Everywhere the feature is genuinely curved and fires enough, the chart's
-description is the shortest — the ladder extends one rung past BSF.
+non-curved features. For genuinely curved features, the chart's description is shortest only
+after measured firings exceed `f*`; the real weekday/month deployment count is not measured
+locally.
 
 ## Caveats / provenance
 
@@ -98,3 +100,5 @@ description is the shortest — the ladder extends one rung past BSF.
   real circles, with a synthetic 12/7-circle + non-cyclic year as clean-SNR controls.
 - Circle-chart decoder scalar count `n_basis·p` measured directly from the fitted
   `gamfit.torch.ManifoldSAE` atom (`decoder_blocks` shape `(1, n_basis, p)`).
+- Deployment firing counts are blocked pending a deployment corpus or activation stream.
+  The stub/status writer is [deployment_firing_counts.py](deployment_firing_counts.py).

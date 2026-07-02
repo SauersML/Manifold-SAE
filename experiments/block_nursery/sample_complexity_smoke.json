@@ -1,0 +1,507 @@
+{
+  "config": {
+    "n_grid": [
+      120,
+      210
+    ],
+    "seeds": [
+      0,
+      1
+    ],
+    "bootstrap": 3,
+    "out": "experiments/block_nursery/sample_complexity_smoke.json",
+    "p": 96,
+    "ncirc": 3,
+    "amp": 2.0,
+    "noise": 0.06,
+    "n_dict": 8,
+    "block_size": 3,
+    "affinity_thresh": 0.35,
+    "fit_charts": false,
+    "chart_steps": 600,
+    "chart_timeout": 300
+  },
+  "summary": [
+    {
+      "n": 120,
+      "n_seeds": 2,
+      "plane_overlap_mean": 0.9352,
+      "plane_overlap_min": 0.8942,
+      "union_overlap_mean": 0.995,
+      "stability_mean": 0.9144,
+      "discovered_union_linear_ev_mean": 0.9362,
+      "block_dims": [
+        [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        [
+          2,
+          2,
+          2,
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "n": 210,
+      "n_seeds": 2,
+      "plane_overlap_mean": 0.9421,
+      "plane_overlap_min": 0.9207,
+      "union_overlap_mean": 0.997,
+      "stability_mean": 0.9616,
+      "discovered_union_linear_ev_mean": 0.9354,
+      "block_dims": [
+        [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        [
+          2,
+          2,
+          2,
+          1,
+          1
+        ]
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "n": 120,
+      "seed": 0,
+      "data": {
+        "n": 120,
+        "p": 96,
+        "ncirc": 3,
+        "amp": 2.0,
+        "circle_subspace_ev": 0.884
+      },
+      "discovery": {
+        "n_pcs": 8,
+        "pca_var_captured": 0.9353,
+        "atom_groups": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ]
+        ],
+        "block_dims": [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        "affinity_thresh": 0.35
+      },
+      "plane_overlap": {
+        "mean": 0.9549,
+        "min": 0.9392,
+        "scores": [
+          0.9687,
+          0.9392,
+          0.9567
+        ],
+        "pairs": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "n_matched": 3
+      },
+      "union_overlap": 0.9947,
+      "stability": {
+        "mean": 0.8966,
+        "min": 0.852,
+        "scores": [
+          0.852,
+          0.9346,
+          0.9032
+        ],
+        "bootstrap_block_dims": [
+          [
+            2,
+            2,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "ev": {
+        "truth_union_linear_ev": 0.884,
+        "discovered_union_linear_ev": 0.9353,
+        "chart_ev": null
+      }
+    },
+    {
+      "n": 120,
+      "seed": 1,
+      "data": {
+        "n": 120,
+        "p": 96,
+        "ncirc": 3,
+        "amp": 2.0,
+        "circle_subspace_ev": 0.8939
+      },
+      "discovery": {
+        "n_pcs": 8,
+        "pca_var_captured": 0.9371,
+        "atom_groups": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ]
+        ],
+        "block_dims": [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        "affinity_thresh": 0.35
+      },
+      "plane_overlap": {
+        "mean": 0.9155,
+        "min": 0.8942,
+        "scores": [
+          0.9142,
+          0.8942,
+          0.9382
+        ],
+        "pairs": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "n_matched": 3
+      },
+      "union_overlap": 0.9953,
+      "stability": {
+        "mean": 0.9322,
+        "min": 0.9008,
+        "scores": [
+          0.9586,
+          0.9008,
+          0.9371
+        ],
+        "bootstrap_block_dims": [
+          [
+            2,
+            2,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            2,
+            1,
+            1,
+            2,
+            1,
+            1
+          ]
+        ]
+      },
+      "ev": {
+        "truth_union_linear_ev": 0.8939,
+        "discovered_union_linear_ev": 0.9371,
+        "chart_ev": null
+      }
+    },
+    {
+      "n": 210,
+      "seed": 0,
+      "data": {
+        "n": 210,
+        "p": 96,
+        "ncirc": 3,
+        "amp": 2.0,
+        "circle_subspace_ev": 0.8841
+      },
+      "discovery": {
+        "n_pcs": 8,
+        "pca_var_captured": 0.936,
+        "atom_groups": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ]
+        ],
+        "block_dims": [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        "affinity_thresh": 0.35
+      },
+      "plane_overlap": {
+        "mean": 0.94,
+        "min": 0.9241,
+        "scores": [
+          0.956,
+          0.9241,
+          0.9398
+        ],
+        "pairs": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "n_matched": 3
+      },
+      "union_overlap": 0.997,
+      "stability": {
+        "mean": 0.9572,
+        "min": 0.9468,
+        "scores": [
+          0.9608,
+          0.9641,
+          0.9468
+        ],
+        "bootstrap_block_dims": [
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "ev": {
+        "truth_union_linear_ev": 0.8841,
+        "discovered_union_linear_ev": 0.936,
+        "chart_ev": null
+      }
+    },
+    {
+      "n": 210,
+      "seed": 1,
+      "data": {
+        "n": 210,
+        "p": 96,
+        "ncirc": 3,
+        "amp": 2.0,
+        "circle_subspace_ev": 0.8818
+      },
+      "discovery": {
+        "n_pcs": 8,
+        "pca_var_captured": 0.9348,
+        "atom_groups": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ]
+        ],
+        "block_dims": [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        "affinity_thresh": 0.35
+      },
+      "plane_overlap": {
+        "mean": 0.9441,
+        "min": 0.9207,
+        "scores": [
+          0.9682,
+          0.9433,
+          0.9207
+        ],
+        "pairs": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ],
+        "n_matched": 3
+      },
+      "union_overlap": 0.9971,
+      "stability": {
+        "mean": 0.9659,
+        "min": 0.9605,
+        "scores": [
+          0.9605,
+          0.9649,
+          0.9724
+        ],
+        "bootstrap_block_dims": [
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            2,
+            2,
+            2,
+            1,
+            1
+          ],
+          [
+            3,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "ev": {
+        "truth_union_linear_ev": 0.8818,
+        "discovered_union_linear_ev": 0.9348,
+        "chart_ev": null
+      }
+    }
+  ],
+  "wall_s": 0.1
+}

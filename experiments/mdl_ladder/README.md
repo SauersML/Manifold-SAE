@@ -11,6 +11,8 @@ Featurizers*: their MDL argument (blocks beat directions, optimum `b≈2–4`) e
 - **[mdl.py](mdl.py)** — the scorer (library + CLI + JSON interface).
 - **[results.json](results.json)** / **[REPORT.md](REPORT.md)** — the bits/token ladder on
   weekday / month / (synthetic year control) / frontier planted circles, with measured `f*`.
+- **[deployment_firing_counts.py](deployment_firing_counts.py)** — deployment-count status
+  writer. With no corpus it records the deployment firing-count claim as blocked.
 
 ## Reproduce
 
@@ -18,6 +20,7 @@ Featurizers*: their MDL argument (blocks beat directions, optimum `b≈2–4`) e
 # from experiments/mdl_ladder/
 python mdl.py --probes --synthetic --frontier --out results.json   # rescore all artifacts
 python mdl.py --json payload.json                                   # score a lane's own ladder
+python deployment_firing_counts.py                                  # write blocked status
 ```
 
 Uses the repo's `gamfit` venv (`/Users/user/gam/.venv/bin/python`) only for the `--probes`

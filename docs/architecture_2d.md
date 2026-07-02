@@ -2,8 +2,8 @@
 
 The 1D architecture (`manifold_sae/sae.py`) has each atom k carry a
 single scalar `t_k ∈ [0, 1]` and a smooth curve `g_k: [0, 1] → ℝ^D`.
-That captures 1D manifolds (magnitudes, polarities, weekdays,
-positions). It cannot capture 2D manifolds (grids, cylinders, tori,
+That captures 1D manifolds (magnitudes, polarities, positions,
+month-like cyclic features, and fragile weekday probes). It cannot capture 2D manifolds (grids, cylinders, tori,
 day×hour, hue×saturation, position-on-a-game-board) in a single atom.
 
 `manifold_sae/sae_2d.py` extends each atom to a 2D parameterization
@@ -159,7 +159,9 @@ For:
 For day-of-week × hour-of-day or position-on-grid, the plane
 parameterization with periodic boundaries handles it. Goodfire's ICL
 grid task is non-periodic; Goodfire's weekday cylinder task is
-one-periodic.
+one-periodic, but the local weekday evidence in this repo should be
+treated as fragile unless it passes the same null and transfer checks
+as the month result.
 
 ## Open questions
 
