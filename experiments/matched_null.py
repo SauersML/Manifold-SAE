@@ -89,13 +89,15 @@ import curved_feature_probes as C  # noqa: E402  (reuse the exact W7 pipeline)
 
 OUT_DIR = Path(os.environ.get("MATCHED_NULL_OUT", HERE / "null_out"))
 
-# Fit budget for every curved re-fit in the battery. We use a SINGLE seed (not the
-# best-of-2 the headline uses) so the null distributions carry the fit's own seed
-# noise — the observed-in-battery statistic is recomputed at the same budget, so
-# every p-value is internally apples-to-apples. The canonical best-of-2 headline
-# numbers are also recorded (from the source json) for reference.
+# Fit budget for every curved fit in the battery. We MATCH the W7 headline recipe
+# exactly (steps=600, best-of-2 seeds selected by train EV) so the observed-in-
+# battery statistic reproduces the CLAIMED value — otherwise a single unlucky seed
+# reads out a worse ordering than the claim reports and we would test a straw man.
+# The nulls use the same recipe, so every p-value is internally apples-to-apples.
+# (The recovered-angle ordering is somewhat seed-fragile at these tiny N; matching
+# the claim's best-of-2 selection is what keeps the null test honest.)
 _STEPS = int(os.environ.get("MATCHED_NULL_STEPS", "600"))
-_NSEEDS = int(os.environ.get("MATCHED_NULL_SEEDS", "1"))
+_NSEEDS = int(os.environ.get("MATCHED_NULL_SEEDS", "2"))
 
 
 # ---------------------------------------------------------------------------
@@ -169,16 +171,19 @@ def _empirical_p(null: np.ndarray, observed: float, tail: str = "greater") -> fl
 # ---------------------------------------------------------------------------
 
 
-def _null_rotation(red, labels, uniq, n_labels, cyclic, obs, n_rot, rng, perm_chance95):
-    """N1: random orthonormal rotation of the r-dim reading subspace, re-fit."""
+def _rotation_draw(red, labels, uniq, n_labels, cyclic, seed):
+    """One rotation-null draw: random orthonormal basis of the same subspace,
+    re-fit, re-read. Returns (adjacency, circ_corr, curved_ev). Deterministic in
+    `seed` so a killed-and-resumed collector never repeats a draw."""
     r = red.shape[1]
-    adjs, circs, evs = [], [], []
-    for i in range(n_rot):
-        Q, _ = np.linalg.qr(rng.standard_normal((r, r)))
-        ev, tok = _curved_read(red @ Q, labels, uniq, n_labels, cyclic, seed=i)
-        adjs.append(_adjacency(tok, np.array(uniq)))
-        circs.append(_circ_corr_to_truth(tok, uniq, n_labels))
-        evs.append(ev)
+    rng = np.random.default_rng(1000 + seed)
+    Q, _ = np.linalg.qr(rng.standard_normal((r, r)))
+    ev, tok = _curved_read(red @ Q, labels, uniq, n_labels, cyclic, seed=seed)
+    return (_adjacency(tok, np.array(uniq)),
+            _circ_corr_to_truth(tok, uniq, n_labels), ev)
+
+
+def _agg_rotation(adjs, circs, evs, obs, perm_chance95):
     adjs, circs, evs = map(np.asarray, (adjs, circs, evs))
     # basis-real fraction: rotations whose recovered ordering still beats the
     # label-permutation 95th-percentile chance ceiling.
@@ -186,7 +191,7 @@ def _null_rotation(red, labels, uniq, n_labels, cyclic, obs, n_rot, rng, perm_ch
     return {
         "kind": "rotation (random orthonormal basis of the same subspace)",
         "tests": "C2 ordering + C1 EV are basis-real, not PC1/PC2 artifacts",
-        "n_null": int(n_rot),
+        "n_null": int(len(adjs)),
         "observed_adjacency": obs["adjacency"],
         "observed_curved_ev": obs["curved_ev"],
         "rot_adjacency_mean": float(adjs.mean()),
@@ -198,8 +203,15 @@ def _null_rotation(red, labels, uniq, n_labels, cyclic, obs, n_rot, rng, perm_ch
         "label_perm_chance95_adjacency": float(perm_chance95),
         "basis_real_fraction": basis_real_frac,
         "curved_ev_cv": float(evs.std() / (abs(evs.mean()) + 1e-12)),
-        "null_hist": _hist(adjs, bins=min(20, max(5, n_rot // 2))),
+        "null_hist": _hist(adjs, bins=min(20, max(5, len(adjs) // 2))),
     }
+
+
+def _null_rotation(red, labels, uniq, n_labels, cyclic, obs, n_rot, rng, perm_chance95):
+    """N1 (in-memory): random orthonormal rotations of the reading subspace."""
+    draws = [_rotation_draw(red, labels, uniq, n_labels, cyclic, i) for i in range(n_rot)]
+    adjs, circs, evs = zip(*draws)
+    return _agg_rotation(adjs, circs, evs, obs, perm_chance95)
 
 
 def _adj_null_sample(n: int, rng) -> float:
@@ -241,29 +253,33 @@ def _null_label_perm(tok_angle, uniq, n_labels, obs, n_perm, rng):
     }
 
 
-def _null_matched_spectrum(red, labels, uniq, n_labels, cyclic, obs, n_gauss, rng):
-    """N3: Gaussian with the same per-PC eigenspectrum, no cyclic structure."""
+def _gap_closed(cev, l1, l2):
+    return (cev - l1) / max(l2 - l1, 1e-9)
+
+
+def _matched_spectrum_draw(red, cyclic, sigma, seed):
+    """One matched-spectrum draw: Gaussian with the same per-PC eigenspectrum but
+    NO cyclic structure; re-fit curved + linear. Returns (cev, l1, l2). Determin-
+    istic in `seed`."""
     N, r = red.shape
-    sigma = red.std(0, keepdims=True)  # red is in PCA coords -> per-PC std = sqrt(eigval)
-    gc_null, g1_null = np.empty(n_gauss), np.empty(n_gauss)
-    cev_null, l1_null, l2_null = (np.empty(n_gauss) for _ in range(3))
-    for i in range(n_gauss):
-        Y = rng.standard_normal((N, r)) * sigma
-        l1 = C.linear_pca_ev(Y, Y, 1)
-        l2 = C.linear_pca_ev(Y, Y, 2)
-        C._CURVE_N_SEEDS = _NSEEDS
-        sae = C.curved_fit(Y, cyclic, steps=_STEPS, seed=i)
-        cev, _ = C.curved_ev_and_positions(sae, Y)
-        del sae
-        cev_null[i], l1_null[i], l2_null[i] = cev, l1, l2
-        g1_null[i] = cev - l1                       # curved beats 1 PC by how much
-        gc_null[i] = (cev - l1) / max(l2 - l1, 1e-9)  # fraction of the 2nd-PC gap closed
+    rng = np.random.default_rng(2000 + seed)
+    Y = rng.standard_normal((N, r)) * sigma
+    l1 = C.linear_pca_ev(Y, Y, 1)
+    l2 = C.linear_pca_ev(Y, Y, 2)
+    C._CURVE_N_SEEDS = _NSEEDS
+    sae = C.curved_fit(Y, cyclic, steps=_STEPS, seed=seed)
+    cev, _ = C.curved_ev_and_positions(sae, Y)
+    del sae
+    return float(cev), float(l1), float(l2)
 
-    def _gap_closed(cev, l1, l2):
-        return (cev - l1) / max(l2 - l1, 1e-9)
 
+def _agg_matched_spectrum(cev_null, l1_null, l2_null, obs):
+    cev_null, l1_null, l2_null = map(np.asarray, (cev_null, l1_null, l2_null))
+    g1_null = cev_null - l1_null
+    gc_null = (cev_null - l1_null) / np.maximum(l2_null - l1_null, 1e-9)
     obs_gc = _gap_closed(obs["curved_ev"], obs["linear_L1"], obs["linear_L2"])
     obs_g1 = obs["curved_ev"] - obs["linear_L1"]
+    n_gauss = len(cev_null)
     return {
         "kind": "matched-spectrum Gaussian (same eigenspectrum, no circle)",
         "tests": "C1 that ONE curved coord reaches 2-PC EV parity is a circle "
@@ -287,6 +303,14 @@ def _null_matched_spectrum(red, labels, uniq, n_labels, cyclic, obs, n_gauss, rn
         "null_lin1_ev_mean": float(l1_null.mean()),
         "null_lin2_ev_mean": float(l2_null.mean()),
     }
+
+
+def _null_matched_spectrum(red, labels, uniq, n_labels, cyclic, obs, n_gauss, rng):
+    """N3 (in-memory): matched-spectrum Gaussian null over n_gauss draws."""
+    sigma = red.std(0, keepdims=True)
+    draws = [_matched_spectrum_draw(red, cyclic, sigma, i) for i in range(n_gauss)]
+    cev, l1, l2 = zip(*draws)
+    return _agg_matched_spectrum(cev, l1, l2, obs)
 
 
 def _fundamental_mode_fraction(M: np.ndarray, n: int) -> float:
@@ -586,6 +610,8 @@ def _synthetic_set(name="weekday", n=7, seed=0):
 
 
 def run_one(name: str, synthetic=False, **kw) -> dict:
+    """One-shot in-memory battery (fine when the box is not memory-starved).
+    On the shared box use the checkpointed harness (`main` default) instead."""
     C._cap_threads()
     if synthetic:
         X, labels, n_labels, cyclic, canonical = _synthetic_set(name)
@@ -601,6 +627,171 @@ def run_one(name: str, synthetic=False, **kw) -> dict:
     plot_battery(out, OUT_DIR / f"null_{tag}{name}.png")
     _print_verdict(out)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Checkpointed, fit-granular harness (survives an aggressive external OOM reaper)
+#
+# The shared box SIGKILLs any ~300MB torch process within seconds under fleet
+# memory pressure, so a whole-set battery never completes. We split it into tiny,
+# resumable units: reduce+observed once (`prep`), the refit-free nulls in one shot
+# (`fast`), and the two refit nulls as APPEND-ONLY jsonl collectors that record
+# every single draw immediately — a kill loses at most the in-flight draw, and the
+# next attempt resumes from the saved count. Draws are deterministic in their index
+# so resume never repeats or biases. `assemble` stitches the parts into the final
+# json + figure. All of this is orchestrated by many retried subprocesses.
+# ---------------------------------------------------------------------------
+
+
+PARTS = OUT_DIR / "parts"
+
+
+def _prep_paths(name):
+    return PARTS / f"{name}_prep.npz", PARTS / f"{name}_observed.json"
+
+
+def _jsonl_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with path.open() as f:
+        return sum(1 for _ in f)
+
+
+def _jsonl_rows(path: Path) -> list:
+    if not path.exists():
+        return []
+    with path.open() as f:
+        return [json.loads(l) for l in f if l.strip()]
+
+
+def phase_prep(name: str, reduce_dim=16) -> int:
+    """Reduce + observed fit (1 curved fit). Idempotent; skips if already done."""
+    C._cap_threads()
+    PARTS.mkdir(parents=True, exist_ok=True)
+    prep_npz, obs_json = _prep_paths(name)
+    if prep_npz.exists() and obs_json.exists():
+        print(f"[prep] {name}: already done", flush=True)
+        return 0
+    X, labels, n_labels, cyclic, canonical = _load_set(name)
+    uniq = sorted(set(labels.tolist()))
+    r = min(reduce_dim, X.shape[0] - 2)
+    red, _, _, _, _ = C._pca_reduce(X, X, r)
+    l1 = C.linear_pca_ev(red, red, 1)
+    l2 = C.linear_pca_ev(red, red, 2)
+    cev, tok_angle = _curved_read(red, labels, uniq, n_labels, cyclic, seed=0)
+    M = _token_means(red, labels, uniq)
+    obs = {
+        "curved_ev": float(cev), "linear_L1": float(l1), "linear_L2": float(l2),
+        "adjacency": float(_adjacency(tok_angle, np.array(uniq))) if cyclic else None,
+        "circ_corr": float(_circ_corr_to_truth(tok_angle, uniq, n_labels)) if cyclic else None,
+        "pca2d_adjacency": float(_pca2d_angle_adjacency(M, len(uniq))) if cyclic else None,
+    }
+    np.savez(prep_npz, red=red, labels=labels, tok_angle=tok_angle, M=M,
+             n_labels=n_labels, cyclic=cyclic, reduce_dim=r, n_samples=X.shape[0])
+    obs_json.write_text(json.dumps(
+        {"observed": obs, "canonical": canonical, "n_labels": int(n_labels),
+         "cyclic": bool(cyclic), "reduce_dim": int(r), "n_samples": int(X.shape[0]),
+         "fit_budget": {"steps": _STEPS, "n_seeds": _NSEEDS}}, indent=2, default=float))
+    print(f"[prep] {name}: obs curved_ev={cev:.3f} adj={obs['adjacency']} "
+          f"pca2d={obs['pca2d_adjacency']} [saved]", flush=True)
+    return 0
+
+
+def _load_prep(name):
+    prep_npz, obs_json = _prep_paths(name)
+    z = np.load(prep_npz, allow_pickle=False)
+    meta = json.loads(obs_json.read_text())
+    return z, meta
+
+
+def phase_fast(name: str, n_perm=5000, n_phase=5000) -> int:
+    """The two refit-FREE nulls (label-permutation + phase-scramble) in one shot."""
+    C._cap_threads()
+    z, meta = _load_prep(name)
+    red, labels = z["red"], z["labels"]
+    uniq = sorted(set(labels.tolist()))
+    n_labels, cyclic = meta["n_labels"], meta["cyclic"]
+    obs, tok_angle, M = meta["observed"], z["tok_angle"], z["M"]
+    rng = np.random.default_rng(7)
+    if cyclic:
+        lp = _null_label_perm(tok_angle, uniq, n_labels, obs, n_perm, rng)
+        ps = _null_phase_scramble(M, len(uniq), obs, n_phase, rng)
+        (PARTS / f"{name}_label_perm.json").write_text(json.dumps(lp, default=float))
+        (PARTS / f"{name}_phase_scramble.json").write_text(json.dumps(ps, default=float))
+        print(f"[fast] {name}: label_perm p={lp['p_adjacency']:.4f} | "
+              f"phase FMF={ps['fundamental_mode_fraction']:.2f}", flush=True)
+    return 0
+
+
+def phase_collect(name: str, which: str, target: int, max_per_call=200) -> int:
+    """Append draws for a refit null to its jsonl until `target` reached. Each draw
+    is flushed immediately (crash-safe). Returns 0 when target met, 2 if more work
+    remains (driver re-invokes). `max_per_call` bounds the kill window per process."""
+    C._cap_threads()
+    z, meta = _load_prep(name)
+    red, labels = z["red"], z["labels"]
+    uniq = sorted(set(labels.tolist()))
+    n_labels, cyclic = meta["n_labels"], meta["cyclic"]
+    path = PARTS / f"{name}_{which}.jsonl"
+    done = _jsonl_count(path)
+    if done >= target:
+        print(f"[collect] {name}/{which}: {done}/{target} done", flush=True)
+        return 0
+    sigma = red.std(0, keepdims=True) if which == "matched_spectrum" else None
+    made = 0
+    with path.open("a") as f:
+        for i in range(done, target):
+            if which == "rotation":
+                adj, circ, ev = _rotation_draw(red, labels, uniq, n_labels, cyclic, i)
+                row = {"i": i, "adj": adj, "circ": circ, "ev": ev}
+            else:  # matched_spectrum
+                cev, l1, l2 = _matched_spectrum_draw(red, cyclic, sigma, i)
+                row = {"i": i, "cev": cev, "l1": l1, "l2": l2}
+            f.write(json.dumps(row, default=float) + "\n")
+            f.flush(); os.fsync(f.fileno())
+            made += 1
+            if made >= max_per_call:
+                break
+    now = _jsonl_count(path)
+    print(f"[collect] {name}/{which}: +{made} -> {now}/{target}", flush=True)
+    return 0 if now >= target else 2
+
+
+def phase_assemble(name: str, n_rot: int, n_gauss: int) -> int:
+    """Stitch prep + observed + all null parts into the final json + figure."""
+    z, meta = _load_prep(name)
+    labels = z["labels"]
+    uniq = sorted(set(labels.tolist()))
+    obs, cyclic, n_labels = meta["observed"], meta["cyclic"], meta["n_labels"]
+    out = {
+        "name": name, "n_samples": meta["n_samples"], "n_tokens": int(n_labels),
+        "cyclic": bool(cyclic), "reduce_dim": meta["reduce_dim"],
+        "fit_budget": meta["fit_budget"], "canonical_headline": meta["canonical"],
+        "observed": obs, "nulls": {},
+    }
+    lp_path = PARTS / f"{name}_label_perm.json"
+    ps_path = PARTS / f"{name}_phase_scramble.json"
+    if lp_path.exists():
+        out["nulls"]["label_perm"] = json.loads(lp_path.read_text())
+    perm_chance95 = out["nulls"].get("label_perm", {}).get("null_adjacency_95", 1.0)
+    rot_rows = _jsonl_rows(PARTS / f"{name}_rotation.jsonl")[:n_rot]
+    if rot_rows:
+        out["nulls"]["rotation"] = _agg_rotation(
+            [r["adj"] for r in rot_rows], [r["circ"] for r in rot_rows],
+            [r["ev"] for r in rot_rows], obs, perm_chance95)
+    ms_rows = _jsonl_rows(PARTS / f"{name}_matched_spectrum.jsonl")[:n_gauss]
+    if ms_rows:
+        out["nulls"]["matched_spectrum"] = _agg_matched_spectrum(
+            [r["cev"] for r in ms_rows], [r["l1"] for r in ms_rows],
+            [r["l2"] for r in ms_rows], obs)
+    if ps_path.exists():
+        out["nulls"]["phase_scramble"] = json.loads(ps_path.read_text())
+    out["verdict"] = _verdict(out)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / f"null_{name}.json").write_text(json.dumps(out, indent=2, default=float))
+    plot_battery(out, OUT_DIR / f"null_{name}.png")
+    _print_verdict(out)
+    return 0
 
 
 def _print_verdict(out: dict):
@@ -630,43 +821,90 @@ def _print_verdict(out: dict):
             print(f"     rotation basis-real fraction={c2['basis_real_fraction']:.2f}", flush=True)
 
 
+def _retry(base, argv, tag, tries):
+    """Run a phase subprocess up to `tries` times; treat rc 0 as done, rc 2 as
+    'progress made, call again', anything else (incl. -9 SIGKILL) as retry."""
+    import subprocess
+    for attempt in range(1, tries + 1):
+        rc = subprocess.run(base + argv, env=os.environ).returncode
+        if rc == 0:
+            return True
+        if rc != 2:
+            print(f"[driver] {tag} rc={rc} (attempt {attempt}/{tries})", flush=True)
+    return False
+
+
+def _drive(name: str, n_rot, n_gauss, n_perm, n_phase) -> None:
+    """Orchestrate one set through the checkpointed phases with heavy retries."""
+    base = [sys.executable, str(Path(__file__).resolve())]
+    tries = int(os.environ.get("MATCHED_NULL_RETRIES", "40"))
+    common = ["--n-rot", str(n_rot), "--n-gauss", str(n_gauss),
+              "--n-perm", str(n_perm), "--n-phase", str(n_phase)]
+    prep_npz, obs_json = _prep_paths(name)
+    # 1) prep (1 fit) — retry until the observed json exists
+    for _ in range(tries):
+        if prep_npz.exists() and obs_json.exists():
+            break
+        _retry(base, ["--phase", "prep", "--set", name] + common, f"{name}/prep", 1)
+    # 2) refit-free nulls
+    for _ in range(tries):
+        if (PARTS / f"{name}_label_perm.json").exists():
+            break
+        _retry(base, ["--phase", "fast", "--set", name] + common, f"{name}/fast", 1)
+    # 3) refit collectors — call repeatedly until the jsonl reaches target
+    for which, target in (("rotation", n_rot), ("matched_spectrum", n_gauss)):
+        path = PARTS / f"{name}_{which}.jsonl"
+        for attempt in range(tries * 4):
+            if _jsonl_count(path) >= target:
+                break
+            _retry(base, ["--phase", "collect", "--set", name, "--which", which] + common,
+                   f"{name}/{which}", 1)
+    # 4) assemble
+    _retry(base, ["--phase", "assemble", "--set", name] + common, f"{name}/assemble", tries)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", type=str, default=None, help="run one cached set")
+    ap.add_argument("--set", type=str, default=None, help="which cached set")
+    ap.add_argument("--phase", type=str, default=None,
+                    choices=["prep", "fast", "collect", "assemble", "oneshot"])
+    ap.add_argument("--which", type=str, default=None,
+                    choices=["rotation", "matched_spectrum"])
     ap.add_argument("--synthetic", action="store_true", help="planted-circle sanity check")
-    ap.add_argument("--n-rot", type=int, default=48)
-    ap.add_argument("--n-gauss", type=int, default=128)
+    ap.add_argument("--n-rot", type=int, default=32)
+    ap.add_argument("--n-gauss", type=int, default=80)
     ap.add_argument("--n-perm", type=int, default=5000)
     ap.add_argument("--n-phase", type=int, default=5000)
+    ap.add_argument("--max-per-call", type=int, default=200)
     args = ap.parse_args()
     kw = dict(n_rot=args.n_rot, n_gauss=args.n_gauss, n_perm=args.n_perm, n_phase=args.n_phase)
 
-    if args.set:
-        run_one(args.set, synthetic=args.synthetic, **kw)
+    # ---- individual phases (invoked by the driver as isolated subprocesses) ----
+    if args.phase == "prep":
+        return phase_prep(args.set)
+    if args.phase == "fast":
+        return phase_fast(args.set, n_perm=args.n_perm, n_phase=args.n_phase)
+    if args.phase == "collect":
+        target = args.n_rot if args.which == "rotation" else args.n_gauss
+        return phase_collect(args.set, args.which, target, max_per_call=args.max_per_call)
+    if args.phase == "assemble":
+        return phase_assemble(args.set, args.n_rot, args.n_gauss)
+
+    # ---- synthetic / one-shot in-memory (only when the box is not starved) ----
+    if args.synthetic or args.phase == "oneshot":
+        if args.set:
+            run_one(args.set, synthetic=args.synthetic, **kw)
+        else:
+            for name in _SETS:
+                run_one(name, synthetic=args.synthetic, **kw)
         return 0
 
-    if args.synthetic:
-        for name, n in (("weekday", 7), ("month", 12)):
-            run_one(name, synthetic=True, **kw)
-        return 0
-
-    # Orchestrate both sets as fresh, retried subprocesses (OOM/segfault-safe;
-    # each set writes its own json incrementally).
-    import subprocess
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    base = [sys.executable, str(Path(__file__).resolve())]
-    max_tries = int(os.environ.get("MATCHED_NULL_RETRIES", "4"))
-    for name in _SETS:
-        for attempt in range(1, max_tries + 1):
-            print(f"\n[driver] === {name} (attempt {attempt}/{max_tries}) ===", flush=True)
-            rc = subprocess.run(base + ["--set", name] +
-                                ["--n-rot", str(args.n_rot), "--n-gauss", str(args.n_gauss),
-                                 "--n-perm", str(args.n_perm), "--n-phase", str(args.n_phase)],
-                                env=os.environ).returncode
-            if rc == 0:
-                break
-            print(f"[driver] {name} rc={rc}; {'retrying' if attempt < max_tries else 'GAVE UP'}",
-                  flush=True)
+    # ---- default: checkpointed driver over both sets --------------------------
+    PARTS.mkdir(parents=True, exist_ok=True)
+    targets = [args.set] if args.set else list(_SETS)
+    for name in targets:
+        print(f"\n[driver] ===== {name} =====", flush=True)
+        _drive(name, args.n_rot, args.n_gauss, args.n_perm, args.n_phase)
     print(f"\n[done] {OUT_DIR}/null_*.json + null_*.png", flush=True)
     return 0
 
