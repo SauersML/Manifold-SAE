@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "data": "planted real-shaped synthetic -- disjoint circle+linear blocks under a random rotation Q; ground-truth curved count known",
+    "p": 9,
+    "n_train": 400,
+    "n_test": 100,
+    "n_curved": 3,
+    "n_linear": 3,
+    "caveats": [
+      "Real OLMo-3-32B activations (runs/OLMO3_32B_*_SELF_QUALIA_*/, L44) ARE present and were tried first, but the self/qualia last-token readout is a LINEAR axis: circle atoms co-collapse ('no atom carries material signal to anchor', held-out EV ~0.03-0.11). Run `--real-probe` to reproduce.",
+      "The documented curved structure (color/hue loop, DATA_README sec 8) is not present locally as an array harvest, so the ground-truth frontier uses fixed real-shaped planted synthetic where the curved count is known.",
+      "gamfit.sae_manifold_fit (REML) is NON-FUNCTIONAL in this shared-tree build: the compiled ext is stale vs the Python wrapper (kwargs structured_residual_passes/promote_from_residual, runtime-stripped), the IBP joint Hessian goes non-PD ('infeasible rho probe' GamError), and the inner Newton loop is slow + memory-leaky (OOM). So the curved side is by parameter accounting against MEASURED per-atom geometry, not a live fit."
+    ]
+  },
+  "linear_curve": [
+    {
+      "linear_dict_ev": 0.36317529360766365,
+      "linear_dict_params": 18,
+      "sparse_dict_ev": 0.3631607595311034,
+      "K_lin": 2,
+      "theta": 18
+    },
+    {
+      "linear_dict_ev": 0.5342040128913601,
+      "linear_dict_params": 27,
+      "sparse_dict_ev": 0.5342064937250586,
+      "K_lin": 3,
+      "theta": 27
+    },
+    {
+      "linear_dict_ev": 0.5887314731639249,
+      "linear_dict_params": 36,
+      "sparse_dict_ev": 0.5887314739918508,
+      "K_lin": 4,
+      "theta": 36
+    },
+    {
+      "linear_dict_ev": 0.8531138569118859,
+      "linear_dict_params": 81,
+      "sparse_dict_ev": 0.7972527292474312,
+      "K_lin": 9,
+      "theta": 81
+    },
+    {
+      "linear_dict_ev": 0.9067932679422045,
+      "linear_dict_params": 99,
+      "sparse_dict_ev": 0.8133187798640145,
+      "K_lin": 11,
+      "theta": 99
+    },
+    {
+      "linear_dict_ev": 0.9702677956371215,
+      "linear_dict_params": 162,
+      "sparse_dict_ev": 0.927154353279416,
+      "K_lin": 18,
+      "theta": 162
+    },
+    {
+      "linear_dict_ev": 0.973902908235685,
+      "linear_dict_params": 198,
+      "sparse_dict_ev": 0.9513299015032084,
+      "K_lin": 22,
+      "theta": 198
+    },
+    {
+      "linear_dict_ev": 0.9739029082493058,
+      "linear_dict_params": 243,
+      "sparse_dict_ev": 0.9719983617520015,
+      "K_lin": 27,
+      "theta": 243
+    },
+    {
+      "linear_dict_ev": 0.9739029082493058,
+      "linear_dict_params": 324,
+      "sparse_dict_ev": 0.9846125422901176,
+      "K_lin": 36,
+      "theta": 324
+    }
+  ],
+  "curvature_frontier": {
+    "atoms": [
+      {
+        "atom": 0,
+        "planted_curved": true,
+        "n_points": 13,
+        "linear_top1_ev": 0.6137314794662186,
+        "curved_ev": 0.9961833052423894,
+        "curvature_gap": 0.38245182577617076,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 12.067310932295356,
+        "global_dev": 0.056973554491705374,
+        "rank": 1
+      },
+      {
+        "atom": 1,
+        "planted_curved": true,
+        "n_points": 12,
+        "linear_top1_ev": 0.6061502373216758,
+        "curved_ev": 0.9942264614155625,
+        "curvature_gap": 0.38807622409388665,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 11.288969784342425,
+        "global_dev": 0.05408258235359687,
+        "rank": 2
+      },
+      {
+        "atom": 2,
+        "planted_curved": true,
+        "n_points": 12,
+        "linear_top1_ev": 0.7163770911298457,
+        "curved_ev": 0.9954711629389371,
+        "curvature_gap": 0.2790940718090914,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 13.72834775971578,
+        "global_dev": 0.047299326562826816,
+        "rank": 3
+      },
+      {
+        "atom": 3,
+        "planted_curved": false,
+        "n_points": 24,
+        "linear_top1_ev": 0.991668440510119,
+        "curved_ev": 0.9936644959448002,
+        "curvature_gap": 0.0019960554346811765,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 21.198349638765993,
+        "global_dev": 0.0005223489463307037,
+        "rank": 4
+      },
+      {
+        "atom": 4,
+        "planted_curved": false,
+        "n_points": 22,
+        "linear_top1_ev": 0.9910116990833655,
+        "curved_ev": 0.9937515359464326,
+        "curvature_gap": 0.0027398368630671133,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 14.188225102921507,
+        "global_dev": 0.000479886848784174,
+        "rank": 5
+      },
+      {
+        "atom": 5,
+        "planted_curved": false,
+        "n_points": 17,
+        "linear_top1_ev": 0.9860311170703008,
+        "curved_ev": 0.9897669164520111,
+        "curvature_gap": 0.003735799381710314,
+        "theta_curved": 27,
+        "theta_linear": 9,
+        "share_of_total_var": 8.534188484120646,
+        "global_dev": 0.00039357893829585665,
+        "rank": 6
+      }
+    ],
+    "noise_floor": 0.0005223489463307037,
+    "k_curved_recommended": 3,
+    "n_curved_planted": 3,
+    "b_curved": 3
+  },
+  "accounting_parity": {
+    "rows": [
+      {
+        "curved_atoms_used": 0,
+        "theta": 54,
+        "k_lin_equiv": 6.0,
+        "manifold_ev_ceiling": 0.8343,
+        "linear_ev_matched": 0.6945,
+        "delta_ev_upper_bound": 0.1398
+      },
+      {
+        "curved_atoms_used": 1,
+        "theta": 72,
+        "k_lin_equiv": 8.0,
+        "manifold_ev_ceiling": 0.8913,
+        "linear_ev_matched": 0.8002,
+        "delta_ev_upper_bound": 0.091
+      },
+      {
+        "curved_atoms_used": 2,
+        "theta": 90,
+        "k_lin_equiv": 10.0,
+        "manifold_ev_ceiling": 0.9453,
+        "linear_ev_matched": 0.88,
+        "delta_ev_upper_bound": 0.0654
+      },
+      {
+        "curved_atoms_used": 3,
+        "theta": 108,
+        "k_lin_equiv": 12.0,
+        "manifold_ev_ceiling": 0.9926,
+        "linear_ev_matched": 0.9159,
+        "delta_ev_upper_bound": 0.0768
+      }
+    ],
+    "curved_ceiling": 0.994,
+    "theta_curved_full": 108,
+    "theta_linear_to_match_ceiling": null,
+    "linear_saturation_ev": 0.9739,
+    "linear_inaccessible_ev": 0.0201
+  },
+  "manifold_attempt": [
+    {
+      "K": 4,
+      "ok": false,
+      "error": "worker produced no output (OOM/segfault)",
+      "wall_seconds": 13.2
+    },
+    {
+      "K": 6,
+      "ok": false,
+      "error": "worker produced no output (OOM/segfault)",
+      "wall_seconds": 15.2
+    }
+  ]
+}

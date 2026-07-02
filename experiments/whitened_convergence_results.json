@@ -1,0 +1,629 @@
+{
+  "provenance": {
+    "source": "real",
+    "harvest": "runs/OLMO3_7B_INSTRUCT_SELF_QUALIA_RICH_LAST/activations.npy",
+    "model": "OLMo-3-7B-Instruct (residual stream, last-token)",
+    "layer_slab": [
+      15,
+      16,
+      17
+    ],
+    "p_full_harvest": 4096,
+    "width_projection": "top-48 PCA scores",
+    "n": 150,
+    "p": 48,
+    "anisotropy_top_over_64th_sv": 6.8
+  },
+  "n_iter": 15,
+  "results": [
+    {
+      "K": 32,
+      "n": 150,
+      "p": 48,
+      "ibp_alpha": "K-aware-default",
+      "isometry_weight": 1.0,
+      "n_iter": 15,
+      "gamfit": "/Users/user/Manifold-SAE/.venv/lib/python3.13/site-packages/gamfit/__init__.py",
+      "status": "NONCONVERGENCE_1784",
+      "error_type": "RemlConvergenceError",
+      "error_msg": "REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -6.831193984203108 at index 14 (matrix is not positive definite)",
+      "traceback_tail": "    payload = rust_module().sae_manifold_fit_minimal(\n        np.ascontiguousarray(x),\n    ...<39 lines>...\n        ibp_alpha_override=None if ibp_alpha is None else float(ibp_alpha),\n    )\ngamfit._rust.RemlConvergenceError: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -6.831193984203108 at index 14 (matrix is not positive definite)\n",
+      "wall_s": 182.47,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "OOM_KILLED",
+          "wall_s": 211.98,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 2,
+          "status": "OOM_KILLED",
+          "wall_s": 24.25,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 3,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.16,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 4,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.2,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 5,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.16,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 6,
+          "status": "OOM_KILLED",
+          "wall_s": 18.61,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 7,
+          "status": "OOM_KILLED",
+          "wall_s": 12.62,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 8,
+          "status": "OOM_KILLED",
+          "wall_s": 20.32,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 9,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.41,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 10,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.43,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 11,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.44,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 12,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.33,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 13,
+          "status": "OOM_KILLED",
+          "wall_s": 30.29,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 14,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.36,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 15,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.65,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 16,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.4,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 17,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.79,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 18,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.47,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 19,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.53,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 20,
+          "status": "OOM_KILLED",
+          "wall_s": 12.23,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 21,
+          "status": "OOM_KILLED",
+          "wall_s": 155.44,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 22,
+          "status": "OOM_KILLED",
+          "wall_s": 68.65,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 23,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.29,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 24,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.25,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 25,
+          "status": "REFUSED_DENSE_CACHE",
+          "wall_s": 0.34,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 26,
+          "status": "OOM_KILLED",
+          "wall_s": 3.04,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 27,
+          "status": "OOM_KILLED",
+          "wall_s": 24.67,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 28,
+          "status": "OOM_KILLED",
+          "wall_s": 12.41,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 29,
+          "status": "OOM_KILLED",
+          "wall_s": 12.99,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 30,
+          "status": "NONCONVERGENCE_1784",
+          "wall_s": 182.47,
+          "load1_at_start": -1.0
+        }
+      ],
+      "tag": "kaware_fix"
+    },
+    {
+      "K": 32,
+      "n": 150,
+      "p": 48,
+      "ibp_alpha": 1.0,
+      "isometry_weight": 1.0,
+      "n_iter": 15,
+      "gamfit": "/Users/user/Manifold-SAE/.venv/lib/python3.13/site-packages/gamfit/__init__.py",
+      "status": "NONCONVERGENCE_1784",
+      "error_type": "RemlConvergenceError",
+      "error_msg": "REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -1017.6002432806738 at index 90 (matrix is not positive definite)",
+      "traceback_tail": "    payload = rust_module().sae_manifold_fit_minimal(\n        np.ascontiguousarray(x),\n    ...<39 lines>...\n        ibp_alpha_override=None if ibp_alpha is None else float(ibp_alpha),\n    )\ngamfit._rust.RemlConvergenceError: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -1017.6002432806738 at index 90 (matrix is not positive definite)\n",
+      "wall_s": 34.02,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "OOM_KILLED",
+          "wall_s": 40.66,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 2,
+          "status": "NONCONVERGENCE_1784",
+          "wall_s": 34.02,
+          "load1_at_start": -1.0
+        }
+      ],
+      "tag": "alpha1_adversarial"
+    },
+    {
+      "K": 16,
+      "ibp_alpha": "none",
+      "status": "OOM_KILLED",
+      "returncode": -9,
+      "stderr_tail": "[1s] SaeManifoldTerm: dictionary co-collapse (reconstruction EV=0.1164 at or below the data-derived collapse bar) with no relative-norm breach; reseeding all 16 atoms onto distinct residual PCs (dictionary multi-start 1/3: total co-collapse, no atom carries material signal to anchor)\n[8s] [#1026] restoring inner-fit reconstruction incumbent after EV degraded from 0.8232 to 0.8119\n",
+      "wall_s": 15.58,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "OOM_KILLED",
+          "wall_s": 8.72,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 2,
+          "status": "OOM_KILLED",
+          "wall_s": 14.89,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 3,
+          "status": "OOM_KILLED",
+          "wall_s": 79.15,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 4,
+          "status": "OOM_KILLED",
+          "wall_s": 19.22,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 5,
+          "status": "OOM_KILLED",
+          "wall_s": 12.72,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 6,
+          "status": "OOM_KILLED",
+          "wall_s": 16.49,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 7,
+          "status": "OOM_KILLED",
+          "wall_s": 28.09,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 8,
+          "status": "OOM_KILLED",
+          "wall_s": 28.6,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 9,
+          "status": "OOM_KILLED",
+          "wall_s": 12.57,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 10,
+          "status": "OOM_KILLED",
+          "wall_s": 14.67,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 11,
+          "status": "OOM_KILLED",
+          "wall_s": 73.24,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 12,
+          "status": "OOM_KILLED",
+          "wall_s": 12.25,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 13,
+          "status": "OOM_KILLED",
+          "wall_s": 42.67,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 14,
+          "status": "OOM_KILLED",
+          "wall_s": 27.78,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 15,
+          "status": "OOM_KILLED",
+          "wall_s": 12.23,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 16,
+          "status": "OOM_KILLED",
+          "wall_s": 27.57,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 17,
+          "status": "OOM_KILLED",
+          "wall_s": 12.21,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 18,
+          "status": "OOM_KILLED",
+          "wall_s": 27.34,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 19,
+          "status": "OOM_KILLED",
+          "wall_s": 103.59,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 20,
+          "status": "OOM_KILLED",
+          "wall_s": 12.32,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 21,
+          "status": "OOM_KILLED",
+          "wall_s": 12.34,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 22,
+          "status": "OOM_KILLED",
+          "wall_s": 27.58,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 23,
+          "status": "OOM_KILLED",
+          "wall_s": 12.38,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 24,
+          "status": "OOM_KILLED",
+          "wall_s": 12.37,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 25,
+          "status": "OOM_KILLED",
+          "wall_s": 12.3,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 26,
+          "status": "OOM_KILLED",
+          "wall_s": 12.28,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 27,
+          "status": "OOM_KILLED",
+          "wall_s": 12.8,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 28,
+          "status": "OOM_KILLED",
+          "wall_s": 20.54,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 29,
+          "status": "OOM_KILLED",
+          "wall_s": 12.56,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 30,
+          "status": "OOM_KILLED",
+          "wall_s": 12.8,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 31,
+          "status": "OOM_KILLED",
+          "wall_s": 12.41,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 32,
+          "status": "OOM_KILLED",
+          "wall_s": 12.48,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 33,
+          "status": "OOM_KILLED",
+          "wall_s": 12.35,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 34,
+          "status": "OOM_KILLED",
+          "wall_s": 12.37,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 35,
+          "status": "OOM_KILLED",
+          "wall_s": 12.42,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 36,
+          "status": "OOM_KILLED",
+          "wall_s": 12.26,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 37,
+          "status": "OOM_KILLED",
+          "wall_s": 12.32,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 38,
+          "status": "OOM_KILLED",
+          "wall_s": 12.31,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 39,
+          "status": "OOM_KILLED",
+          "wall_s": 12.26,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 40,
+          "status": "OOM_KILLED",
+          "wall_s": 12.44,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 41,
+          "status": "OOM_KILLED",
+          "wall_s": 12.24,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 42,
+          "status": "OOM_KILLED",
+          "wall_s": 12.25,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 43,
+          "status": "OOM_KILLED",
+          "wall_s": 12.21,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 44,
+          "status": "OOM_KILLED",
+          "wall_s": 12.3,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 45,
+          "status": "OOM_KILLED",
+          "wall_s": 12.27,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 46,
+          "status": "OOM_KILLED",
+          "wall_s": 12.26,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 47,
+          "status": "OOM_KILLED",
+          "wall_s": 12.21,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 48,
+          "status": "OOM_KILLED",
+          "wall_s": 12.21,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 49,
+          "status": "OOM_KILLED",
+          "wall_s": 39.08,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 50,
+          "status": "OOM_KILLED",
+          "wall_s": 18.4,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 51,
+          "status": "OOM_KILLED",
+          "wall_s": 15.58,
+          "load1_at_start": -1.0
+        }
+      ],
+      "exhausted_retries": true,
+      "tag": "kaware_fix"
+    },
+    {
+      "K": 16,
+      "n": 150,
+      "p": 48,
+      "ibp_alpha": 1.0,
+      "isometry_weight": 1.0,
+      "n_iter": 15,
+      "gamfit": "/Users/user/Manifold-SAE/.venv/lib/python3.13/site-packages/gamfit/__init__.py",
+      "status": "NONCONVERGENCE_1784",
+      "error_type": "RemlConvergenceError",
+      "error_msg": "REML smoothing optimization failed to converge: no candidate seeds passed outer startup validation (SAE manifold):\n  generated=2, screened=2, exact_validated=2, solver_started=0\n  rejection breakdown: rejected_by_kkt=0, rejected_by_domain=0, rejected_by_objective=0, rejected_by_budget=0, rejected_other=2 (total=2)\n  per-seed reasons:\n    seed 0 (validation): REML smoothing optimization failed to converge: outer eval failed: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -43.95354021521532 at index 99 ",
+      "traceback_tail": "gamfit._rust.RemlConvergenceError: REML smoothing optimization failed to converge: no candidate seeds passed outer startup validation (SAE manifold):\n  generated=2, screened=2, exact_validated=2, solver_started=0\n  rejection breakdown: rejected_by_kkt=0, rejected_by_domain=0, rejected_by_objective=0, rejected_by_budget=0, rejected_other=2 (total=2)\n  per-seed reasons:\n    seed 0 (validation): REML smoothing optimization failed to converge: outer eval failed: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -43.95354021521532 at index 99 (matrix is not positive definite)\n    seed 1 (validation): REML smoothing optimization failed to converge: outer eval failed: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: arrow-Schur: Schur complement Cholesky failed: non-PD pivot -37.822728553364996 at index 99 (matrix is not positive definite)\n",
+      "wall_s": 28.67,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "OOM_KILLED",
+          "wall_s": 12.22,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 2,
+          "status": "OOM_KILLED",
+          "wall_s": 12.2,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 3,
+          "status": "OOM_KILLED",
+          "wall_s": 12.25,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 4,
+          "status": "OOM_KILLED",
+          "wall_s": 12.22,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 5,
+          "status": "OOM_KILLED",
+          "wall_s": 12.3,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 6,
+          "status": "OOM_KILLED",
+          "wall_s": 12.2,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 7,
+          "status": "OOM_KILLED",
+          "wall_s": 12.2,
+          "load1_at_start": -1.0
+        },
+        {
+          "attempt": 8,
+          "status": "NONCONVERGENCE_1784",
+          "wall_s": 28.67,
+          "load1_at_start": -1.0
+        }
+      ],
+      "tag": "alpha1_adversarial"
+    }
+  ]
+}

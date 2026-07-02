@@ -1,0 +1,64 @@
+{
+  "provenance": {
+    "source": "real",
+    "harvest": "runs/OLMO3_7B_INSTRUCT_SELF_QUALIA_RICH_LAST/activations.npy",
+    "model": "OLMo-3-7B-Instruct (residual stream, last-token)",
+    "layer_slab": [
+      15,
+      16,
+      17
+    ],
+    "p_full_harvest": 4096,
+    "width_projection": "top-128 PCA scores",
+    "n": 500,
+    "p": 128,
+    "anisotropy_top_over_64th_sv": 9.2
+  },
+  "n_iter": 15,
+  "results": [
+    {
+      "K": 32,
+      "n": 500,
+      "p": 128,
+      "ibp_alpha": "K-aware-default",
+      "isometry_weight": 1.0,
+      "n_iter": 15,
+      "gamfit": "/Users/user/Manifold-SAE/.venv/lib/python3.13/site-packages/gamfit/__init__.py",
+      "status": "NONCONVERGENCE_1784",
+      "error_type": "RemlConvergenceError",
+      "error_msg": "REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion_with_cache: predicted working set 4354583552 bytes exceeds budget 2147483648 bytes for dense evidence cache; shape n=500,p=128,K=32; cost-only streaming route is required",
+      "traceback_tail": "    payload = rust_module().sae_manifold_fit_minimal(\n        np.ascontiguousarray(x),\n    ...<39 lines>...\n        ibp_alpha_override=None if ibp_alpha is None else float(ibp_alpha),\n    )\ngamfit._rust.RemlConvergenceError: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion_with_cache: predicted working set 4354583552 bytes exceeds budget 2147483648 bytes for dense evidence cache; shape n=500,p=128,K=32; cost-only streaming route is required\n",
+      "wall_s": 1.51,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "NONCONVERGENCE_1784",
+          "wall_s": 1.51
+        }
+      ],
+      "tag": "kaware_fix"
+    },
+    {
+      "K": 32,
+      "n": 500,
+      "p": 128,
+      "ibp_alpha": 1.0,
+      "isometry_weight": 1.0,
+      "n_iter": 15,
+      "gamfit": "/Users/user/Manifold-SAE/.venv/lib/python3.13/site-packages/gamfit/__init__.py",
+      "status": "NONCONVERGENCE_1784",
+      "error_type": "RemlConvergenceError",
+      "error_msg": "REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion_with_cache: predicted working set 4354583552 bytes exceeds budget 2147483648 bytes for dense evidence cache; shape n=500,p=128,K=32; cost-only streaming route is required",
+      "traceback_tail": "    payload = rust_module().sae_manifold_fit_minimal(\n        np.ascontiguousarray(x),\n    ...<39 lines>...\n        ibp_alpha_override=None if ibp_alpha is None else float(ibp_alpha),\n    )\ngamfit._rust.RemlConvergenceError: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion_with_cache: predicted working set 4354583552 bytes exceeds budget 2147483648 bytes for dense evidence cache; shape n=500,p=128,K=32; cost-only streaming route is required\n",
+      "wall_s": 1.51,
+      "attempts_log": [
+        {
+          "attempt": 1,
+          "status": "NONCONVERGENCE_1784",
+          "wall_s": 1.51
+        }
+      ],
+      "tag": "alpha1_adversarial"
+    }
+  ]
+}

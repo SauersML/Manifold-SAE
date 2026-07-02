@@ -1,0 +1,157 @@
+{
+  "meta": {
+    "source": "REAL residual-stream harvest",
+    "model": "Qwen/Qwen2.5-0.5B",
+    "steps": 600,
+    "reduce_dim": 16,
+    "reml": false
+  },
+  "results": {
+    "weekday": {
+      "layer": 14,
+      "n_samples": 35,
+      "n_tokens": 7,
+      "cyclic": true,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.938763343049025,
+      "layer_diag": {
+        "5": {
+          "best_abs_spearman_top8pc": 0.657703081232493
+        },
+        "8": {
+          "best_abs_spearman_top8pc": 0.5837535014005603
+        },
+        "11": {
+          "best_abs_spearman_top8pc": 0.6428571428571429
+        },
+        "14": {
+          "best_abs_spearman_top8pc": 0.6697478991596638
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": 0.49030956225923494,
+        "linear_L2": 0.541295198148039,
+        "curved": 0.33480593523812946,
+        "reduce_evr": 0.9651694463269507
+      },
+      "cv_ev_std": {
+        "linear_L1": 0.09442221880562901,
+        "linear_L2": 0.08736895071456424,
+        "curved": 0.18365121567533166,
+        "reduce_evr": 0.004312737943407129
+      },
+      "insample_ev": {
+        "curved": 0.5837980431006868,
+        "linear_L1": 0.44426608208500673,
+        "linear_L2": 0.580473567412497
+      },
+      "curved_ev_full_insample": 0.5837980431006868,
+      "ordering_curved": {
+        "metric": "circular",
+        "circular_corr_abs": 0.5453990747714114,
+        "cyclic_adjacency_accuracy": 0.7142857142857143,
+        "n_tokens": 7
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.8214285714285714,
+        "pca2d_angle_cyclic_adjacency_accuracy": 0.5714285714285714
+      },
+      "_tok_true": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "_tok_coord": [
+        -0.7809144047300332,
+        -2.481000289090917,
+        -2.4253934087323503,
+        -1.5059054591248568,
+        -2.842464380011124,
+        0.927170244877875,
+        0.920185523706769
+      ]
+    },
+    "month": {
+      "layer": 8,
+      "n_samples": 60,
+      "n_tokens": 12,
+      "cyclic": true,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.9350433337549661,
+      "layer_diag": {
+        "5": {
+          "best_abs_spearman_top8pc": 0.5731592108919145
+        },
+        "8": {
+          "best_abs_spearman_top8pc": 0.798666296193387
+        },
+        "11": {
+          "best_abs_spearman_top8pc": 0.6060572381217004
+        },
+        "14": {
+          "best_abs_spearman_top8pc": 0.525090302861906
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": 0.2810524011005128,
+        "linear_L2": 0.5186805529648509,
+        "curved": 0.4868791983199457,
+        "reduce_evr": 0.945974036779915
+      },
+      "cv_ev_std": {
+        "linear_L1": 0.1154170820107023,
+        "linear_L2": 0.22319054965532256,
+        "curved": 0.2329961100536476,
+        "reduce_evr": 0.006893715379093984
+      },
+      "insample_ev": {
+        "curved": 0.5975875388748115,
+        "linear_L1": 0.31612642221095855,
+        "linear_L2": 0.586001672510143
+      },
+      "curved_ev_full_insample": 0.5975875388748115,
+      "ordering_curved": {
+        "metric": "circular",
+        "circular_corr_abs": 0.5968376535255429,
+        "cyclic_adjacency_accuracy": 0.8333333333333334,
+        "n_tokens": 12
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.8181818181818182,
+        "pca2d_angle_cyclic_adjacency_accuracy": 1.0
+      },
+      "_tok_true": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0
+      ],
+      "_tok_coord": [
+        0.3047281641975337,
+        0.3195396331198648,
+        0.38942259388147027,
+        0.4703270890537776,
+        1.875615330239915,
+        2.734945947106288,
+        3.0376565216297884,
+        3.0055265419044073,
+        -3.129937057283475,
+        -2.732868873758429,
+        -1.7116390364218041,
+        -0.4369343564504285
+      ]
+    }
+  }
+}

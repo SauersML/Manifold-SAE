@@ -1,0 +1,1 @@
+{"layers": [5, 8, 11, 14], "source": "REAL residual-stream harvest", "model": "Qwen/Qwen2.5-0.5B", "sets": ["weekday", "month"]}

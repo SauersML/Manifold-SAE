@@ -1,0 +1,13 @@
+{
+  "weekday": {
+    "reml_ev_insample": null,
+    "error": "blocked: external OOM killer SIGKILLed every gamfit.sae_manifold_fit attempt (5 retries). Lowering n_iter to shrink the window triggers RemlConvergenceError instead. Torch-backend ManifoldSAE result stands as the primary curved fit."
+  },
+  "month": {
+    "reml_ev_insample": null,
+    "error": "same OOM blocker"
+  },
+  "year": {
+    "skipped": "real harvest OOM-blocked"
+  }
+}
