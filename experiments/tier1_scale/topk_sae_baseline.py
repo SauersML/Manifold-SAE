@@ -27,9 +27,42 @@ def load_manifest(mp):
     return train, held, t0
 
 
+def load_harvest(harvest_dir, residual_io, cap, heldout_stride):
+    """Load a residual_shard_io harvest into (train_np, held_np, t0) with a
+    row-hash held-out split matching the T1 runner, capped at `cap` train rows."""
+    import sys
+    sys.path.insert(0, residual_io)
+    from residual_shard_io import load_shards
+    r = load_shards(harvest_dir)
+    man = r.manifest
+    t0src = man.get("t0") or man.get("stats") or {}
+    t0 = {}
+    if t0src.get("mean") is not None:
+        t0["mean"] = np.asarray(t0src["mean"], dtype=np.float32)
+    for k in ("scale", "std", "rms", "norm"):
+        if t0src.get(k) is not None:
+            t0["scale"] = np.asarray(t0src[k], dtype=np.float32); break
+    tr, hd = [], []
+    counter = 0; ntr = 0
+    for b in r.batches(4096):
+        m = b.shape[0]
+        hmask = (np.arange(counter, counter + m) % heldout_stride == 0)
+        counter += m
+        if ntr < cap:
+            t = b[~hmask]; t = t[: cap - ntr]; tr.append(t); ntr += t.shape[0]
+        hd.append(b[hmask])
+        if ntr >= cap:
+            break
+    return np.concatenate(tr, 0), (np.concatenate(hd, 0) if hd else None), t0
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--manifest")
+    ap.add_argument("--harvest-dir")
+    ap.add_argument("--residual-io", default="/models/sauers_build/gam_fable/examples")
+    ap.add_argument("--cap", type=int, default=1000000, help="max train rows for harvest mode")
+    ap.add_argument("--heldout-stride", type=int, default=20)
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=512)
     ap.add_argument("--active", type=int, default=32)   # L0
@@ -44,7 +77,13 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     log(f"torch {torch.__version__} device={dev}")
 
-    train_p, held_p, t0 = load_manifest(args.manifest)
+    if args.harvest_dir:
+        Xtr_np, Xho_np, t0 = load_harvest(args.harvest_dir, args.residual_io,
+                                          args.cap, args.heldout_stride)
+    else:
+        train_p, held_p, t0 = load_manifest(args.manifest)
+        Xtr_np = np.concatenate([np.load(p) for p in train_p], 0)
+        Xho_np = np.concatenate([np.load(p) for p in held_p], 0) if held_p else None
     mean = torch.tensor(np.asarray(t0.get("mean"), dtype=np.float32)) if t0.get("mean") is not None else None
     scale = torch.tensor(np.asarray(t0.get("scale"), dtype=np.float32)) if t0.get("scale") is not None else None
 
@@ -53,11 +92,11 @@ def main():
         if args.center and mean is not None:
             x = x - mean
         if args.center and scale is not None:
-            x = x / scale
+            x = x / torch.where(scale > 1e-6, scale, torch.ones_like(scale))
         return x
 
-    Xtr = torch.cat([prep(np.load(p)) for p in train_p], 0)
-    Xho = torch.cat([prep(np.load(p)) for p in held_p], 0) if held_p else None
+    Xtr = prep(Xtr_np)
+    Xho = prep(Xho_np) if Xho_np is not None else None
     N, P = Xtr.shape
     K = args.k
     log(f"train {tuple(Xtr.shape)} heldout {tuple(Xho.shape) if Xho is not None else None} K={K} L0={args.active}")
