@@ -162,7 +162,13 @@ positive result.
 
 ## SPEC.md audit of today's landed surface (gam/SPEC.md, 19 rules)
 
-RULE 8 (Python thin wrapper, no math/logic) — VIOLATION:
+RULE 8 (Python thin wrapper, no math/logic) — MOSTLY FIXED (b41384235):
+`BlockSparseDictionaryFit.transform` now DELEGATES to the Rust FFI
+`block_sparse_dictionary_transform_ffi` (gamfit/_sparse_dictionary.py:46,61). Residual:
+a numpy `gate = np.linalg.norm(w, axis=2)` fallback remains at l.80 (used only when the
+FFI is absent). Low severity now — per strict rule-8 the numpy fallback should be dropped
+(or made a hard error) so Rust is the sole source of truth, but the primary path is
+correct. Original finding (for history):
 - `gamfit/_sparse_dictionary.py:334` `BlockSparseDictionaryFit.transform` reimplements
   the BLOCK OOS routing IN NUMPY: l.354 raw tied projection w=x·D_{g,r}, l.356
   `gate = np.linalg.norm(w, axis=2)` (group-ℓ₂ gate), then block-TopK + tied signed
