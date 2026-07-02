@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: **CENTERPIECE added** — the unified real-data ladder (§2): BSF reproduced (direction 36.6 → block 6.4 bits/token, selection cost 32→3) then extended one rung (circle-chart codes 1 intrinsic coord; block→chart `f*`≈12–22 on weekday/month). BT1 GREEN (`4a06940cd`, 17/0); G-bsf synthetic committed (`33731de`: Grassmannian 0.9855, vanilla 0.8185) + cyclic held-out EV (weekday 0.82, month 0.95); N-nursery = recovery-not-EV; P-null null p-values PENDING (uncommitted); K≥2 co-collapse repro RED → unpublishable._
+_Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 synthetic GREEN-lit** (R-review) → SAFE NOW (QUALIFIED): recovers 2/3 circles at held-out EV 0.834 = oracle 0.833 > joint 0.756, no joint solve, REML width-blocked; NOT an EV win (linear PCA-6 0.883, 0/3 circles); REML-cure transfer unestablished (#2027 repro RED); discovery≈oracle parity holds only at n=480. Centerpiece unified ladder in §2; BT1 GREEN; G-bsf synthetic+cyclic held-out backed; P-null null p-values PENDING (uncommitted `null_out/`); K≥2 co-collapse repro RED._
 
 ---
 
@@ -115,7 +115,7 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 | **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **SAFE NOW** — scorer SOUND (R-review hand-verified) | landed (in-sample EVs) |
 | **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **SAFE NOW** — strongest real-model result | landed — weekday circle only (month co-collapse on pre-fix build) |
 | **P-null** — matched-null battery (`matched_null.py`) | real cyclic claims survive matched nulls | *Descriptive W7 facts (committed `curved_feature_probes.json`):* curved(1 coord) ≈ linear(2 PC) ≫ linear(1 PC); month cyclic adjacency clean, weekday 0.714. *Matched-null p-values:* **PENDING** — `null_out/null_weekday.json` (real harvest, current `matched_null.py`) is **not committed**, so no null p-value is citeable | **code SOUND** (R-review 5fd1465); **null verdict PENDING a committed artifact** | PENDING — P-null committing `null_out/*.json`; refresh once on disk & R-review-verified |
-| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | **structure recovery under matched budget** (real held-out L8, N=95, 70/30, R-review-validated `adfe50d`): nursery recovers the weekday circle from one curved coordinate — cyclic adjacency **1.0 vs joint 0.429** (month 0.417 vs 0.25); on **held-out EV linear beats both** — PCA-4 0.696 > joint torch 0.629 > nursery 0.576. Width diagnostic: REML converges at P=16 (61s) but hangs at P=96 | **QUALIFIED** — a *recovery* advantage at modest EV cost, **never** an EV win; **not** a co-collapse demo (REML converged at P=16) | landed + R-review-validated (§4.4) |
+| **N-nursery** — chart-per-discovered-block vs joint-K (`block_nursery/`) | recover curved factors without a joint K≥2 solve | **p=96 product-of-3-circles synthetic (R-review-validated):** nursery recovers **2/3 circles at held-out EV 0.834 = oracle-block upper bound 0.833 > joint torch 0.756 (1/3 circles)**, with no joint solve and REML width-blocked (TIMEOUT at p=96). Clean unconfounded number: **one curved coordinate captures 0.94 of a circle's variance vs 0.52 for one linear coordinate**. NOT an EV win — linear PCA-6 gets 0.883 (but recovers 0/3 circles) | **SAFE NOW (QUALIFIED)** — factor recovery + factorized (no-joint-solve) delivery, **never** an EV win; REML transfer unestablished | landed + R-review-validated (§4.4) |
 | **BT1** — Rust block-sparse Tier-1 (gam `4a06940cd`) | gauge-invariant block-sparse core | after the edition-2024 pattern-error fix (`4a06940cd`) `gam-sae` compiles; R-review ran `cargo test -p gam-sae --lib block` → **17 passed / 0 failed**, incl. `gauge_invariant_selection_and_loss_under_block_rotation` (with negative control), `planted_block_subspaces_recovered`, `fitted_block_frames_are_orthonormal`, utilization/stable-rank. FFI clean (no `#[allow]`, full-path prelude) | **SAFE NOW** — gauge-invariant block-sparse core verified (numeric + 17 in-repo tests green) | landed & green — hedge: block-fitter EV is in-sample; **no downstream headline EV yet** (SAFE claim = gauge-invariance + recovery, not an EV number) |
 
 **Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
@@ -157,20 +157,30 @@ claims. Stated plainly:
    claim is the verified gauge-invariant recovery property, not a reconstruction number.
 
 4. **N-nursery: the publishable claim is FACTOR RECOVERY, not EV, and NOT a co-collapse cure.**
-   R-review validated the real held-out arms (`adfe50d`; 70/30 split, EV on test throughout,
-   label-free train-only discovery — the earlier in-sample caveat is CLOSED). The enforced honest
-   reading:
-   (a) **The nursery does NOT win on held-out EV** — linear PCA-4 (0.696) > joint torch (0.629)
-   > nursery composed (0.576). The "nursery matches-or-beats joint EV" half of the hypothesis
-   FAILS on this real case. Its genuine advantage is **factor recovery**: it recovers the weekday
-   circle cleanly (cyclic adjacency 1.0) where the joint fit does not (0.429), at a modest EV cost.
-   (b) **This is not a co-collapse demonstration.** REML `sae_manifold_fit` CONVERGED here (small
-   P=16, 61s), so this real case does not exhibit the full-width co-collapse the hypothesis is
-   about — it **cannot** be cited as "REML co-collapses, nursery fixes it." The co-collapse claim
-   rests **entirely on the still-PENDING synthetic P=96 arm** (where REML hangs); it remains a
-   torch-proxy story, unestablished for the production REML fitter.
-   (c) **Small-N noise:** weekday adjacency 1.0 but circular_corr only 0.243 on ~28 test rows —
-   treat the real recovery numbers as suggestive, not decisive.
+   R-review validated both the real held-out arms (`adfe50d`) and the clean p=96 synthetic
+   (product of 3 circles): a chart-per-discovered-block nursery recovers **2/3 circles at held-out
+   test EV 0.834**, matching the oracle-block upper bound (0.833) and beating the joint torch fit
+   (0.756, 1/3 circles), **without any joint K≥2 solve** and with REML width-blocked (TIMEOUT at
+   p=96). The clean unconfounded number: one curved coordinate captures **0.94** of a circle's
+   variance vs **0.52** for one linear coordinate. Discovery is label-free (energy-anticorrelation
+   on X, train-only) with a consistent held-out split. Four hedges, all R-review-verified and
+   MANDATORY on any headline:
+   (a) **Not an EV win over linear.** Linear PCA-6 reaches 0.883 test EV (above the nursery's
+   0.834) but recovers **0/3 circles**. The nursery's win is factor recovery + factorized
+   (no-joint-solve) delivery, never raw EV.
+   (b) **REML transfer unestablished.** REML is blocked at width and O-manifold's #2027 co-collapse
+   repro is still RED, so "the joint fit co-collapses and the nursery fixes it" is shown only for
+   the **torch proxy**, not the production REML fitter.
+   (c) **"2/3" is honest-conservative.** All 3 planes are discovered and charted; circle 0's angle
+   recovers at 0.77, just under the 0.8 bar — and the **oracle** arm also gets circle 0 at only
+   0.75, so this is that circle's intrinsic-angle difficulty, not a discovery/chart failure.
+   (d) **The discovery≈oracle parity is N-sensitive.** It holds **at n=480**; at n=210 the
+   energy-anticorrelation discovery mis-segments (blocks [3,1,2,1,1]) and drops to EV 0.60 (vs
+   oracle 0.80). Phrase it "discovery matches the oracle at n=480," never a general "discovery
+   loses nothing." (The 2/3 recovery itself still reproduces at reduced n.)
+   The earlier real p=16 arm corroborates the recovery story (weekday adjacency 1.0 vs joint 0.429)
+   but is EV-losing (linear 0.696 > joint 0.629 > nursery 0.576) and small-N noisy (circular_corr
+   0.243 on ~28 rows) — suggestive, not decisive.
 
    **Related — the K≥2 co-collapse "fix" is RED end-to-end.** O-manifold's root-cause fix chain
    landed (deflation/anchor/ownership `465ad67a0`, reseed cooldown `3ddf58c03`, repro `f7991e5c8`)
