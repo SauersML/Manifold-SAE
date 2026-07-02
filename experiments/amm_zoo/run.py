@@ -35,6 +35,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -45,9 +46,10 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXP
 
 HERE = Path(__file__).resolve().parent
 OUT = Path(os.environ.get("AMM_OUT", HERE))
-SCRATCH = Path(os.environ.get(
-    "AMM_SCRATCH",
-    "/private/tmp/claude-501/-Users-user/8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/amm_work"))
+# Per-cell spec/out files. Default to the system temp dir (writable on every host,
+# incl. MSI compute nodes) — never a machine-specific absolute path. Override with
+# AMM_SCRATCH.
+SCRATCH = Path(os.environ.get("AMM_SCRATCH", os.path.join(tempfile.gettempdir(), "amm_zoo_work")))
 
 ARMS = ["topk_sae", "bsf_vanilla", "bsf_grassmann", "sasa", "ours"]
 
