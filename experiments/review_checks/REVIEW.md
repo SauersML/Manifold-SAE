@@ -393,7 +393,17 @@ TIMEOUT_BLOCKED at width. Gate results:
    scored on the SAME te — joint (train_idx=tr,test_idx=te), linear (_linear_heldout
    _ev(X,tr,te)), oracle + discovered nursery (run_nursery(...,tr,te)). Charts fit on
    train, seed-selected by TRAIN ev (adfe50d). No test leak anywhere.
-3. 2/3 RECOVERY HONESTY — PASS (mildly pessimistic, honestly reported). All THREE
+3. 2/3 RECOVERY HONESTY — PASS. STRONGER PRECISE FRAMING (confirmed against
+   missed_circle_diagnosis.json, 4480383): "3/3 blocks discovered, 3/3 rings
+   reconstructed, 2/3 pass the strict angle bar." The json shows near-diagonal
+   subspace overlaps (block0→plane0 0.985, block1→plane1 0.984, block2→plane2 0.944)
+   — discovery grouped all 3 planes correctly — AND all 3 charts reconstruct at
+   0.89–0.93 held-out EV; only block 0's angle correlation (0.771) misses the 0.8 bar.
+   So it's a chart angle-fidelity shortfall (their plausible mechanism: n_basis=4
+   Fourier parameterizes the ring non-uniformly + seed selection optimizes EV, not
+   angular uniformity), NOT a discovery or factorization failure. Endorsed. [OLD note
+   below still accurate on the oracle-also-0.75 point.]
+   All THREE
    circles ARE discovered AND charted (blocks 0/1/2, dim 2, all CONVERGED, chart_ev
    0.926/0.925/0.890). "2/3" is a strict corr>0.8 threshold count: circle 1=0.955,
    circle 2=0.808 pass; circle 0=0.771 just under. Crucially the ORACLE arm (true
