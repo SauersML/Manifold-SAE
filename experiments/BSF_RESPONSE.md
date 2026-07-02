@@ -267,7 +267,7 @@ for a multidimensional concept — and splits on the fix:
 **What is ours, anchored on evidenced differentiators:** the measured description-length crossover
 `f* ≈ 2p` (charts beat blocks once a feature fires more than ~2p times — §2); dose calibration on a
 real model (R²=0.95, ~10× better than a metric-free linear latent — §3); a gauge-invariant
-*certified* block/encode core (BT1, 17/0 tests — §3); typed topology (circle vs line — a line's
+*certified* block-sparse core (BT1, 17/0 block tests — §3); typed topology (circle vs line — a line's
 chart crossover is `f*=∞`, so the type self-controls); and per-atom REML evidence for model
 selection instead of hyperparameter sweeps.
 
