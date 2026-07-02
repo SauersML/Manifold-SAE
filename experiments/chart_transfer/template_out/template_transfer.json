@@ -1,0 +1,309 @@
+{
+  "reduce_dim": 8,
+  "sets": {
+    "weekday": {
+      "set": "weekday",
+      "layer": 5,
+      "n_templates": 5,
+      "n_tokens": 7,
+      "reduce_dim": 8,
+      "fixed_split": {
+        "fit_templates": [
+          0,
+          1,
+          2
+        ],
+        "eval_templates": [
+          3,
+          4
+        ],
+        "chart_status": "CONVERGED",
+        "coord_consistency_circ_corr": 0.457,
+        "coord_median_abs_offset_deg": 20.5,
+        "adjacency_eval_templates": 0.429,
+        "adjacency_fit_templates": 0.429,
+        "chart_ev_eval": 0.6403,
+        "chart_ev_fit": 0.7324,
+        "linear1_ev_eval": 0.6576,
+        "linear2_ev_eval": 0.7108,
+        "reduce_dim": 8
+      },
+      "loto": [
+        {
+          "fit_templates": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "eval_templates": [
+            0
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.617,
+          "coord_median_abs_offset_deg": 25.2,
+          "adjacency_eval_templates": 0.714,
+          "adjacency_fit_templates": 0.429,
+          "chart_ev_eval": 0.7225,
+          "chart_ev_fit": 0.6946,
+          "linear1_ev_eval": 0.7629,
+          "linear2_ev_eval": 0.8405,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "eval_templates": [
+            1
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.485,
+          "coord_median_abs_offset_deg": 29.3,
+          "adjacency_eval_templates": 0.286,
+          "adjacency_fit_templates": 0.571,
+          "chart_ev_eval": 0.4723,
+          "chart_ev_fit": 0.6512,
+          "linear1_ev_eval": 0.8174,
+          "linear2_ev_eval": 0.8746,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "eval_templates": [
+            2
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.35,
+          "coord_median_abs_offset_deg": 15.8,
+          "adjacency_eval_templates": 0.571,
+          "adjacency_fit_templates": 0.571,
+          "chart_ev_eval": 0.6026,
+          "chart_ev_fit": 0.6897,
+          "linear1_ev_eval": 0.6398,
+          "linear2_ev_eval": 0.751,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "eval_templates": [
+            3
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.618,
+          "coord_median_abs_offset_deg": 27.8,
+          "adjacency_eval_templates": 0.143,
+          "adjacency_fit_templates": 0.286,
+          "chart_ev_eval": 0.4521,
+          "chart_ev_fit": 0.7225,
+          "linear1_ev_eval": 0.6028,
+          "linear2_ev_eval": 0.6663,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "eval_templates": [
+            4
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.826,
+          "coord_median_abs_offset_deg": 82.1,
+          "adjacency_eval_templates": 0.429,
+          "adjacency_fit_templates": 0.429,
+          "chart_ev_eval": 0.458,
+          "chart_ev_fit": 0.6965,
+          "linear1_ev_eval": 0.8053,
+          "linear2_ev_eval": 0.836,
+          "reduce_dim": 8
+        }
+      ],
+      "loto_summary": {
+        "n_folds": 5,
+        "coord_consistency_circ_corr": 0.579,
+        "coord_median_abs_offset_deg": 36.04,
+        "adjacency_eval_mean": 0.429,
+        "chart_ev_eval_mean": 0.542,
+        "linear1_ev_eval_mean": 0.726,
+        "linear2_ev_eval_mean": 0.794
+      }
+    },
+    "month": {
+      "set": "month",
+      "layer": 8,
+      "n_templates": 5,
+      "n_tokens": 12,
+      "reduce_dim": 8,
+      "fixed_split": {
+        "fit_templates": [
+          0,
+          1,
+          2
+        ],
+        "eval_templates": [
+          3,
+          4
+        ],
+        "chart_status": "CONVERGED",
+        "coord_consistency_circ_corr": 0.907,
+        "coord_median_abs_offset_deg": 36.2,
+        "adjacency_eval_templates": 0.417,
+        "adjacency_fit_templates": 1.0,
+        "chart_ev_eval": 0.6021,
+        "chart_ev_fit": 0.6303,
+        "linear1_ev_eval": 0.3493,
+        "linear2_ev_eval": 0.6578,
+        "reduce_dim": 8
+      },
+      "loto": [
+        {
+          "fit_templates": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "eval_templates": [
+            0
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.322,
+          "coord_median_abs_offset_deg": 12.8,
+          "adjacency_eval_templates": 1.0,
+          "adjacency_fit_templates": 1.0,
+          "chart_ev_eval": 0.6414,
+          "chart_ev_fit": 0.6315,
+          "linear1_ev_eval": 0.3553,
+          "linear2_ev_eval": 0.6536,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "eval_templates": [
+            1
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.664,
+          "coord_median_abs_offset_deg": 27.6,
+          "adjacency_eval_templates": 0.583,
+          "adjacency_fit_templates": 1.0,
+          "chart_ev_eval": 0.5023,
+          "chart_ev_fit": 0.634,
+          "linear1_ev_eval": 0.349,
+          "linear2_ev_eval": 0.6544,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            3,
+            4
+          ],
+          "eval_templates": [
+            2
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.94,
+          "coord_median_abs_offset_deg": 17.0,
+          "adjacency_eval_templates": 0.667,
+          "adjacency_fit_templates": 1.0,
+          "chart_ev_eval": 0.5689,
+          "chart_ev_fit": 0.6417,
+          "linear1_ev_eval": 0.3406,
+          "linear2_ev_eval": 0.6267,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            2,
+            4
+          ],
+          "eval_templates": [
+            3
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.637,
+          "coord_median_abs_offset_deg": 62.2,
+          "adjacency_eval_templates": 0.25,
+          "adjacency_fit_templates": 1.0,
+          "chart_ev_eval": 0.0097,
+          "chart_ev_fit": 0.6412,
+          "linear1_ev_eval": 0.0747,
+          "linear2_ev_eval": 0.1083,
+          "reduce_dim": 8
+        },
+        {
+          "fit_templates": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "eval_templates": [
+            4
+          ],
+          "chart_status": "CONVERGED",
+          "coord_consistency_circ_corr": 0.851,
+          "coord_median_abs_offset_deg": 12.5,
+          "adjacency_eval_templates": 0.667,
+          "adjacency_fit_templates": 1.0,
+          "chart_ev_eval": 0.6214,
+          "chart_ev_fit": 0.614,
+          "linear1_ev_eval": 0.3552,
+          "linear2_ev_eval": 0.6696,
+          "reduce_dim": 8
+        }
+      ],
+      "loto_summary": {
+        "n_folds": 5,
+        "coord_consistency_circ_corr": 0.683,
+        "coord_median_abs_offset_deg": 26.42,
+        "adjacency_eval_mean": 0.633,
+        "chart_ev_eval_mean": 0.469,
+        "linear1_ev_eval_mean": 0.295,
+        "linear2_ev_eval_mean": 0.543
+      }
+    }
+  },
+  "verdict": {
+    "weekday": {
+      "coord_consistency_circ_corr": 0.579,
+      "adjacency_eval_mean": 0.429,
+      "chart_ev_eval_mean": 0.542,
+      "linear2_ev_eval_mean": 0.794,
+      "chart1_vs_linear2_transfer": -0.252
+    },
+    "month": {
+      "coord_consistency_circ_corr": 0.683,
+      "adjacency_eval_mean": 0.633,
+      "chart_ev_eval_mean": 0.469,
+      "linear2_ev_eval_mean": 0.543,
+      "chart1_vs_linear2_transfer": -0.074
+    }
+  }
+}
