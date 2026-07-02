@@ -65,5 +65,111 @@ P-null — `experiments/matched_null.py` (new). W7 cyclic claims.
   smallest reportable p is below the claim (e.g. B≥999 for p<.001 headline).
 - No peeking: null draws must not reuse the test statistic's fitted params.
 
+## NEW lanes (scope update) — both in /Users/user/gam
+
+Baseline of the finished fleet's DIRTY edits (what O-manifold/O-solve must land)
+snapshotted at scratchpad `gam_dirty_baseline.diff`. Diffstat:
+  bench/synth_sae_bench_manifold.py            +51
+  crates/gam-math/src/probability.rs           +37
+  crates/gam-model-kernels/src/inverse_link.rs +64
+  crates/gam-sae/src/manifold/mod.rs           +3
+  crates/gam-sae/src/manifold/outer_objective.rs +74
+  crates/gam-sae/src/manifold/tests.rs         -144 (DELETIONS — scrutinize!)
+  .../tests_collapse_bar_reachable_rank_1610.rs ±12
+  crates/gam-solve/src/mixture_link.rs         +14
+  crates/gam-spec/src/lib.rs                    +59
+  tests/test_sae_manifold_accuracy_oos.py      ±4
+  (untracked) crates/gam-sae/src/manifold/tests_frame_refresh_alpha_grad.rs
+
+O-manifold checks:
+- tests.rs shows -144 lines: a triage that DELETES 144 lines of tests is the
+  prime "silently dropped intent" risk. When O-manifold commits, verify those
+  deletions are (a) genuine relocations (the new tests_frame_refresh_alpha_grad.rs
+  / tests_collapse_* files) not net loss of coverage, and (b) not removal of a
+  test that would now fail. Diff committed tree vs `gam_dirty_baseline.diff`.
+- Co-collapse repro test must BITE: it must fail/thrash on pre-fix code. Verify by
+  checking out the test at the pre-fix commit and running it (in a temp build, or
+  reason from the assert). If it passes before the fix, it doesn't prove anything.
+- K=1 path must stay green (W7/W8 depend on it): after any seeding/anchoring
+  change, `cargo test -p gam-sae` K=1 tests must pass.
+
+O-solve checks (crates/gam-solve/ only):
+- mixture_link dirty edit = widen `inverse_link_has_fisher_weight_jet` gate to
+  admit LogLog + Cauchit (claims their 5-jet Fisher weight closes). VERIFY: does
+  `fisher_weight_jet5_for_inverse_link` actually implement LogLog/Cauchit d1..d5?
+  If the jet returns garbage/NaN for these, the gate widening enables Firth/
+  Jeffreys on an unimplemented link — a real bug. Check before trusting.
+- GpuRequiresDenseSystem already defined in gpu_kernels/arrow_schur.rs (l.56,200,
+  220). O-solve must return it (not SchurFactorFailed) when hbb absent /
+  penalty_op present, AND every caller (latent_inner.rs:371 matches
+  SchurFactorFailed) must handle the new variant → CPU fallback, not panic.
+- `cargo test -p gam-solve` must actually pass — run it, don't trust the message.
+
 ## Findings
-(none yet — polling)
+
+### O-solve — mixture_link gate widening (PRELIMINARY: SOUND)
+The dirty edit widens `inverse_link_has_fisher_weight_jet` to admit LogLog +
+Cauchit. Verified against the code, NOT just the comment:
+- `fisher_weight_jet5` (mixture_link.rs:286-287) routes both to
+  `component_fisher_weight_jet5`, which genuinely implements LogLog (l.480/543/877)
+  and Cauchit (l.499/560/902) — not a panic/fallthrough.
+- Existing test `non_logit_probit_fisher_weight_jets_match_finite_differences`
+  (l.2989) BITES: asserts W == mu'^2/(mu(1-mu)) to rel_err<1e-12 AND W'..W''''
+  vs central FD to <1e-5..5e-4, for CLogLog/LogLog/Cauchit.
+- `loglog_fifth_derivative_should_match_closed_form_sign` (l.3081) checks d5 vs a
+  hand-derived closed form to 1e-15.
+- `mixture_fisher_weight_jet_covers_loglog_and_cauchit_components` (l.3044)
+  asserts the gate stays open + Firth-eligible for anchored mixtures.
+Conclusion: gate widening is well-covered; NOT the "enable Firth on an
+unimplemented link" bug I was watching for. Pending: confirm `cargo test -p
+gam-solve` green on the committed tree (running now, bkjzah6n5).
+
+### G-bsf — commit a401226 (VERDICT: SOUND / faithful)
+Reviewed bsf.py + train.py AND verified numerically against the actual code
+(`experiments/review_checks/check_bsf.py`, ALL PASS on the committed module):
+- Tied encoder: grassmann `log_gamma` is a single 0-dim scalar (verified
+  `shape==()`); `encode` computes `z = exp(log_gamma)·(x-b_dec)@Dᵀ` = one shared
+  γ. bsf.py:136,154. FAITHFUL.
+- Block-TopK by group ℓ2: `block_topk_mask` selects top-k of
+  `vector_norm(z,dim=2)`; verified kept blocks == top-2 group-norm for every row.
+  bsf.py:55-71. Signed codes (no ReLU anywhere; `z_sparse = z*mask`), mask carries
+  no gradient (standard TopK STE convention). FAITHFUL.
+- Grassmann projection identity: after `reproject_stiefel`, verified
+  `z_g D_g == γ·P_g(x-b_dec)` to 4e-16 and rows orthonormal to 1e-10. bsf.py:203.
+- Stiefel reprojection: QR of D_gᵀ with positive-R sign convention, applied to
+  `decoder.data` in-place every `reproj_every` steps in grassmann mode only.
+  bsf.py:204-219, cadence in `maybe_retract` (l.233). FAITHFUL.
+- GAUGE INVARIANCE (the tied model's core property): rotating block 0's basis by a
+  random O(b) rotation leaves ‖z_g‖ (selection) invariant to 1e-15 AND
+  reconstruction (loss) invariant to 1e-15; NEGATIVE control (2× scale) DOES
+  change reconstruction. So the invariance test genuinely bites.
+- AuxK: targets `k_aux` LOWEST-utilization blocks (`topk(util_ema, largest=False)`)
+  and reconstructs the RESIDUAL `x - x_hat.detach()` WITHOUT the decoder bias.
+  bsf.py:182-200. util_ema tracks activation frequency (dead-block resurrection,
+  Gao et al.). FAITHFUL.
+- No synthetic leak: `make_planted` returns `true_bases` used ONLY in
+  `match_blocks_to_truth` AFTER training; never enters training. train.py:130-141.
+- Matched comparison: real phase holds F=64 (n_latent) and L0=8 (k·b) constant
+  across b∈{1,2,4,8}; PCA + per-feature std are TRAIN-ONLY (no test leak);
+  val_EV on held-out. FAIR.
+MINOR (not a defect, note for headline): cyclic phase (weekday/month) trains and
+evaluates on the SAME X (train_bsf(...,X,...,X)); its `full_ev` is IN-SAMPLE. The
+headline there is the structural claim (one block, adjacency accuracy) which is
+legitimate, but do NOT publish cyclic `full_ev` as a generalization number.
+
+### O-manifold — commit e09e6956c (VERDICT: clean landing of fleet batch)
+This is task-#7 "land fleet batch", NOT yet the co-collapse fix (#8 pending).
+- Committed hunks for all 5 load-bearing files (outer_objective, mixture_link,
+  gam-spec, inverse_link, probability) are BYTE-IDENTICAL to the pre-commit dirty
+  baseline (md5 match) — nothing silently altered while landing.
+- tests.rs -144: the 3 deleted tests (`streaming_polar_refresh_reorients_frame`,
+  `small_p_zero_decoder_stays_full_b`,
+  `forward_alpha_data_derivative_skips_ungated_atom_1026`) are all RELOCATED intact
+  into the new `tests_frame_refresh_alpha_grad.rs` (+163). Pure relocation (cfg-test
+  scanner pattern), NOT coverage loss. Verified by name presence.
+- The substantive math change (reachable_dictionary_rank → rank of CONCATENATED
+  chart design instead of Σ per-atom ranks, #C5) is a genuine correctness fix:
+  removes an upward bias in the collapse null floor (double-counting shared
+  directions). Sound.
+PENDING: `cargo test -p gam-sae` green + the co-collapse repro/fix (#8) when it
+lands — the repro test must BITE on pre-fix code.
