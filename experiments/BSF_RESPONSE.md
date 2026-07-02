@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: R-review verdicts encoded (weekday cyclic order QUALIFIED marginal p≈.04, month robust, C1 EV-parity safe); G-bsf synthetic recovery corrected 0.76→0.82; BT1 confirmed NOT compiling (`e01c2fd`); N-nursery arms running/uncommitted → PENDING with two mandatory caveats pre-recorded. Untracked result artifacts flagged for lane commit._
+_Status: live document, updated as lanes commit. Last sync: N-nursery real held-out arms R-review-validated (`adfe50d`) → QUALIFIED as a **factor-recovery** advantage (weekday adjacency 1.0 vs joint 0.429), **not** an EV win (linear 0.696 > joint 0.629 > nursery 0.576) and **not** a co-collapse cure (REML converged at P=16). Weekday cyclic order QUALIFIED marginal p≈.04, month robust; G-bsf synthetic 0.82 (metrics committed); BT1 still NOT compiling (`e01c2fd`, 3 edition-2024 pattern errors) → PENDING. null_out/ still pending P-null commit._
 
 ---
 
@@ -82,7 +82,7 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 | **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **SAFE NOW** — scorer SOUND (R-review hand-verified) | landed (in-sample EVs) |
 | **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **SAFE NOW** — strongest real-model result | landed — weekday circle only (month co-collapse on pre-fix build) |
 | **P-null** — matched-null battery (`null_out/`, `matched_null.py`) | real cyclic claims survive matched nulls | **month cyclic order robust** (n=12, adj 0.83); **weekday cyclic order MARGINAL** (adj 0.71 at n=7, p≈0.04, and fragile — the single-seed battery re-fit scores lower/at chance); **C1 EV-parity safe**; continuous circular correlation significant | **SAFE NOW** for month order + C1 EV-parity; **QUALIFIED** for weekday (marginal p≈.04) — R-review verified (commit 5fd1465) | landed per R-review REVIEW.md; **raw `null_out/` JSONs pending P-null commit**; month/color full battery PENDING |
-| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | design VALID (R-review 5fd1465); real held-out arms now committed (`real_results.json`, `337aadc`: joint control incl. REML + torch, and the nursery arm) — **awaiting R-review validation of the results** | **PENDING** — results committed, not yet validated | PENDING (see §4.4 for the two mandatory caveats before any headline) |
+| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | REAL held-out (L8, N=95, 70/30 split, R-review-validated `adfe50d`): **factor recovery** — weekday cyclic adjacency **1.0 (nursery) vs 0.429 (joint)**, month 0.417 vs 0.25; but on **held-out EV the nursery does NOT win** — linear PCA-4 0.696 > joint torch 0.629 > nursery composed 0.576 | **QUALIFIED** — a *factor-recovery* advantage, **not** an EV win, and **not** a co-collapse demonstration (REML converged at P=16) | landed + R-review-validated (§4.4) |
 | **BT1** — Rust block-sparse Tier-1 (gam `097b1c1de`) | gauge-invariant block-sparse core | gauge invariance verified numerically by review (gate/loss invariant to O(b) rotation to 1e-15; negative control bites). FFI + `block_tests.rs` added. **But R-review (e01c2fd) confirms `gam-sae` still does NOT compile** — 3 edition-2024 pattern errors in `block.rs`; tests cannot run. | **DESIGN SOUND, NOT GREEN** | **PENDING** — does not compile (`cargo test -p gam-sae` fails to build); no BT1 number is publishable |
 
 **Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
@@ -125,15 +125,27 @@ claims. Stated plainly:
    sound and the FFI surface (`gamfit.block_sparse_dictionary_fit`) is written, but every BT1
    result stays PENDING until the crate compiles and the tests pass.
 
-4. **N-nursery has no validated headline yet, and two caveats are MANDATORY when it lands.**
-   The design is valid (R-review): the joint-K co-collapse control is honestly bounded (REML
-   attempted in a capped subprocess, recorded `TIMEOUT_BLOCKED`), and the discovered arm uses no
-   labels. But the result arms are still running/uncommitted. When a headline lands it MUST carry:
-   (a) **the co-collapse cure is demonstrated on a TORCH-proxy fitter, not REML** — REML, the
-   production fitter the hypothesis is really about, is recorded BLOCKED here, so transfer is
-   UNESTABLISHED; and (b) **the real-data Arm B blocks are set-membership-supervised** (each
-   set's top-2 PCs); the fully-unsupervised `discover_blocks` result is the publishable number
-   and the oracle/set-supervised arm is only the labeled ceiling. All nursery EVs are in-sample.
+4. **N-nursery: the publishable claim is FACTOR RECOVERY, not EV, and NOT a co-collapse cure.**
+   R-review validated the real held-out arms (`adfe50d`; 70/30 split, EV on test throughout,
+   label-free train-only discovery — the earlier in-sample caveat is CLOSED). The enforced honest
+   reading:
+   (a) **The nursery does NOT win on held-out EV** — linear PCA-4 (0.696) > joint torch (0.629)
+   > nursery composed (0.576). The "nursery matches-or-beats joint EV" half of the hypothesis
+   FAILS on this real case. Its genuine advantage is **factor recovery**: it recovers the weekday
+   circle cleanly (cyclic adjacency 1.0) where the joint fit does not (0.429), at a modest EV cost.
+   (b) **This is not a co-collapse demonstration.** REML `sae_manifold_fit` CONVERGED here (small
+   P=16), so this real case does not exhibit the full-width co-collapse the hypothesis is about —
+   it **cannot** be cited as "REML co-collapses, nursery fixes it." That cure claim remains a
+   synthetic/torch-proxy story and is unestablished for the production REML fitter.
+   (c) **Small-N noise:** weekday adjacency 1.0 but circular_corr only 0.243 on ~28 test rows —
+   treat the real recovery numbers as suggestive, not decisive.
+
+   **Related — the K≥2 co-collapse "fix" is an unproven mechanism.** O-manifold's reseed-cooldown
+   debounce (`3ddf58c03`) is logically sound (R-review: does not mask persistent co-collapse, K=1
+   fits byte-unchanged) but has **no biting repro test** that co-collapses on pre-fix code and
+   passes after — so "we fixed the K≥2 co-collapse" must not be published as a result until such a
+   test lands (task in-flight). REML is OOM-blocked in `.venv`, so it can only be exercised on the
+   torch path or a small planted case.
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a
