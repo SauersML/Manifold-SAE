@@ -381,6 +381,36 @@ Each per-block chart explains ~0.95 of its own 2-plane's test variance; composed
 ambient EV (0.576) is limited by the blocks covering only 4 of 16 dims, not chart
 quality.
 
+### N-nursery SYNTHETIC verdict — commit 598a8f8 (VALIDATION GATE)
+Verdict numbers (held-out test EV, 30%, p=96, ncirc=3): joint torch 0.7557 (1/3
+circles), nursery oracle 0.8325 (2/3), nursery DISCOVERED 0.8342 (2/3), linear
+PCA-6 0.883 (0/3), PCA-9 0.9364 (0/3), circle-subspace ceiling 0.8842, REML
+TIMEOUT_BLOCKED at width. Gate results:
+1. DISCOVERY LEAK — PASS. discover_blocks uses ONLY X (energy anti-correlation of
+   |projections|); no theta/planes/labels/rank references; called on X[tr] only
+   (block_nursery.py:611 "discover on TRAIN"). Label-free + train-only.
+2. HELD-OUT DISCIPLINE — PASS. ONE split (train_test_split seed=0, l.555); ALL arms
+   scored on the SAME te — joint (train_idx=tr,test_idx=te), linear (_linear_heldout
+   _ev(X,tr,te)), oracle + discovered nursery (run_nursery(...,tr,te)). Charts fit on
+   train, seed-selected by TRAIN ev (adfe50d). No test leak anywhere.
+3. 2/3 RECOVERY HONESTY — PASS (mildly pessimistic, honestly reported). All THREE
+   circles ARE discovered AND charted (blocks 0/1/2, dim 2, all CONVERGED, chart_ev
+   0.926/0.925/0.890). "2/3" is a strict corr>0.8 threshold count: circle 1=0.955,
+   circle 2=0.808 pass; circle 0=0.771 just under. Crucially the ORACLE arm (true
+   plane) ALSO under-recovers circle 0 (corr 0.749) — so circle 0's ANGLE is
+   intrinsically harder in BOTH arms; it is NOT a discovery miss or a chart failure.
+   Discovered EV 0.8342 ≈ oracle 0.8325 → unsupervised discovery loses nothing. The
+   2 extra 1-dim discovered blocks (chart_ev 0.40/0.53) just soak leftover linear
+   background — harmless. Honest read: "3/3 planes found+charted; 2/3 angles recover
+   at corr>0.8, the third at 0.77 (matching the oracle's 0.75)".
+4. REPRODUCIBILITY — reduced-n (n=210, seed=7, 250 steps) spot-run: see below.
+On this p=96 synthetic the nursery DOES beat joint torch on held-out EV (0.834 vs
+0.756) AND recovers more circles (2 vs 1), and REML is width-blocked — the honest
+"no-joint-solve delivery" story. But linear PCA-6 (0.883) still beats nursery on raw
+EV with 0/3 circles, so the claim is RECOVERY + factorized delivery, NOT an EV win
+over linear. REML transfer still unestablished (blocked at width; and the #2027 repro
+shows the joint fit's co-collapse guard is not yet effective).
+
 ### BSF_RESPONSE.md synthesis — commit 605e716 (VERDICT: honest structure, TWO UNBACKED numbers)
 The doc is unusually honest (cites this review as §4) and its stated rule is "empty
 cells marked PENDING, never filled with placeholders." Most cited numbers DO trace to
