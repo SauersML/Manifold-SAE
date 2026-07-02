@@ -1,0 +1,80 @@
+{
+  "presence": {
+    "setup": {
+      "d": 64,
+      "b": 4,
+      "n_blocks": 8,
+      "N": 2400,
+      "n_distractor": 6,
+      "distractor": [
+        0.1,
+        0.5
+      ],
+      "weak": [
+        0.25,
+        0.55
+      ],
+      "strong": [
+        1.8,
+        2.6
+      ],
+      "noise": 0.05
+    },
+    "detectors": {
+      "block_norm": {
+        "target_block": 5,
+        "auc_all": 0.7413144982589427,
+        "auc_weak_vs_absent": 0.46680548750612444,
+        "auc_strong_vs_absent": 0.9993858436972209
+      },
+      "gate_recon_only": {
+        "target_block": 2,
+        "auc_all": 0.4983776511554289,
+        "auc_weak_vs_absent": 0.4684386738526866,
+        "auc_strong_vs_absent": 0.5265238753262705
+      },
+      "gate_presence_aware": {
+        "target_block": 7,
+        "auc_all": 0.999446027223805,
+        "auc_weak_vs_absent": 0.9988567695574065,
+        "auc_strong_vs_absent": 1.0
+      }
+    }
+  },
+  "real": {
+    "weekday": {
+      "layer": 8,
+      "n_labels": 7,
+      "winning_block": 3,
+      "norm_eta2_template": 0.6730449935687914,
+      "norm_eta2_identity": 0.21292957579367577,
+      "angle_eta2_template": 0.008464633733239312,
+      "angle_eta2_identity": 0.8906428222202408
+    },
+    "month": {
+      "layer": 8,
+      "n_labels": 12,
+      "winning_block": 3,
+      "norm_eta2_template": 0.8175944894941835,
+      "norm_eta2_identity": 0.13621263925357274,
+      "angle_eta2_template": 0.00022846317732377208,
+      "angle_eta2_identity": 0.8736178106047787
+    }
+  },
+  "steering": {
+    "identity_circular_corr_by_intensity": {
+      "0.5": 0.9761310173507055,
+      "1.0": 0.9761310173507055,
+      "2.0": 0.9761310173507055
+    },
+    "identity_mean_abs_angle_err_by_intensity": {
+      "0.5": 0.0,
+      "1.0": 0.0,
+      "2.0": 0.0
+    },
+    "intensity_pearson_corr": 1.0,
+    "norm_eta2_by_identity": 1.9017182536577961e-31,
+    "note": "the block decoder is orthonormal, so its 2-D (angle=identity, radius=intensity) coordinate recovers both axes exactly (angle error \u22480 at every intensity; norm \u03b7\u00b2_identity\u22480). The conflation is entirely in the norm-reduction \u2016z_g\u2016 that BSF selects on \u2014 not in the block representation, which already carries both axes independently.",
+    "done": true
+  }
+}

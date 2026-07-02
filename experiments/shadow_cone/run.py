@@ -265,6 +265,11 @@ def phase_steering() -> bool:
         return float(num / den) if den > 0 else 0.0
     id_corr_by_rho = {float(r): circ_corr(grid_theta[grid_rho == r], id_recovered[grid_rho == r])
                       for r in rhos}
+    # mean absolute wrapped angular error (clearer than circular corr, which is
+    # degenerate for uniformly-spread angles) — ~0 confirms exact identity recovery
+    wrap = lambda a: np.abs((a + np.pi) % (2 * np.pi) - np.pi)
+    id_err_by_rho = {float(r): float(wrap(grid_theta[grid_rho == r] - id_recovered[grid_rho == r]).mean())
+                     for r in rhos}
     # intensity axis: at FIXED angle, norm recovers rho independent of theta
     inten_corr = float(np.corrcoef(grid_rho, inten_recovered)[0, 1])
     # cross-leak: does norm depend on identity? (should be ~0)
@@ -272,11 +277,14 @@ def phase_steering() -> bool:
 
     res = {
         "identity_circular_corr_by_intensity": id_corr_by_rho,
+        "identity_mean_abs_angle_err_by_intensity": id_err_by_rho,
         "intensity_pearson_corr": inten_corr,
         "norm_eta2_by_identity": norm_vs_theta_eta2,
-        "note": "angle recovers identity at every intensity (corr≈1); norm recovers "
-                "intensity independent of identity (η²_identity≈0) — the two axes the "
-                "raw block-norm reading collapses into one.",
+        "note": "the block decoder is orthonormal, so its 2-D (angle=identity, "
+                "radius=intensity) coordinate recovers both axes exactly (angle error ≈0 "
+                "at every intensity; norm η²_identity≈0). The conflation is entirely in the "
+                "norm-reduction ‖z_g‖ that BSF selects on — not in the block representation, "
+                "which already carries both axes independently.",
         "done": True,
     }
     metrics["steering"] = res
@@ -305,7 +313,7 @@ def _steering_figure(theta, rho, id_rec, inten_rec):
     # right: norm is flat across identity at each intensity; angle tracks identity
     ax[1].scatter(theta, inten_rec, c=rho, cmap="viridis", s=30)
     ax[1].set_xlabel("driven identity angle θ"); ax[1].set_ylabel("recovered norm (intensity)")
-    ax[1].set_title("norm ⟂ identity (flat bands) — the conflated axis, decoupled")
+    ax[1].set_title("norm independent of identity (flat bands) — the decoupled axis")
     fig.tight_layout()
     fig.savefig(OUT / "steering_axes.png", dpi=120)
     plt.close(fig)
@@ -386,13 +394,16 @@ def write_report(metrics: dict):
                  "norm changes feature **identity** at constant intensity; scaling the **norm** "
                  "at fixed angle changes **intensity** at constant identity.")
         L.append("")
-        idc = st["identity_circular_corr_by_intensity"]
-        L.append(f"- Identity (angle→identity) circular corr = "
-                 f"{', '.join(f'{v:.2f} @ρ={k}' for k, v in idc.items())} — identity recovers "
-                 f"perfectly **at every intensity**.")
+        ide = st.get("identity_mean_abs_angle_err_by_intensity", {})
+        L.append(f"- Identity (angle→identity) mean abs angle error = "
+                 f"{', '.join(f'{v:.1e} @ρ={k}' for k, v in ide.items())} rad — identity "
+                 f"recovers **exactly at every intensity**.")
         L.append(f"- Intensity (norm→intensity) Pearson corr = {st['intensity_pearson_corr']:.2f}; "
                  f"norm η²(identity) = {st['norm_eta2_by_identity']:.3f} — norm is **independent "
                  f"of identity**.")
+        L.append(f"- The block decoder is orthonormal, so both axes live in the block "
+                 f"representation independently; only the norm-reduction ‖z_g‖ that BSF selects "
+                 f"on collapses them.")
         L.append("")
         if (OUT / "steering_axes.png").exists():
             L.append("![steering axes](steering_axes.png)")
