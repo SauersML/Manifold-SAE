@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: initial draft (M-mdl synthesis lane)._
+_Status: live document, updated as lanes commit. Last sync: BT1 FFI/tests commit `097b1c1de` landed (green pending R-review); N-nursery arms + P-null month/color still PENDING._
 
 ---
 
@@ -23,7 +23,7 @@ _Status: live document, updated as lanes commit. Last sync: initial draft (M-mdl
 
 | axis | BSF (paraphrased) | what we ship | evidence (artifact) | status |
 |---|---|---|---|---|
-| **Additive generative model** | Named by BSF as future work: move from a reconstruction autoencoder to an explicit additive generative model of activations. | A REML/IBP additive manifold-SAE is our *core*, not future work: each atom is an additive generative term with its own penalty and evidence. | `gam-sae` REML core; block-sparse Tier-1 `block.rs` (gam `a6f2c0e28`) | **partial** — design sound & gauge-verified; does not yet compile / tests absent (§4) |
+| **Additive generative model** | Named by BSF as future work: move from a reconstruction autoencoder to an explicit additive generative model of activations. | A REML/IBP additive manifold-SAE is our *core*, not future work: each atom is an additive generative term with its own penalty and evidence. | `gam-sae` REML core; block-sparse Tier-1 `block.rs` + FFI/tests (gam `097b1c1de`) | **landed** — design sound & gauge-verified; FFI + gauge/recovery tests committed; R-review re-verification PENDING (§4) |
 | **Curved vs flat features** | Curves/manifolds read *post-hoc* from block subspaces (PCA / Fourier detectors on top of flat blocks). | Curvature is a *first-class atom*: an explicit `circle`/`fourier` chart `g(t)` fit as a dictionary element, not detected after the fact. | `curved_feature_probes.py`, `frontier_out/`, `mdl_ladder/` | **landed** (in-sample; real-data nulls in §4) |
 | **Description length (MDL)** | Block code beats direction code in bits; optimum `b ≈ 2–4`. | Ladder extends one rung: chart beats block for curved features above a firing-count crossover `f* = Θ(p)`. | `mdl_ladder/DERIVATION.md`, `results.json` | **landed** (§2) |
 | **Intervention dose / calibration** | (Not addressed) — featurizer is descriptive, no forward-effect prediction. | `steer` reports `predicted_nats`: how far the output distribution moves, via a downstream output-Fisher metric on the chart, *before* the edit. | `dose_real_out/` (real llama-3.1-8b) | **landed** — strongest real-model result (§3) |
@@ -79,7 +79,7 @@ per-lane JSON interface: `mdl_ladder/DERIVATION.md`, `mdl_ladder/README.md`.
 | **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **strongest real-model result** | landed — weekday circle only (month co-collapse on pre-fix build) |
 | **P-null** — matched-null battery (`null_out/`) | real weekday cyclic claims survive matched nulls | **circular correlation 0.93, p=0.010 (survives)**; discrete adjacency 0.43, p=0.43 (**fails**); C1 gap-closed p=0.48 (**fails vs matched-spectrum**) | **partially nulled** — continuous circularity real, discrete ordering at chance | landed (real weekday); month/color PENDING |
 | **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | data harness landed (n=480, p=96, 3 circles, subspace EV 0.878); `arms: {}` | `PENDING` — A/B arms not yet run | PENDING |
-| **BT1** — Rust block-sparse Tier-1 (gam `a6f2c0e28`) | gauge-invariant block-sparse core | gauge invariance verified numerically (gate/loss invariant to O(b) rotation to 1e-15; negative control bites) | **DESIGN SOUND** but **does not compile + tests absent** | PENDING green |
+| **BT1** — Rust block-sparse Tier-1 (gam `097b1c1de`) | gauge-invariant block-sparse core | gauge invariance verified numerically (gate/loss invariant to O(b) rotation to 1e-15; negative control bites). Follow-up commit adds FFI + Python surface + `block_tests.rs` (gauge/recovery), addressing the two compile/test blockers R-review flagged on `a6f2c0e28`. | **DESIGN SOUND**; FFI + tests landed | PENDING R-review re-verify (`cargo test -p gam-sae` green) |
 
 ---
 
@@ -104,10 +104,13 @@ claims. Stated plainly:
    metric predicts interventions — **not** that the discrete token ordering beats chance on
    35 samples. Month/color nulls are still PENDING.
 
-3. **BT1 block-sparse core does not compile yet.** Commit `a6f2c0e28` has a missing
-   `block_tests.rs` and a `&mut Array2` vs `ArrayView2` type error; the gauge/parity/recovery
-   tests do not exist in-repo (verified numerically by review, but untested in CI). Marked
-   PENDING green until `cargo test -p gam-sae` passes with the tests present.
+3. **BT1 block-sparse core: tests landed, green not yet re-verified.** R-review flagged
+   `a6f2c0e28` for a missing `block_tests.rs` and a `&mut Array2` vs `ArrayView2` type error.
+   The follow-up commit `097b1c1de` ("block-sparse FFI + Python surface + gauge/recovery tests")
+   adds `block_tests.rs` (now present in `crates/gam-sae/src/sparse_dict/`) and the FFI/Python
+   surface, addressing both blockers. R-review has **not yet re-reviewed** `097b1c1de`, so
+   `cargo test -p gam-sae` green is still PENDING that verification — we do not claim it passes
+   without evidence.
 
 4. **N-nursery A/B has not run.** Only the synthetic data harness landed; the head-to-head
    (joint K≥2 co-collapse control vs the nursery arm) is `arms: {}`. No verdict yet — the
