@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 synthetic GREEN-lit** (R-review) → SAFE NOW (QUALIFIED): 3/3 blocks discovered, 3/3 rings reconstructed (0.89–0.93 held-out EV), 2/3 pass the strict angle bar (corr>0.8); composed EV 0.834 = oracle 0.833 > joint 0.756, no joint solve, REML width-blocked; the failing ring's angle reads 0.749 in the oracle arm too (intrinsic, not discovery). NOT an EV win (linear PCA-6 0.883); REML-cure transfer unestablished (#2027 RED); discovery≈oracle only at n=480. Centerpiece unified ladder in §2; BT1 GREEN; G-bsf synthetic+cyclic held-out backed; **P-null committed** (month circle survives every null; weekday demoted — marginal/mixed); **shadow_cone + chart_transfer verdicted** (presence-decoupling needs an explicit presence signal; chart *coordinate* transfers 0.95/0.81 but EV-transfer is null); **co-collapse fix now PARTIAL** (EV-collapse repaired `50b8c52b7`, factor separation still red); centerpiece anchored on the month flagship; all 5 arXiv IDs in §5 verified._
+_Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 synthetic GREEN-lit** (R-review) → SAFE NOW (QUALIFIED): 3/3 blocks discovered, 3/3 rings reconstructed (0.89–0.93 held-out EV), 2/3 pass the strict angle bar (corr>0.8); composed EV 0.834 = oracle 0.833 > joint 0.756, no joint solve, REML width-blocked; the failing ring's angle reads 0.749 in the oracle arm too (intrinsic, not discovery). NOT an EV win (linear PCA-6 0.883); REML-cure transfer unestablished (#2027 RED); discovery≈oracle only at n=480. Centerpiece unified ladder in §2; BT1 GREEN; G-bsf synthetic+cyclic held-out backed; **P-null committed** (month circle survives every null; weekday demoted — marginal/mixed); **co-collapse now GREEN on the deterministic repro** (`7a93b1d06`, #2027 3/3: EV recovers AND atoms separate onto distinct curved factors, both widths; fix = cold-start chart deflation; production-width REML validation pending); **shadow_cone** QUALIFIED (decoupling needs explicit presence supervision); **chart_transfer** QUALIFIED-positive (coordinate consistency 0.95/0.81 supported, EV does not beat the 2-PC plane); centerpiece anchored on the month flagship; all 5 arXiv IDs verified._
 
 ---
 
@@ -120,7 +120,7 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 | **BT1** — Rust block-sparse Tier-1 (gam `4a06940cd`) | gauge-invariant block-sparse core | after the edition-2024 pattern-error fix (`4a06940cd`) `gam-sae` compiles; R-review ran `cargo test -p gam-sae --lib block` → **17 passed / 0 failed**, incl. `gauge_invariant_selection_and_loss_under_block_rotation` (with negative control), `planted_block_subspaces_recovered`, `fitted_block_frames_are_orthonormal`, utilization/stable-rank. FFI clean (no `#[allow]`, full-path prelude) | **SAFE NOW** — gauge-invariant block-sparse core verified (numeric + 17 in-repo tests green) | landed & green — hedge: block-fitter EV is in-sample; **no downstream headline EV yet** (SAFE claim = gauge-invariance + recovery, not an EV number) |
 
 | **shadow_cone** — presence/amplitude decoupling (`shadow_cone/`) | can a block's presence be decoupled from its intensity? | synthetic weak-vs-absent presence (held-out AUC): **block norm 0.47** (≈chance — the "shadow") and a **reconstruction-only gate 0.47** both fail; only a **presence-supervised gate reaches 0.999**. Real-data η²: norm → template/context **0.67/0.82** (intensity is context-driven), angle → identity **0.89/0.87** (the coordinate carries the concept) | **SAFE NOW (QUALIFIED)** — decoupling is architecturally supported but **requires an explicit presence signal; reconstruction alone does not buy it** | landed & committed (`db9d1e5`, R-review SOUND) |
-| **chart_transfer** — chart-coordinate invariance across prompts (`chart_transfer/`) | does the chart's coordinate transfer as a feature property? | **coordinate consistency SUPPORTED** (14 template families, leave-one-template-out, median **0.95/0.81**; on month the chart transfers where linear collapses, 0.22 vs 0.001). **EV-transfer NULL** — reconstruction EV does not out-transfer the linear plane; linear-2 still wins weekday EV | **QUALIFIED (mixed)** — the *coordinate* is invariant; the *reconstruction* does not out-transfer linear | landed & committed (`8930bd6`; R-review re-adjudicated `d568f53`) |
+| **chart_transfer** — chart-coordinate invariance across prompts (`chart_transfer/`) | does the chart's coordinate transfer as a feature property? | **coordinate consistency SUPPORTED** (14 template families, LOTO, median circ-corr **0.95/0.81**) — the same token gets a consistent recovered angle across held-out templates, which a **directionless linear SAE cannot express**. On raw EV the 1-coord chart beats a single linear direction by a wide margin (both sets) but does **not** beat the 2-PC plane (weekday chart 0.26 < linear-2 0.43; month 0.12 > 0.05). Outlier templates rotate/degrade it (36–50% of folds <0.9) | **QUALIFIED positive** — the *coordinate* is largely a feature property (a strong tendency, not a law); it does not out-reconstruct the 2-PC plane | landed & committed (`e5662ec`/`8930bd6`; R-review) |
 **Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
 
 ---
@@ -175,9 +175,10 @@ claims. Stated plainly:
    (a) **Not an EV win over linear.** Linear PCA-6 reaches 0.883 test EV (above the nursery's
    0.834) but recovers **0/3 circles**. The nursery's win is factor recovery + factorized
    (no-joint-solve) delivery, never raw EV.
-   (b) **REML transfer unestablished.** REML is blocked at width and O-manifold's #2027 co-collapse
-   repro is still RED, so "the joint fit co-collapses and the nursery fixes it" is shown only for
-   the **torch proxy**, not the production REML fitter.
+   (b) **REML transfer unestablished.** REML is blocked at width; the #2027 co-collapse repro is now
+   GREEN on the deterministic torch repro (fixed via cold-start chart deflation — see below), but
+   production-width REML validation is still pending, so the co-collapse story is established on the
+   torch repro, not yet on the production REML fitter.
    (c) **The "2/3" is an angle-bar count, not a recovery failure.** All 3 blocks are discovered and
    all 3 rings reconstructed (0.89–0.93 held-out EV); 2/3 pass the strict angle bar (corr>0.8). The
    3rd ring's angle recovers at 0.77 (just under 0.8) — and the **oracle** arm reads that same ring's
@@ -191,14 +192,16 @@ claims. Stated plainly:
    but is EV-losing (linear 0.696 > joint 0.629 > nursery 0.576) and small-N noisy (circular_corr
    0.243 on ~28 rows) — suggestive, not decisive.
 
-   **Related — the K≥2 co-collapse fix is PARTIAL: EV-collapse repaired, factor separation not.**
-   O-manifold's fix chain now **repairs the EV-collapse** (`50b8c52b7`, the EV regression test is
-   GREEN — the joint K≥2 fit no longer collapses to EV≈0), **but the atoms still do not separate
-   onto distinct factors** — the structure test is RED. So publish nothing stronger than *"the K≥2
-   EV-collapse is repaired; the joint fit still does not recover disjoint factors."* The
-   additive-generative-model / joint-K≥2 factorization win remains unestablished, and the nursery's
-   factor-recovery-without-a-joint-solve advantage (§4.4) stands as the route that does separate
-   factors.
+   **Related — the K≥2 co-collapse pathology is now reproduced AND fixed on the deterministic repro.**
+   R-review confirms the #2027 suite is **3/3 GREEN at HEAD (`7a93b1d06`)**, including the
+   structural-separation test: on the deterministic two-circle repro, **EV recovers AND the atoms
+   separate onto distinct curved factors, at both widths**. The fix is cold-start sequential CHART
+   deflation. Scope honestly: this is **not yet validated at production width on real data** — REML
+   remains width-blocked in the current venv (a node rerun is staged). The evidence quality is worth
+   noting: one biting regression test tracked the whole fix chain **broken → EV-only → separated**,
+   so the green is earned, not asserted. The additive-generative-model / joint-K≥2 line accordingly
+   softens from "still co-collapses" to **"fixed on the deterministic repro; production-width
+   validation pending."**
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a
@@ -219,13 +222,14 @@ claims. Stated plainly:
    pre-fix multi-modal auto-grow/co-collapse in that build; re-run against the guard-patched
    build before claiming month/hue dose calibration.
 
-9. **Chart transfer is a coordinate result, not a reconstruction result (scoping null).** Across
-   14 template families (leave-one-template-out), the chart's angular *coordinate* transfers
-   consistently (median 0.95/0.81) — and on month it transfers where a linear coordinate collapses
-   (0.22 vs 0.001) — but the chart's *reconstruction EV* does **not** out-transfer the 2-PC linear
-   plane (linear-2 still wins weekday EV). Publish "the chart coordinate is an invariant feature
-   property," not "the chart reconstructs better on held-out templates." (`chart_transfer/`,
-   R-review `d568f53`.)
+9. **Chart transfer is a coordinate result, not a reconstruction result.** Across 14 template
+   families (LOTO), the chart's angular *coordinate* transfers consistently (median circ-corr
+   0.95/0.81) — a genuine positive a directionless linear SAE cannot even express. On raw EV the
+   1-coord chart beats a single linear direction by a wide margin but does **not** beat the 2-PC
+   plane (weekday chart 0.26 < linear-2 0.43; month 0.12 > 0.05), and outlier templates
+   rotate/degrade the coordinate (36–50% of folds <0.9; month template 9 at 0.04). Publish "the
+   chart coordinate is largely an invariant feature property (a strong tendency, not a law)," not
+   "the chart reconstructs better on held-out templates." (`chart_transfer/`, R-review.)
 
 ---
 
