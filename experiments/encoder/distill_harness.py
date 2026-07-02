@@ -78,7 +78,12 @@ class EncoderReport:
     assignment_linf_mean: float
     assignment_linf_max: float
     reconstruction_ev_teacher: float
-    reconstruction_ev_encoder_accepted: float
+    # EV of the (exact) reconstruction restricted to the rows the encoder
+    # accepted. On accepted rows the amortized guess matches the cold exact solve
+    # inside the gate, so this is the encoder-served EV up to the gate tolerance;
+    # the encoder's own reconstruction is NOT recomputed (that would need a
+    # second solve), so the number is reported against the exact teacher.
+    reconstruction_ev_accepted_rows: float
     # certificate-fallback
     fallback_rate_overall: float
     accepted_rows: int
@@ -107,7 +112,7 @@ class EncoderReport:
             f" | gate mean={self.assignment_linf_mean:.2e} max={self.assignment_linf_max:.2e}",
             f"gate tolerances   : coord={self.coord_tolerance:.2e} assign={self.assignment_tolerance:.2e}",
             f"recon EV          : teacher={self.reconstruction_ev_teacher:.4f}"
-            f" encoder(accepted)={self.reconstruction_ev_encoder_accepted:.4f}",
+            f" accepted-rows={self.reconstruction_ev_accepted_rows:.4f}",
             f"fallback (overall): {self.fallback_rate_overall:.4f}"
             f" ({self.fallback_rows}/{self.eval_rows} rows)",
             f"throughput        : {self.throughput_rows_per_s:,.0f} rows/s on {self.throughput_device}"
@@ -350,7 +355,7 @@ def distill_and_gate(
         assignment_linf_mean=float(np.mean(gate["assign_err"])),
         assignment_linf_max=float(np.max(gate["assign_err"])),
         reconstruction_ev_teacher=float(ev_teacher),
-        reconstruction_ev_encoder_accepted=float(ev_enc_acc),
+        reconstruction_ev_accepted_rows=float(ev_enc_acc),
         fallback_rate_overall=float(fb_rows / n_eval) if n_eval else float("nan"),
         accepted_rows=int(np.count_nonzero(accepted)),
         fallback_rows=fb_rows,
