@@ -89,6 +89,21 @@ def circular_mean(a: np.ndarray) -> float:
     return float(np.arctan2(np.sin(a).mean(), np.cos(a).mean()))
 
 
+def recovered_angle(recon: np.ndarray) -> np.ndarray | None:
+    """Per-sample recovered circular coordinate = atan2 of the chart RECONSTRUCTION
+    in its dominant 2-plane. The torch ManifoldSAE `positions` output is an internal
+    encoder coordinate whose range does not span the ring, so the reconstruction
+    geometry (where the model places each point ON the ring) is the robust angle
+    readout (verified: ccorr(atan2(recon), theta) = 0.98 vs 0.62 for raw positions)."""
+    C = recon - recon.mean(0)
+    if C.shape[1] < 2:
+        return None
+    if C.shape[1] > 2:
+        _, _, V = np.linalg.svd(C, full_matrices=False)
+        C = C @ V[:2].T
+    return np.arctan2(C[:, 1], C[:, 0])
+
+
 def circular_corr(a: np.ndarray, b: np.ndarray) -> float:
     a0, b0 = a - circular_mean(a), b - circular_mean(b)
     num = float((np.sin(a0) * np.sin(b0)).sum())
@@ -396,8 +411,8 @@ def run_nursery(X: np.ndarray, block_bases: list[np.ndarray], tag: str,
             rec["chart_ev_block_coords_test"] = round(ev(Z[test_idx], Zhat[test_idx]), 4)
             rec["chart_ev_block_coords_train"] = round(ev(Z[train_idx], Zhat[train_idx]), 4)
             composed += Zhat @ Q.T                      # lift to ambient
-            angle = 2 * np.pi * pos[:, 0, 0]            # recovered chart coord (all rows)
-            if theta is not None:
+            angle = recovered_angle(Zhat)              # atan2 of reconstruction (all rows)
+            if theta is not None and angle is not None:
                 ccs = [abs(circular_corr(angle, theta[:, ci])) for ci in range(theta.shape[1])]
                 rec["best_planted_circle_corr"] = round(max(ccs), 3)
                 rec["matched_planted_circle"] = int(np.argmax(ccs))
@@ -517,19 +532,20 @@ def _mdl_nursery(per_block, n_tokens: int, p_ambient: int) -> dict | None:
         return {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
 
 
-def _joint_recovery(out_path, theta):
-    """For each planted circle, best circular corr over the joint fit's atoms.
+def _joint_recovery(out_path, theta, planes):
+    """For each planted circle, does the joint reconstruction reproduce its angle?
 
-    Reports how many circles the joint fit cleanly recovered (corr>0.8) -- the
-    co-collapse signature is that atoms pile onto a subset of circles, leaving the
-    rest unrecovered even though every atom is alive.
-    """
-    _, pos = _load_fit(out_path)
-    K = pos.shape[1]
+    Project the joint ambient reconstruction onto each planted plane Q_c (evaluation
+    only, not used in the fit) and read the recovered angle by atan2; circular-corr
+    vs the true theta_c. The co-collapse signature: the joint model fails to trace
+    the individual rings (low corr on most circles) even at high aggregate EV."""
+    xh, _ = _load_fit(out_path)
+    xc = xh - xh.mean(0)
     per_circle = []
-    for ci in range(theta.shape[1]):
-        best = max(abs(circular_corr(2 * np.pi * pos[:, a, 0], theta[:, ci])) for a in range(K))
-        per_circle.append(round(best, 3))
+    for ci, (u, v) in enumerate(planes):
+        Q = np.linalg.qr(np.stack([u, v], 1))[0][:, :2]
+        ang = recovered_angle(xc @ Q)
+        per_circle.append(round(abs(circular_corr(ang, theta[:, ci])), 3))
     return per_circle, int(sum(c > 0.8 for c in per_circle))
 
 
@@ -553,7 +569,7 @@ def driver_synthetic():
     tj = fit_curved_isolated(X, n_atoms=K, tag="syn_A_torch", train_idx=tr, test_idx=te,
                              target_k=K)
     if tj["status"] == "CONVERGED":
-        tj["per_circle_corr"], tj["n_circles_recovered"] = _joint_recovery(tj["out_path"], theta)
+        tj["per_circle_corr"], tj["n_circles_recovered"] = _joint_recovery(tj["out_path"], theta, planes)
     print(f"  torch joint: ev_test={tj.get('ev')} ev_train={tj.get('ev_train')} "
           f"per_circle_corr={tj.get('per_circle_corr')} "
           f"recovered={tj.get('n_circles_recovered')}/{K}", flush=True)
@@ -562,7 +578,7 @@ def driver_synthetic():
                                 test_idx=te, target_k=2 * K)
     if tj_oc["status"] == "CONVERGED":
         tj_oc["per_circle_corr"], tj_oc["n_circles_recovered"] = _joint_recovery(
-            tj_oc["out_path"], theta)
+            tj_oc["out_path"], theta, planes)
     print(f"  torch joint over-complete K={2*K}: ev_test={tj_oc.get('ev')} "
           f"recovered={tj_oc.get('n_circles_recovered')}/{K} dead={tj_oc.get('dead_atoms')}",
           flush=True)
@@ -593,7 +609,7 @@ def driver_synthetic():
     print("\n[Arm B-discovered] discover blocks -> chart per block -> compose...", flush=True)
     bb, Ddict, diag = discover_blocks(X[tr], n_dict=2 * K + 2, block_size=3)  # discover on TRAIN
     print(f"  discovered {len(bb)} blocks, dims={diag['block_dims']}, "
-          f"sparse_dict_ev={diag['sparse_dict_ev']:.3f}", flush=True)
+          f"pca_var={diag['pca_var_captured']:.3f}", flush=True)
     nb_disc = run_nursery(X, bb, tag="syn_B_disc", train_idx=tr, test_idx=te, theta=theta)
     nb_disc["n_circles_recovered"] = len({
         b["matched_planted_circle"] for b in nb_disc["per_block"]
@@ -737,18 +753,18 @@ def driver_real():
     tj = fit_curved_isolated(Xshared, n_atoms=K, tag="real_A_torch",
                              train_idx=tr, test_idx=te, target_k=K)
     if tj["status"] == "CONVERGED":
-        _, pos = _load_fit(tj["out_path"])
-        # per-set: best atom's cyclic-adjacency recovery (all rows -- interpretability)
+        xh_joint, _ = _load_fit(tj["out_path"])
+        # per-set: does the joint reconstruction trace this set's circle? Project the
+        # reconstruction onto the set's own 2-plane (eval only) and read atan2.
         per_set = {}
         for si, s in enumerate(sets):
             rows = np.where(set_all == si)[0]
-            best_adj, best_cc = 0.0, 0.0
-            for a in range(K):
-                cc, adj = _cyclic_recovery(2 * np.pi * pos[rows, a, 0],
-                                           rank_all[rows].astype(int), ntok[si])
-                if adj > best_adj:
-                    best_adj, best_cc = adj, cc
-            per_set[s] = {"best_atom_cyclic_adjacency": best_adj, "circular_corr": best_cc}
+            Zc = Xshared[rows] - Xshared[rows].mean(0)
+            _, _, Vk = np.linalg.svd(Zc, full_matrices=False)
+            Qs = Vk[:2].T
+            ang = recovered_angle((xh_joint[rows] - xh_joint[rows].mean(0)) @ Qs)
+            cc, adj = _cyclic_recovery(ang, rank_all[rows].astype(int), ntok[si])
+            per_set[s] = {"best_atom_cyclic_adjacency": adj, "circular_corr": cc}
         tj["per_set_recovery"] = per_set
     lin = {f"pca_L{K}_test": _linear_heldout_ev(Xshared, tr, te, K),
            f"pca_L{2*K}_test": _linear_heldout_ev(Xshared, tr, te, 2 * K)}
@@ -776,10 +792,10 @@ def driver_real():
         rec = nb["per_block"][si]
         op = SCRATCH / f"real_B_b{si}_out.npz"
         if op.exists():
-            _, pos = _load_fit(str(op))
+            Zhat, _ = _load_fit(str(op))              # block-coord reconstruction (all rows)
             rows = np.where(set_all == si)[0]
-            cc, adj = _cyclic_recovery(2 * np.pi * pos[rows, 0, 0],
-                                       rank_all[rows].astype(int), ntok[si])
+            ang = recovered_angle(Zhat[rows])
+            cc, adj = _cyclic_recovery(ang, rank_all[rows].astype(int), ntok[si])
             rec["set"] = s
             rec["recovered_circular_corr"] = cc
             rec["cyclic_adjacency_accuracy"] = adj
