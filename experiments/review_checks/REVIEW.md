@@ -4,6 +4,44 @@ Reviewer for the block-sparse + curved-chart featurizer fleet. Repos polled:
 `/Users/user/gam` (main) and `/Users/user/Manifold-SAE` (main). I edit nothing
 but this file.
 
+## amm_zoo (tasks #15-17, a7ceb7a + P4 ad0b537) — METHOD SOUND, but SMOKE RESULTS DON'T SUPPORT THE THESIS
+METHOD checks (lead's 5) — all PASS:
+- Matched budget/L0 SYMMETRIC across arms: `matched_budget` gives every arm the same
+  Σb_g·d decoder scalars + L0=k·mean(b) (arms.py:42). ✓
+- No ground-truth leak: topology CLASSIFIED from the code-cloud radial rel_std
+  (_classify_block), radius fit on TRAIN, `use_chart` gated on TRAIN-MSE reduction;
+  ground truth enters ONLY the metric. ✓
+- Hungarian correct: `linear_sum_assignment(-r2m)` maximizes total contribution R²,
+  rectangular→square pad (metrics.py:293/68). ✓
+- Held-out: arms fit on dataset.train, scored on dataset.test. ✓
+- Linear-control (charts must NOT win on Gaussian): the chart is gated to ring blocks
+  (rel_std<0.35) that ALSO lower train MSE; a Gaussian blob has Rayleigh rel_std≈0.52
+  → classified linear → chart is identity → `ours`==`bsf_grassmann` on linear factors. ✓
+BUT the COMMITTED SMOKE RESULTS (results_smoke.json; 1 seed, σ∈{0.05,0.2}, 250 steps)
+do NOT support the block⊂chart thesis — and arguably invert it:
+- The chart NEVER FIRES: `ours` == `bsf_grassmann` EXACTLY on EVERY topology (circle,
+  arc, torus, sphere, linear) at BOTH σ (e.g. circle 0.174==0.174, torus 0.031==0.031).
+  So the curved-factor DENOISING / R²-vs-σ crossing that is the arm's whole point is
+  NOT demonstrated — `use_chart` never triggered at these settings.
+- The DIRECTION baseline `topk_sae` WINS on every topology (R² 0.41–0.50) vs the block/
+  chart arms (0.13–0.33, NEGATIVE on sphere −0.06/−0.11 and torus −0.03). So "block ⊂
+  chart beats directions on curved factors" is INVERTED in the smoke run.
+- Likely cause: smoke-scale under-training (250 steps, σ≤0.2) — block-TopK under-
+  converges vs TopK, and ring-denoising only helps at HIGHER σ than tested. The
+  R²-vs-σ crossing needs the FULL run (more steps, higher σ).
+VERDICT: amm_zoo is methodologically clean + honest (linear-control gating correct), but
+as COMMITTED it does NOT demonstrate the thesis — it shows the OPPOSITE (directions win,
+chart inert). M-mdl must hold the amm_zoo cell as PENDING (full run) — do NOT publish it
+as a head-to-head win. Re-review when a full-scale run (σ up to where denoising bites,
+≫250 steps) lands. ("smoke" in the filename flags it as preliminary.)
+
+### Co-collapse re-verify after anchor/cooldown DROP (b4d103f57) — STILL GREEN
+O-manifold dropped the reseed-arm anchor + cooldown (b4d103f57, "regressed guard tests").
+Re-ran 2027 at that HEAD → still 3/3 (+ decoder_norm_guard_is_noop_for_k1) = 4/4 ok. The
+cold-start CHART deflation (7a93b1d06) is the actual fix and is independent of the dropped
+anchor/cooldown, so my GREEN sign-off HOLDS. Bonus: the drop removes the
+SAE_COCOLLAPSE_RESEED_COOLDOWN_ITERS magic constant I flagged (rule 19).
+
 ## RED-TREE ATTRIBUTION TRIAGE (~17 gam-sae failures) — in progress
 Method: read failing assertion TYPE + which commit changed the exercised math (no
 shared-tree checkout; scratch-copy A/B where needed). Full-suite run capturing
