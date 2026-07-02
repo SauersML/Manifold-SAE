@@ -240,6 +240,17 @@ claims. Stated plainly:
    chart coordinate is largely an invariant feature property (a strong tendency, not a law)," not
    "the chart reconstructs better on held-out templates." (`chart_transfer/`, R-review.)
 
+10. **The controlled manifold zoo is a full-scale run owed — not yet a thesis test.** `amm_zoo/`
+   (planted circle/arc/torus/sphere/Möbius/helix at matched budget and L0, Hungarian-by-contribution-R²,
+   the chart arm gated off linear factors so it cannot win on Gaussian structure) is the cleanest
+   controlled test of "curved beats flat on curved manifolds." R-review verified the **method is
+   sound**, but only an **under-powered smoke** has run (1 seed, ≤250 steps, σ≤0.2). In it the chart
+   machinery never fired and direction (TopK) dictionaries win held-out R² on every topology — but
+   that is the regime where the curved advantage is *not expected* to show (ring-denoising bites only
+   at higher σ; block-TopK under-converges vs TopK at 250 steps). So the zoo **neither supports nor
+   refutes the thesis yet**; it must not be cited either way until a full-scale run (higher σ, ≫250
+   steps, multi-seed) lands.
+
 ---
 
 ## 5. Related work — where ManifoldSAE sits in the 2026 stream
