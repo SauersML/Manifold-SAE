@@ -201,6 +201,11 @@ def fig2_theta_dev(compose: dict | None, out: Path) -> dict:
         return {"status": "PENDING", "reason": "no atoms in COMPOSE artifact"}
     min_eff = float(_get(compose, "min_effect_ev", "min_effect", default=0.0))
 
+    # ΔEV provenance: the pre-registered A2 metric is HELD-OUT marginal (LOAO) ΔEV. If
+    # COMPOSE only has the FFI's in-sample birth ΔEV, we still score but flag it — birth
+    # ΔEV is what the fit optimized, so an unflagged pass would be a Goodhart hazard.
+    dev_source = str(_get(compose, "atoms", default=[{}])[0].get("delta_ev_source", "unstated"))
+    held_out_dev = "loao" in dev_source or "held" in dev_source or dev_source == "unstated"
     fig, ax = _newfig()
     seen = set()
     n_curved_paying = 0
@@ -208,7 +213,7 @@ def fig2_theta_dev(compose: dict | None, out: Path) -> dict:
         topo = str(_get(a, "topology", "kind", default="other")).lower()
         topo = topo if topo in TOPO_COLOR else "other"
         th = _get(a, "theta", "turning", default=None)
-        de = _get(a, "delta_ev", "dev", "loao_delta_ev", default=None)
+        de = _get(a, "delta_ev", "loao_delta_ev", "dev", default=None)
         if th is None or de is None:
             continue
         th, de = float(th), float(de)
@@ -232,6 +237,8 @@ def fig2_theta_dev(compose: dict | None, out: Path) -> dict:
         "curved_atoms_theta_gt1_and_paying": n_curved_paying,
         "min_effect_ev": min_eff,
         "threshold": ">= 5",
+        "delta_ev_source": dev_source,
+        "delta_ev_is_heldout": bool(held_out_dev),
         "figure": _save(fig, out),
     }
 
@@ -489,12 +496,16 @@ def a3_collapse(compose: dict | None) -> dict:
     births = _get(compose, "births", "birth_log", default=None)
     if births is None:
         return {"status": "PENDING", "reason": "no birth log in COMPOSE artifact"}
-    total = sum(int(_get(b, "collapse_events", "collapses", default=0)) for b in births)
+    # prefer an explicit total if COMPOSE reports one, else sum the per-birth counts
+    total = _get(compose, "collapse_events_total", default=None)
+    total = int(total) if total is not None else \
+        sum(int(_get(b, "collapse_events", "collapses", default=0)) for b in births)
     evs = [float(_get(b, "ev", "ev_after", default=np.nan)) for b in births]
     monotone = all(evs[i] <= evs[i + 1] + 1e-9 for i in range(len(evs) - 1) if not math.isnan(evs[i]))
     return {"status": "ACCEPT" if total == 0 else "MISS",
             "collapse_events": total, "n_births": len(births),
-            "ev_monotone_in_births": bool(monotone), "threshold": "exactly 0"}
+            "ev_monotone_in_births": bool(monotone), "threshold": "exactly 0",
+            "grown_vs_joint": _get(compose, "grown_vs_joint", default=None)}
 
 
 def _accepted_curved(compose: dict) -> list[dict]:
@@ -647,7 +658,9 @@ def g_band(compose: dict | None) -> dict:
     atoms = _accepted_curved(compose)
     covs = [c for a in atoms if (c := _band_coverage_one(a)) is not None]
     if not covs:
-        return {"status": "PENDING", "reason": "no band coverage available"}
+        return {"status": "PENDING",
+                "reason": "no posterior band (FFI atom payload lacks shape_band_sd) — "
+                          "not fabricated; needs the band surface from the stagewise adapter"}
     med = float(np.median(covs))
     return {"status": "ACCEPT" if 0.90 <= med <= 0.98 else "MISS",
             "median_coverage": round(med, 3), "n_atoms": len(covs),
@@ -677,15 +690,65 @@ def g_util(compose: dict | None) -> dict:
 # ---------------------------------------------------------------------------------
 # Axis 6 — R1 seed stability, R2 cross-corpus, R3 hygiene attestation.
 # ---------------------------------------------------------------------------------
-def r1_stability(stab: dict | None) -> dict:
-    if not stab:
-        return {"status": "PENDING", "reason": "STABILITY stability.json not landed"}
-    pa = _get(stab, "principal_angle_overlap", "subspace_overlap", default=None)
-    hm = _get(stab, "hungarian_latent_match", "latent_match", default=None)
-    res = {"principal_angle_overlap": pa, "hungarian_latent_match": hm}
-    res["status"] = ("ACCEPT" if pa is not None and float(pa) > 0.9
-                     else ("MISS" if pa is not None else "PENDING"))
-    return res
+def _atom_subspace(atom: dict) -> np.ndarray | None:
+    """Column-orthonormal (p, k) basis of an atom's ambient subspace. Prefer an
+    explicit `subspace_basis` (rows or cols); else the decoder block `decoder_B`."""
+    b = _get(atom, "subspace_basis", "decoder_B", "basis", default=None)
+    if b is None:
+        return None
+    B = np.asarray(b, dtype=float)
+    if B.ndim != 2 or B.size == 0:
+        return None
+    # orient so rows = ambient dim p (the larger axis is p in our regime p≫k)
+    if B.shape[0] < B.shape[1]:
+        B = B.T
+    q, _ = np.linalg.qr(B)
+    return q
+
+
+def _subspace_overlap(A: np.ndarray, B: np.ndarray) -> float:
+    """Largest principal cosine between two column-orthonormal subspaces (∈[0,1])."""
+    s = np.linalg.svd(A.T @ B, compute_uv=False)
+    return float(np.clip(s.max(), 0.0, 1.0)) if s.size else 0.0
+
+
+def r1_stability(stab: dict | None, seed0: dict | None = None,
+                 seed2: dict | None = None) -> dict:
+    # Explicit stability.json wins if a lane computed it.
+    if stab:
+        pa = _get(stab, "principal_angle_overlap", "subspace_overlap", default=None)
+        hm = _get(stab, "hungarian_latent_match", "latent_match", default=None)
+        hh = _get(stab, "artifact_hash_match", default=None)
+        return {"principal_angle_overlap": pa, "hungarian_latent_match": hm,
+                "artifact_hash_match": hh, "source": "stability.json",
+                "status": ("ACCEPT" if pa is not None and float(pa) > 0.9
+                           else ("MISS" if pa is not None else "PENDING"))}
+    # Otherwise compute it ourselves from the seed-0 / seed-2 composed dictionaries.
+    if not (seed0 and seed2):
+        return {"status": "PENDING", "reason": "seed-2 clone not landed (need both dicts)"}
+    A0 = [(_atom_subspace(a), a) for a in _get(seed0, "atoms", default=[])]
+    A2 = [(_atom_subspace(a), a) for a in _get(seed2, "atoms", default=[])]
+    S0 = [s for s, _ in A0 if s is not None]
+    S2 = [s for s, _ in A2 if s is not None]
+    if not S0 or not S2:
+        return {"status": "PENDING",
+                "reason": "atoms lack subspace_basis/decoder_B — cannot compute angles"}
+    from scipy.optimize import linear_sum_assignment
+    ov = np.zeros((len(S0), len(S2)))
+    for i, a in enumerate(S0):
+        for j, b in enumerate(S2):
+            k = min(a.shape[1], b.shape[1])
+            ov[i, j] = _subspace_overlap(a[:, :k], b[:, :k])
+    ri, cj = linear_sum_assignment(-ov)  # maximize matched overlap
+    matched = ov[ri, cj]
+    subspace_overlap = float(np.mean(matched))
+    # honest harsher metric: fraction of atoms whose best match is a near-identity subspace
+    latent_match = float(np.mean(matched > 0.9))
+    return {"principal_angle_overlap": round(subspace_overlap, 3),
+            "hungarian_latent_match": round(latent_match, 3),
+            "n_matched": int(len(matched)), "source": "computed from seed0/seed2",
+            "threshold": "subspace overlap > 0.9",
+            "status": "ACCEPT" if subspace_overlap > 0.9 else "MISS"}
 
 
 def r2_cross_corpus(cross: dict | None) -> dict:
@@ -812,6 +875,24 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     row("A3", "live-decoder collapse events", "0", a3.get("status"),
         cell(a3.get("collapse_events")))
     A("")
+    # ΔEV provenance caveat — A2 must be honest about in-sample vs held-out ΔEV.
+    if a2.get("delta_ev_source") and a2.get("delta_ev_source") != "unstated":
+        if not a2.get("delta_ev_is_heldout"):
+            A(f"> **A2 caveat:** ΔEV source is `{a2['delta_ev_source']}` — the FFI's "
+              "IN-SAMPLE birth ΔEV, not the pre-registered held-out LOAO. Birth ΔEV is "
+              "what the fit optimized, so read A2 as provisional until the held-out LOAO "
+              "lands from the stagewise adapter's per-atom held-out recon.")
+        else:
+            A(f"> A2 ΔEV source: `{a2['delta_ev_source']}` (held-out).")
+        A("")
+    # grown-vs-joint discriminator (the free architecture comparison inside the run)
+    gvj = a3.get("grown_vs_joint")
+    if gvj:
+        A(f"> **Grown-vs-joint discriminator:** grown (stagewise) held-out EV "
+          f"{cell(gvj.get('grown'))} vs joint-fit-at-grown-K {cell(gvj.get('joint'))}. "
+          "Stagewise ≥ joint (with zero collapse) is the architecture evidence; joint "
+          "collapsing where stagewise does not is the strongest such evidence.")
+        A("")
     # overall verdict
     hard = [a1.get("status"), a2.get("status"), a3.get("status"), dose.get("A4_status"),
             dose.get("A5_status"), dose.get("A6_status")]
@@ -878,8 +959,9 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     dose = _load(artifacts_dir / "dose_calibration.json")
     fc = _load(artifacts_dir / "fidelity_currency.json")
     nc = _load(artifacts_dir / "null_control.json")
-    stab = _load(artifacts_dir / "stability.json")
     cross = _load(artifacts_dir / "creditscope_l30.json")
+    stab = _load(artifacts_dir / "stability.json")
+    seed2 = _load(artifacts_dir / "compose_per_atom_seed2.json")  # seed-2 clone for R1
     # R3 binds to DATA's real split manifest (data/l17/) with a results-dir override.
     manifest = (_load(artifacts_dir / "manifest.json")
                 or _load(REPO / "data" / "l17" / "split_manifest.json"))
@@ -899,7 +981,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
         "i1": i1_shatter(compose),
         "g_band": g_band(compose),
         "g_util": g_util(compose),
-        "r1": r1_stability(stab),
+        "r1": r1_stability(stab, compose, seed2),
         "r2": r2_cross_corpus(cross),
         "r3": r3_hygiene(manifest, tier0_present),
     }
@@ -931,27 +1013,39 @@ def selftest() -> dict:
         ap = rng.normal(size=(300, 2)) * 0.1 + np.stack(
             [np.cos(t[rng.integers(0, 80, 300)]), np.sin(t[rng.integers(0, 80, 300)])], axis=1) * (1 + 0.1 * i)
         coord = np.arctan2(ap[:, 1], ap[:, 0])
+        basis, _ = np.linalg.qr(rng.normal(size=(16, 2)))  # atom subspace in R^16
         atoms.append({"idx": i, "topology": "circle", "theta": th, "delta_ev": de,
-                      "d_atom": 1,
+                      "delta_ev_source": "heldout_loao", "d_atom": 1,
                       "stable_rank": float(rng.uniform(1.0, 1.4)),  # d=1 chart ⇒ ~1
                       "utilization": float(rng.uniform(0.1, 0.9)),
                       "chart_curve": curve.tolist(),
                       "band": np.c_[np.full(80, 0.30), np.full(80, 0.30)].tolist(),
                       "activation_proj": ap.tolist(),
                       "activation_coord": coord.tolist(),
-                      "band_coverage": float(rng.uniform(0.93, 0.97))})
+                      "band_coverage": float(rng.uniform(0.93, 0.97)),
+                      "subspace_basis": basis.tolist()})
     for i in range(3):
         atoms.append({"idx": 100 + i, "topology": "linear",
                       "theta": float(rng.uniform(0, 0.4)),
                       "delta_ev": float(rng.uniform(0.01, 0.05)),
                       "stable_rank": 1.0, "utilization": float(rng.uniform(0.2, 0.8))})
     compose = {
-        "min_effect_ev": 0.005, "ev_baseline": "train_mean",
+        "min_effect_ev": 0.005, "ev_baseline": "train_mean", "collapse_events_total": 0,
         "operating_point": {"total_actives": 40, "heldout_ev": 0.905,
                             "linear_only_heldout_ev": 0.88, "heldout_subsample_n": 50000},
+        "grown_vs_joint": {"grown": 0.905, "joint": 0.86},
         "atoms": atoms,
         "births": [{"ev": 0.80 + 0.01 * i, "collapse_events": 0} for i in range(8)],
     }
+    # seed-2 clone: same atoms, subspaces slightly rotated (subspace-stable, R1 ACCEPT)
+    seed2_atoms = []
+    for a in atoms:
+        b = np.asarray(a.get("subspace_basis", []), float)
+        if b.size:
+            b2, _ = np.linalg.qr(b + rng.normal(scale=0.05, size=b.shape))
+            a = {**a, "subspace_basis": b2.tolist()}
+        seed2_atoms.append(a)
+    compose_seed2 = {**compose, "atoms": seed2_atoms}
     # probe angles that respect cyclic order (so wraparound passes): evenly spaced ring
     ring = np.linspace(0, 2 * math.pi, 13)[:12] + rng.normal(0, 0.05, 12)
     dose = {"probe_order": list(range(12)), "probe_angles": list(ring),
@@ -972,8 +1066,9 @@ def selftest() -> dict:
     manifest = {"chunk_level_split": True, "tier0_train_only": True, "matched_currency": "actives"}
     # dump artifacts and drive the real production run() path (honest end-to-end proof)
     for name, payload in [("l17_t1_frontier.json", t1), ("compose_per_atom.json", compose),
+                          ("compose_per_atom_seed2.json", compose_seed2),
                           ("dose_calibration.json", dose), ("fidelity_currency.json", fc),
-                          ("null_control.json", nc), ("stability.json", stab),
+                          ("null_control.json", nc),
                           ("creditscope_l30.json", cross), ("manifest.json", manifest)]:
         (st / name).write_text(json.dumps(payload))
     # a realistic MDL featurizer set (chart captures 85% on one intrinsic coord)

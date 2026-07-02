@@ -39,7 +39,7 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
 | P1 | L0 (mean actives/token) | reported, matched | ACCEPT | L0 40.0 |
 | P2 | MDL bits @ δ, curved tier pays (#2085) | ≥5 pay | MISS | 0 pay |
 | | **Axis 3 — IDENTITY** | | | |
-| I1 | shatter count (linear atoms / curve) | median ≥2 | ACCEPT | 2.0 |
+| I1 | shatter count (linear atoms / curve) | median ≥2 | ACCEPT | 2.55 |
 | I2 | absorption / SCR / TPP | STRETCH | PENDING | SAEBench harness |
 | I3 | chart-interp nameable ordering | ordering>0.9 | ACCEPT | 0.96 |
 | | **Axis 4 — GEOMETRY** (licensed by G0) | | | |
@@ -47,8 +47,8 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
 | A2 | (Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect | ≥5 | ACCEPT | 5 |
 | A4 | coordinate fidelity (circular corr/ordering) | >0.9 | ACCEPT | 0.96 |
 | G_wrap | wraparound (Sun adjacent to Mon) | pass | ACCEPT | True |
-| G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | ACCEPT | 0.939 |
-| G_util | stable rank ≈ d (ARD prunes idle) | ≤ d+0.5 | ACCEPT | 1.141 |
+| G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | ACCEPT | 0.944 |
+| G_util | stable rank ≈ d (ARD prunes idle) | ≤ d+0.5 | ACCEPT | 1.153 |
 | | **Axis 5 — CAUSAL** (the crown) | | | |
 | A5 | dose slope (measured-KL on predicted-nats) | ∈[0.5,2] | ACCEPT | 1.08 |
 | A6 | dose R² | >0.7 | ACCEPT | 0.94 |
@@ -59,6 +59,10 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
 | R3 | split hygiene + matched budget stated | pass | PASS | actives |
 | | **Discriminator** | | | |
 | A3 | live-decoder collapse events | 0 | ACCEPT | 0 |
+
+> A2 ΔEV source: `heldout_loao` (held-out).
+
+> **Grown-vs-joint discriminator:** grown (stagewise) held-out EV 0.905 vs joint-fit-at-grown-K 0.86. Stagewise ≥ joint (with zero collapse) is the architecture evidence; joint collapsing where stagewise does not is the strongest such evidence.
 
 **Overall:** GATE PASSED and all six frozen A-metrics ACCEPT — headline holds.
 
@@ -110,7 +114,9 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "status": "ACCEPT",
   "curved_atoms_theta_gt1_and_paying": 5,
   "min_effect_ev": 0.005,
-  "threshold": ">= 5"
+  "threshold": ">= 5",
+  "delta_ev_source": "heldout_loao",
+  "delta_ev_is_heldout": true
  },
  "fig3": {
   "status": "OK",
@@ -123,17 +129,17 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "crossover": {
    "block": "blk0-linear",
    "chart": "blk0-chart",
-   "delta_code_bits_per_firing": 1.407,
-   "delta_coeff_bits_per_firing": 1.407,
+   "delta_code_bits_per_firing": 0.7235,
+   "delta_coeff_bits_per_firing": 0.7235,
    "selection_bits_delta": 0.0,
    "selection_asymmetric": false,
    "phi_extra_params": -2048,
-   "r_per_freed_coord_bits": 0.3469,
-   "l_param_bits": 0.3469,
-   "f_star": -504.99,
+   "r_per_freed_coord_bits": 0.2615,
+   "l_param_bits": 0.2615,
+   "f_star": -740.23,
    "f_star_matched_simple": -292.57,
    "chart_wins_at_actual_f": true,
-   "actual_firings": 3421
+   "actual_firings": 1902
   },
   "threshold": ">=5 pay"
  },
@@ -152,7 +158,11 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "collapse_events": 0,
   "n_births": 8,
   "ev_monotone_in_births": true,
-  "threshold": "exactly 0"
+  "threshold": "exactly 0",
+  "grown_vs_joint": {
+   "grown": 0.905,
+   "joint": 0.86
+  }
  },
  "dose": {
   "fig7": "/Users/user/Manifold-SAE/figures_35b/_selftest/fig7_probe_ordering.png",
@@ -196,7 +206,7 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   }
  },
  "i1": {
-  "analytic_median": 2.0,
+  "analytic_median": 2.55,
   "eps": 0.1,
   "n_atoms": 5,
   "status": "ACCEPT",
@@ -204,19 +214,21 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
  },
  "g_band": {
   "status": "ACCEPT",
-  "median_coverage": 0.939,
+  "median_coverage": 0.944,
   "n_atoms": 5,
   "threshold": "coverage in [0.90, 0.98]"
  },
  "g_util": {
   "status": "ACCEPT",
-  "median_stable_rank": 1.141,
+  "median_stable_rank": 1.153,
   "d": 1,
   "threshold": "median stable rank <= d + 0.5"
  },
  "r1": {
   "principal_angle_overlap": 0.93,
   "hungarian_latent_match": 0.42,
+  "artifact_hash_match": null,
+  "source": "stability.json",
   "status": "ACCEPT"
  },
  "r2": {

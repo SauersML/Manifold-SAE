@@ -124,7 +124,7 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
  },
  "r1": {
   "status": "PENDING",
-  "reason": "STABILITY stability.json not landed"
+  "reason": "seed-2 clone not landed (need both dicts)"
  },
  "r2": {
   "status": "PENDING",
