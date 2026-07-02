@@ -1,0 +1,284 @@
+{
+  "real": {
+    "meta": {
+      "path": "/Users/user/Manifold-SAE/runs/OLMO3_32B_BASE_SELF_QUALIA_LAST/activations.npy",
+      "layer": 40,
+      "n": 760,
+      "d_reduced": 128
+    },
+    "budget": {
+      "F": 64,
+      "L0": 8,
+      "d_reduced": 128
+    },
+    "rows": [
+      {
+        "model": "TopK-SAE",
+        "mode": "vanilla",
+        "b": 1,
+        "G": 64,
+        "k_blocks": 8,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.448915803203209,
+        "mean_stable_rank": 1.0,
+        "mean_utilization": 1.0,
+        "n_active_blocks": 64
+      },
+      {
+        "model": "BSF-grassmann",
+        "mode": "grassmann",
+        "b": 2,
+        "G": 32,
+        "k_blocks": 4,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.42527453132088855,
+        "mean_stable_rank": 1.464460007257745,
+        "mean_utilization": 0.8022235873678494,
+        "n_active_blocks": 32
+      },
+      {
+        "model": "BSF-vanilla",
+        "mode": "vanilla",
+        "b": 2,
+        "G": 32,
+        "k_blocks": 4,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.42746501854328256,
+        "mean_stable_rank": 1.4813458337461478,
+        "mean_utilization": 0.8240657502231747,
+        "n_active_blocks": 32
+      },
+      {
+        "model": "BSF-grassmann",
+        "mode": "grassmann",
+        "b": 4,
+        "G": 16,
+        "k_blocks": 2,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.39927736598560803,
+        "mean_stable_rank": 2.456501622544323,
+        "mean_utilization": 0.7197301215076461,
+        "n_active_blocks": 16
+      },
+      {
+        "model": "BSF-vanilla",
+        "mode": "vanilla",
+        "b": 4,
+        "G": 16,
+        "k_blocks": 2,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.3872205668229839,
+        "mean_stable_rank": 2.337630776442033,
+        "mean_utilization": 0.7070216350837214,
+        "n_active_blocks": 16
+      },
+      {
+        "model": "BSF-grassmann",
+        "mode": "grassmann",
+        "b": 8,
+        "G": 8,
+        "k_blocks": 1,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.3248823279081696,
+        "mean_stable_rank": 3.4160858447264033,
+        "mean_utilization": 0.5760310235529815,
+        "n_active_blocks": 8
+      },
+      {
+        "model": "BSF-vanilla",
+        "mode": "vanilla",
+        "b": 8,
+        "G": 8,
+        "k_blocks": 1,
+        "L0_nonzeros": 8,
+        "n_latent": 64,
+        "dec_params": 8192,
+        "val_ev": 0.3488399901865272,
+        "mean_stable_rank": 3.301206311605166,
+        "mean_utilization": 0.5884842647510652,
+        "n_active_blocks": 8
+      }
+    ]
+  },
+  "synthetic": {
+    "setup": {
+      "d": 48,
+      "n_true_subspaces": 8,
+      "block_size": 4,
+      "k_true": 2,
+      "n": 2000,
+      "noise": 0.05,
+      "n_seeds": 5
+    },
+    "vanilla": {
+      "seeds_done": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "train_ev": 0.9090248397953868,
+      "best_seed": 3,
+      "val_ev": 0.8935082702881082,
+      "recovery_mean_r2": 0.8185293485895412,
+      "matches": [
+        {
+          "truth": 0,
+          "block": 1,
+          "r2": 0.7566657230086925
+        },
+        {
+          "truth": 1,
+          "block": 2,
+          "r2": 0.997847065243175
+        },
+        {
+          "truth": 2,
+          "block": 5,
+          "r2": 0.997578597260188
+        },
+        {
+          "truth": 3,
+          "block": 3,
+          "r2": 0.5139807062553476
+        },
+        {
+          "truth": 4,
+          "block": 7,
+          "r2": 0.5107687934609236
+        },
+        {
+          "truth": 5,
+          "block": 4,
+          "r2": 0.9965377785234777
+        },
+        {
+          "truth": 6,
+          "block": 0,
+          "r2": 0.7787715215893548
+        },
+        {
+          "truth": 7,
+          "block": 6,
+          "r2": 0.9960846033751702
+        }
+      ],
+      "mean_stable_rank": 2.9030743316571757,
+      "mean_utilization": 0.9278536638115412
+    },
+    "grassmann": {
+      "seeds_done": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "train_ev": 0.9387287120902033,
+      "best_seed": 1,
+      "val_ev": 0.9345101465263371,
+      "recovery_mean_r2": 0.9854664398017035,
+      "matches": [
+        {
+          "truth": 0,
+          "block": 7,
+          "r2": 0.985481426339265
+        },
+        {
+          "truth": 1,
+          "block": 0,
+          "r2": 0.9861879265437347
+        },
+        {
+          "truth": 2,
+          "block": 2,
+          "r2": 0.985757990898114
+        },
+        {
+          "truth": 3,
+          "block": 4,
+          "r2": 0.9831291509984067
+        },
+        {
+          "truth": 4,
+          "block": 1,
+          "r2": 0.9859511427957268
+        },
+        {
+          "truth": 5,
+          "block": 3,
+          "r2": 0.985645090411276
+        },
+        {
+          "truth": 6,
+          "block": 5,
+          "r2": 0.9876181535460389
+        },
+        {
+          "truth": 7,
+          "block": 6,
+          "r2": 0.9839606368810652
+        }
+      ],
+      "mean_stable_rank": 2.9491582227604782,
+      "mean_utilization": 0.9344469573897289
+    }
+  },
+  "cyclic": {
+    "weekday": {
+      "layer": 8,
+      "n_labels": 7,
+      "d_reduced": 6,
+      "G": 4,
+      "block_size": 4,
+      "k_blocks": 1,
+      "winning_block": 3,
+      "winning_block_subspace_ev": 0.803266395748176,
+      "runner_up_subspace_ev": 0.7410998066652243,
+      "winning_block_coord_stable_rank": 2.3622427709687392,
+      "cyclic_adjacency_accuracy": 1.0,
+      "winning_block_active_freq": 0.6,
+      "full_ev": 0.9556099246048203,
+      "block_subspace_evs": [
+        0.741,
+        0.364,
+        0.353,
+        0.803
+      ]
+    },
+    "month": {
+      "layer": 8,
+      "n_labels": 12,
+      "d_reduced": 6,
+      "G": 4,
+      "block_size": 4,
+      "k_blocks": 1,
+      "winning_block": 3,
+      "winning_block_subspace_ev": 0.8115449996984643,
+      "runner_up_subspace_ev": 0.8027428322105505,
+      "winning_block_coord_stable_rank": 2.412203539830378,
+      "cyclic_adjacency_accuracy": 1.0,
+      "winning_block_active_freq": 0.5,
+      "full_ev": 0.9792510664131605,
+      "block_subspace_evs": [
+        0.803,
+        0.469,
+        0.426,
+        0.812
+      ]
+    }
+  }
+}
