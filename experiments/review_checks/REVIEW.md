@@ -158,11 +158,17 @@ arrow-Schur decline test). The lane is DONE + GREEN, not stalled:
   contract verified.
 - mixture_link gate widening (LogLog/Cauchit 5-jet Fisher) verified earlier + FD-tested.
 - fisher_weight tests passed earlier (exit 0).
-Recommend: no re-task needed for correctness; the one open thread is confirming EVERY
-caller of the arrow-Schur GPU path routes GpuRequiresDenseSystem → CPU fallback (the
-decline tests prove the variant is emitted; a caller audit would prove the fallback is
-wired at each site — latent_inner.rs:371 matches SchurFactorFailed, should also handle
-the new variant).
+Caller-audit thread — CLOSED (team-lead audited directly; no fix needed). The
+GpuRequiresDenseSystem variant lives on the DEVICE enum ArrowSchurGpuFailure and is
+absorbed at gpu/arrow_schur_gpu.rs:39 BEFORE any caller sees it: it switches the solve
+to ArrowSolverMode::InexactPCG (GPU reduced-Schur matvec if available, else CPU matvec)
+with NO ridge escalation; only genuine numerical failures become ArrowSchurError.
+latent_inner.rs:371's SchurFactorFailed match is on ArrowSchurError (the CPU enum, which
+has NO decline variant) — so the type system itself guarantees the decline cannot leak
+to that layer. O-solve lane fully GREEN + COMPLETE: decline tests 2/2, mixture_link
+verified, caller routing structurally sound.
+(My rule-8 block-OOS-numpy finding routed to BT1 to add a Rust
+block_sparse_dictionary_transform FFI in its streaming batch.)
 
 ## Baseline (established before lanes committed)
 
