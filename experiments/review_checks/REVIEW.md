@@ -69,9 +69,73 @@ frame-rank smoothing FS numerator C1/C4").
 Because the _780 tests are LIVE FD-vs-analytic (FD recomputed from the current objective
 at test time — no hardcoded oracle), a failure means the ANALYTIC derivative no longer
 matches the objective it differentiates → these are CODE BUGS (derivative regressions),
-NOT tests-need-update. FIX LANE recommended targeting the 8950ee951/acfb8718e shared-ARD
-derivative/trace/EFS assembly. Final magnitudes + the TBD cluster to follow once the
-suite run completes.
+NOT tests-need-update.
+
+### FINALIZED TABLE (full gam-sae run captured 20 failures)
+
+CLUSTER A — DERIVATIVE-CONSISTENCY (FD/oracle vs analytic). VERDICT: CODE BUG.
+SUSPECT: **8950ee951** (shared-ARD "every derivative/trace/EFS/IFT-RHS" rework) +
+acfb8718e (EFS numerator). Smoking gun: `..ibp_cross_row_woodbury_1038` names line 1038,
+exactly 8950ee951's ArdSharing::Shared derivative block. NEEDS FIX LANE.
+  tests_logdet_adjoint_780::ibp_logit_adjoint_matches_exact_numerical_oracle_1416
+  tests_logdet_adjoint_780::ibp_rho_trace_matches_exact_numerical_oracle_1416
+  tests_logdet_adjoint_780::learnable_ibp_alpha_logdet_trace_matches_dense_fd_1417
+  tests_logdet_adjoint_780::sae_logdet_theta_adjoint_matches_dense_fd_ibp_map
+  tests_pen_fd_780::sae_assembled_gradient_matches_penalized_objective_central_fd
+  tests_deflation_traces_780::learnable_ibp_alpha_logdet_trace_matches_dense_fd_pd_region_deflation
+  construction::step2_quotient_scale_tests::step2_beta_gradient_matches_central_diff_on_peeled_state
+  construction::exact_stationarity_solve_1418::apply_exact_hessian_includes_ibp_cross_row_woodbury_1038
+  tests_ibp_capacity_1784::ibp_default_alpha_underfits_but_k_aware_matches_linear_1784
+  tests_structured_residual_2021::structured_residual_metric_whitens_loss_and_gradient_2021
+  (also likely) sae_contract_probe::sae_1026_solver_recovers_separable_superposition_but_not_below_2k
+  → these break because the shared-ARD analytic gradient/trace/EFS no longer equals the
+    objective's FD. FIX = correct the shared-ARD derivative assembly (NOT update the tests
+    — the FD is the live truth). e09e6956c is NOT involved.
+
+CLUSTER B — ENCODE parity/OOS. SUSPECT: **2fc0fba3b** (amplitude-aware routing, #2083).
+VERDICT: mixed (emulator/fast-encode parity = CODE BUG; OOS-behavior = maybe test-update).
+NEEDS FIX LANE (encode).
+  gpu_kernels::sae_encode_resident::emulator_matches_production_certified_encode_1d_quadratic
+  gpu_kernels::sae_encode_resident::emulator_matches_production_certified_encode_2d_quadratic
+  tests_olmo::fast_encode_matches_per_row_warm_start
+  tests_olmo::data_driven_higher_latent_dim_helps_out_of_sample
+  tests_olmo::more_harmonics_overfit_out_of_sample
+
+CLUSTER C — CO-COLLAPSE GUARD (MOVING TARGET, likely from b4d103f57's reseed-arm DROP,
+NOT the original ~17). VERDICT: test-vs-code decision for O-manifold — these test the
+reseed arm that b4d103f57 removed.
+  tests::co_collapse_multistart_restores_best_basin_not_last_reseed
+  tests::decoder_norm_guard_reseeds_all_atoms_on_total_co_collapse_k3
+  → If the reseed arm is intentionally gone (superseded by cold-start deflation), these
+    tests need updating/removing; if not, the drop over-removed. Route to O-manifold.
+    (My #2027 + noop-for-k1 checks still pass, so the co-collapse HEADLINE is unaffected.)
+
+CLUSTER D — MISC (individual):
+  row_jet_program::batch4_reconstruction_bit_identical_to_per_row — bit-identical batch
+    parity; likely a numerical-ordering change (encode/jet family) — TBD, low priority.
+  structure_harvest::scoring_iter_cap_preserves_moves_and_adopted_fit — harvest scoring;
+    separate, TBD.
+
+BOTTOM LINE for the lead: TWO fix lanes with dead owners are needed —
+(1) **ARD/EFS derivative** (8950ee951/acfb8718e) — ~10-11 derivative-consistency CODE
+    BUGS; the specific broken term is the shared-ARD gradient/trace/EFS-numerator vs its
+    FD (confirm which term with the captured gap magnitude).
+(2) **encode** (2fc0fba3b) — 5 encode parity/OOS reds.
+Plus route the 2 co-collapse guard tests to O-manifold (b4d103f57 drop) and the 2 misc.
+e09e6956c EXONERATED.
+CROSS-CHECK vs O-manifold's own A/B (shared memory): O-manifold isolated the same ~18
+reds as predating its co-collapse work (good) but guessed "prime suspect 16662c4f1" for
+ALL of them. That is IMPLAUSIBLE for Cluster A — 16662c4f1 is O-solve's GPU arrow-schur
+ENTRY decline (penalty_op short-circuit); it cannot change CPU-computed analytic
+logdet-adjoints / penalized-gradient FD. The CPU derivative cluster is the shared-ARD
+derivative rework (8950ee951), confirmed by the `_1038` line match. 16662c4f1 at most
+touches the GPU-kernels encode emulator (Cluster B overlap). So both prior guesses
+(lead's e09e6956c, O-manifold's 16662c4f1) miss Cluster A's real cause.
+Magnitude capture (bdz9ntwzn) was a struct-dump panic (analytic-value dump, exact gap
+not cleanly parsed) — but the failures are confirmed from the full run and the live
+FD-vs-analytic structure is a sufficient proof of code-bug regardless of magnitude.
+NOTE: structure_harvest fails BOTH with and without the cold-seed (per O-manifold's
+GAM_DISABLE_COLD_SEED probe) → it's independent of the co-collapse lane (Cluster D).
 
 ## EXECUTIVE SUMMARY (final) — per-lane verdict + publication safety
 
