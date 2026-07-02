@@ -588,26 +588,73 @@ def plot_battery(out: dict, path: Path):
 # ---------------------------------------------------------------------------
 
 
-_SETS = ("weekday", "month")  # cached real harvests in probe_out/
+_SETS = ("weekday", "month")  # cached W7 real harvests in probe_out/
+PROBE_OUT = C.HERE / "probe_out"
+
+
+# Hue-wheel color-name tokens (a CYCLIC set: magenta wraps back to red). This is a
+# cheap Qwen2.5-0.5B color-NAME probe — the same cheap residual harvest that gave
+# weekday/month — NOT the W7 big-model color-SWATCH harvest (color_geometry.py,
+# D=7168, infeasible on this box). Reported as a related color-name analog.
+COLOR_TOKENS = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta"]
+
+
+def _color_set() -> dict:
+    return {"color": {
+        "labels": COLOR_TOKENS,
+        "order": list(range(len(COLOR_TOKENS))),
+        "cyclic": True,
+        "templates": [
+            "The wall was painted {x}.",
+            "She wore a {x} dress.",
+            "He bought a {x} car.",
+            "The {x} balloon floated away.",
+            "I really love the color {x}.",
+        ],
+    }}
+
+
+def phase_harvest_color() -> int:
+    """Cheap dedicated color-name harvest (resumable; skips if already cached)."""
+    C._cap_threads()
+    out = PROBE_OUT
+    if (out / "harvest_color.npz").exists():
+        print("[harvest_color] already cached", flush=True)
+        return 0
+    cfg = C.HarvestConfig()
+    C.harvest(cfg, _color_set(), out)   # saves harvest_color.npz, resumable
+    print(f"[harvest_color] cached at {out}/harvest_color.npz", flush=True)
+    return 0
 
 
 def _load_set(name: str):
-    """Load a cached W7 set, pick the same analysis layer as the headline json,
-    per-template demean it, and return (X, labels, n_labels, canonical)."""
-    entry, layers = C.load_harvest_set(name, C.HERE / "probe_out")
-    jf = C.HERE / "probe_out" / "curved_feature_probes.json"
-    res = json.loads(jf.read_text())["results"][name]
-    L = int(res["layer"])
+    """Load a cached set, pick the analysis layer, per-template demean, and return
+    (X, labels, n_labels, cyclic, canonical). W7 sets (weekday/month) reuse the
+    headline layer + record the claimed numbers; color picks its layer by the same
+    conservative LINEAR PCA diagnostic W7 uses (choose_layer)."""
+    entry, layers = C.load_harvest_set(name, PROBE_OUT)
+    jf = PROBE_OUT / "curved_feature_probes.json"
+    res = json.loads(jf.read_text())["results"] if jf.exists() else {}
+    if name in res:
+        L = int(res[name]["layer"])
+        r = res[name]
+        canonical = {
+            "layer": L,
+            "curved_ev_insample": r["insample_ev"]["curved"],
+            "linear_L1_insample": r["insample_ev"]["linear_L1"],
+            "linear_L2_insample": r["insample_ev"]["linear_L2"],
+            "cyclic_adjacency": r["ordering_curved"]["cyclic_adjacency_accuracy"],
+            "pca2d_adjacency": r["ordering_linear"]["pca2d_angle_cyclic_adjacency_accuracy"],
+        }
+    else:
+        # demean per template first (choose_layer expects the analysed signal)
+        dm = {**entry, **{L: C._demean_per_template(entry[L], entry["template_idx"])
+                          for L in layers}}
+        L, diag = C.choose_layer(dm, layers)
+        canonical = {"layer": int(L), "note": "color-name Qwen probe; layer by "
+                     "linear PCA diagnostic (no W7 headline to match)"}
     X = C._demean_per_template(entry[L], entry["template_idx"])
     labels = entry["rank"].astype(int)
-    canonical = {
-        "layer": L,
-        "curved_ev_insample": res["insample_ev"]["curved"],
-        "linear_L1_insample": res["insample_ev"]["linear_L1"],
-        "linear_L2_insample": res["insample_ev"]["linear_L2"],
-        "cyclic_adjacency": res["ordering_curved"]["cyclic_adjacency_accuracy"],
-        "pca2d_adjacency": res["ordering_linear"]["pca2d_angle_cyclic_adjacency_accuracy"],
-    }
     return X, labels, int(entry["n_labels"]), bool(entry["cyclic"]), canonical
 
 
@@ -854,6 +901,12 @@ def _drive(name: str, n_rot, n_gauss, n_perm, n_phase) -> None:
     tries = int(os.environ.get("MATCHED_NULL_RETRIES", "40"))
     common = ["--n-rot", str(n_rot), "--n-gauss", str(n_gauss),
               "--n-perm", str(n_perm), "--n-phase", str(n_phase)]
+    # 0) color needs a cheap model harvest first (retry — the box is kill-prone)
+    if name == "color":
+        for _ in range(tries):
+            if (PROBE_OUT / "harvest_color.npz").exists():
+                break
+            _retry(base, ["--phase", "harvest_color"], "color/harvest", 1)
     prep_npz, obs_json = _prep_paths(name)
     # 1) prep (1 fit) — retry until the observed json exists
     for _ in range(tries):
@@ -881,7 +934,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", type=str, default=None, help="which cached set")
     ap.add_argument("--phase", type=str, default=None,
-                    choices=["prep", "fast", "collect", "assemble", "oneshot"])
+                    choices=["harvest_color", "prep", "fast", "collect", "assemble", "oneshot"])
     ap.add_argument("--which", type=str, default=None,
                     choices=["rotation", "matched_spectrum"])
     ap.add_argument("--synthetic", action="store_true", help="planted-circle sanity check")
@@ -894,6 +947,8 @@ def main() -> int:
     kw = dict(n_rot=args.n_rot, n_gauss=args.n_gauss, n_perm=args.n_perm, n_phase=args.n_phase)
 
     # ---- individual phases (invoked by the driver as isolated subprocesses) ----
+    if args.phase == "harvest_color":
+        return phase_harvest_color()
     if args.phase == "prep":
         return phase_prep(args.set)
     if args.phase == "fast":
