@@ -89,11 +89,16 @@ def compute_t0(mean: np.ndarray, norm: np.ndarray) -> dict:
 
 
 def _provisional_manifest(writer: ShardWriter) -> None:
-    """Dump a readable manifest mid-run without closing the writer."""
+    """Dump a readable manifest mid-run without closing the writer.
+
+    Carries the T0 block (computed from the running stats) so a consumer that
+    opens an interim slice still sees mean/std/rms/rogue_dims/scale.
+    """
     if writer._cur_file is not None:
         writer._cur_file.flush()
     man = writer._build_manifest()
     man["provisional"] = True
+    man["t0"] = compute_t0(man["stats"]["mean"], man["stats"]["norm"])
     with open(os.path.join(writer.out_dir, MANIFEST_NAME), "w") as f:
         json.dump(man, f)
 
