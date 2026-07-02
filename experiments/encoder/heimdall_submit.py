@@ -34,11 +34,15 @@ def wrap_command(name: str, inner: str, scratch: str = SCRATCH) -> str:
 
 
 def submit(name: str, inner: str, *, node: str = "node2", scratch: str = SCRATCH) -> dict:
+    # Heimdall SubmitRequest wraps the job in a ``spec`` field.
     payload = {
-        "job_type": "custom",
-        "command": wrap_command(name, inner, scratch),
-        "gpus": 0,
-        "node": node,
+        "spec": {
+            "job_type": "custom",
+            "name": name,
+            "command": wrap_command(name, inner, scratch),
+            "gpus": 0,
+            "node": node,
+        }
     }
     out = subprocess.run(
         ["curl", "-s", "-m", "20", "-X", "POST", HEIMDALL,
