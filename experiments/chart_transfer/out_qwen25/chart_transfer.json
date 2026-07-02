@@ -1,0 +1,486 @@
+{
+  "config": {
+    "source": "qwen25",
+    "pca_dim": 16,
+    "steps": 800,
+    "n_basis": 4,
+    "n_seeds": 3,
+    "seed": 0
+  },
+  "results": {
+    "weekday": {
+      "name": "weekday",
+      "layers": [
+        5,
+        8,
+        11,
+        14
+      ],
+      "fit_layers": [
+        5,
+        8,
+        11,
+        14
+      ],
+      "cyclic": true,
+      "per_layer": {
+        "5": {
+          "ev": 0.6232781828082845,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 8.230831623077393
+        },
+        "8": {
+          "ev": 0.5637277864318055,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.3106606006622314
+        },
+        "11": {
+          "ev": 0.6015195422024098,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.3185219764709473
+        },
+        "14": {
+          "ev": 0.6133147238737253,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.252081871032715
+        }
+      },
+      "hops_sae": [
+        {
+          "layer_from": 5,
+          "layer_to": 8,
+          "degree": -1,
+          "degree_concentration": 0.6188736171453098,
+          "isometry_defect": 0.4713896656341115,
+          "isometry_defect_se": 0.24251991055871303,
+          "topology_preserved": false,
+          "transport_edf": 3.814513592076975,
+          "residual_rms": 0.7491744424533698,
+          "r2_native": 0.5637277864318055,
+          "r2_transported": -2.316493059531622,
+          "compute_gap": 2.8802208459634278
+        },
+        {
+          "layer_from": 8,
+          "layer_to": 11,
+          "degree": -1,
+          "degree_concentration": 0.7949209083991219,
+          "isometry_defect": 0.9596325015667152,
+          "isometry_defect_se": 0.36331884994699437,
+          "topology_preserved": false,
+          "transport_edf": 4.864453197657958,
+          "residual_rms": 0.4182608635732116,
+          "r2_native": 0.6015195422024098,
+          "r2_transported": -3.8236631099314975,
+          "compute_gap": 4.425182652133907
+        },
+        {
+          "layer_from": 11,
+          "layer_to": 14,
+          "degree": 2,
+          "degree_concentration": 0.7542146596729953,
+          "isometry_defect": 0.8025741074376622,
+          "isometry_defect_se": 0.4371392018086449,
+          "topology_preserved": false,
+          "transport_edf": 5.7500433127855946,
+          "residual_rms": 0.21520810893522735,
+          "r2_native": 0.6133147238737253,
+          "r2_transported": 0.5504902514979522,
+          "compute_gap": 0.06282447237577315
+        }
+      ],
+      "hops_pca": [
+        {
+          "layer_from": 5,
+          "layer_to": 8,
+          "degree": -1,
+          "degree_concentration": 0.82623345004383,
+          "isometry_defect": 0.0031868565539628383,
+          "isometry_defect_se": 0.00694200848180694,
+          "topology_preserved": true,
+          "transport_edf": 1.713215556528198,
+          "residual_rms": 0.5950666094176897
+        },
+        {
+          "layer_from": 8,
+          "layer_to": 11,
+          "degree": -1,
+          "degree_concentration": 0.7942033098775849,
+          "isometry_defect": 5.769136909398398,
+          "isometry_defect_se": 2.1643635085671846,
+          "topology_preserved": false,
+          "transport_edf": 7.096239468557001,
+          "residual_rms": 0.3142591577898863
+        },
+        {
+          "layer_from": 11,
+          "layer_to": 14,
+          "degree": 1,
+          "degree_concentration": 0.8150214961523877,
+          "isometry_defect": 2.059643815211022,
+          "isometry_defect_se": 1.535584067375531,
+          "topology_preserved": false,
+          "transport_edf": 6.193741723830384,
+          "residual_rms": 0.4908235989519279
+        }
+      ],
+      "ladder": {
+        "adjacent": [
+          {
+            "layer_from": 5,
+            "layer_to": 8,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": -1,
+            "degree_concentration": 0.6188736171453098,
+            "rotation_offset": -2.234040593398941,
+            "isometry_defect": 0.4713896656341115,
+            "isometry_defect_se": 0.24251991055871303,
+            "min_directional_derivative": -0.14969071021631564,
+            "transport_edf": 3.814513592076975,
+            "smoothing_lambda": 0.575400898853719,
+            "noise_variance": 0.6299142436301806,
+            "residual_rms": 0.7491744424533698,
+            "n_obs": 35,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          },
+          {
+            "layer_from": 8,
+            "layer_to": 11,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": -1,
+            "degree_concentration": 0.7949209083991219,
+            "rotation_offset": 0.30988783881419274,
+            "isometry_defect": 0.9596325015667152,
+            "isometry_defect_se": 0.36331884994699437,
+            "min_directional_derivative": -0.24752899022610153,
+            "transport_edf": 4.864453197657958,
+            "smoothing_lambda": 0.07852827506352185,
+            "noise_variance": 0.20318115646136034,
+            "residual_rms": 0.4182608635732116,
+            "n_obs": 35,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          },
+          {
+            "layer_from": 11,
+            "layer_to": 14,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": 2,
+            "degree_concentration": 0.7542146596729953,
+            "rotation_offset": -2.3828401494413174,
+            "isometry_defect": 0.8025741074376622,
+            "isometry_defect_se": 0.4371392018086449,
+            "min_directional_derivative": 0.3613084123282939,
+            "transport_edf": 5.7500433127855946,
+            "smoothing_lambda": 0.00798938753748243,
+            "noise_variance": 0.055419177971304516,
+            "residual_rms": 0.21520810893522735,
+            "n_obs": 35,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          }
+        ],
+        "two_hop": [
+          {
+            "layer_from": 5,
+            "layer_to": 11,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": true,
+            "degree": 1,
+            "degree_concentration": 0.6317575008986651,
+            "rotation_offset": 2.3872705243224535,
+            "isometry_defect": 0.26011996288910044,
+            "isometry_defect_se": 0.141218149595923,
+            "min_directional_derivative": 0.2391999533342628,
+            "transport_edf": 3.214785831896914,
+            "smoothing_lambda": 1.4697500713517673,
+            "noise_variance": 0.6777969098488723,
+            "residual_rms": 0.784563936063938,
+            "n_obs": 35,
+            "composition_defect": 0.27467230106117385,
+            "composition_max_studentized": 1.2055391565264946,
+            "composition_p_value": 3.510112002169663e-07,
+            "composition_gauge_reflected": false
+          },
+          {
+            "layer_from": 8,
+            "layer_to": 14,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": -1,
+            "degree_concentration": 0.4064005317441805,
+            "rotation_offset": -1.0620438855689618,
+            "isometry_defect": 3.574426792046305,
+            "isometry_defect_se": 1.1509045908103972,
+            "min_directional_derivative": -0.24812185085415317,
+            "transport_edf": 4.442650479139351,
+            "smoothing_lambda": 0.14017465584115268,
+            "noise_variance": 0.6703419194155901,
+            "residual_rms": 0.7650186240509216,
+            "n_obs": 35,
+            "composition_defect": 0.8871612243871407,
+            "composition_max_studentized": 1.6842826987444675,
+            "composition_p_value": 0.029129685239369207,
+            "composition_gauge_reflected": false
+          }
+        ]
+      }
+    },
+    "month": {
+      "name": "month",
+      "layers": [
+        5,
+        8,
+        11,
+        14
+      ],
+      "fit_layers": [
+        5,
+        8,
+        11,
+        14
+      ],
+      "cyclic": true,
+      "per_layer": {
+        "5": {
+          "ev": 0.5929963492900006,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.266132116317749
+        },
+        "8": {
+          "ev": 0.5374801585820839,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.383347272872925
+        },
+        "11": {
+          "ev": 0.6204066990479075,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.2658047676086426
+        },
+        "14": {
+          "ev": 0.6217685423511574,
+          "decode_ok": true,
+          "decode_rel": 0.0,
+          "secs": 3.2873170375823975
+        }
+      },
+      "hops_sae": [
+        {
+          "layer_from": 5,
+          "layer_to": 8,
+          "degree": 1,
+          "degree_concentration": 0.575397589336083,
+          "isometry_defect": 0.1715096453686311,
+          "isometry_defect_se": 0.1900391603740407,
+          "topology_preserved": true,
+          "transport_edf": 3.037870451527084,
+          "residual_rms": 1.06371655060328,
+          "r2_native": 0.5374801585820839,
+          "r2_transported": -3.4185680423263474,
+          "compute_gap": 3.9560482009084312
+        },
+        {
+          "layer_from": 8,
+          "layer_to": 11,
+          "degree": 1,
+          "degree_concentration": 0.5706260008537432,
+          "isometry_defect": 37.89019123275384,
+          "isometry_defect_se": 25.113520730348668,
+          "topology_preserved": false,
+          "transport_edf": 7.2032157867595155,
+          "residual_rms": 0.5239257920181425,
+          "r2_native": 0.6204066990479075,
+          "r2_transported": 0.3395666929464993,
+          "compute_gap": 0.28084000610140814
+        },
+        {
+          "layer_from": 11,
+          "layer_to": 14,
+          "degree": 1,
+          "degree_concentration": 0.5579872981295445,
+          "isometry_defect": 2.1597175159069453,
+          "isometry_defect_se": 1.022732644313613,
+          "topology_preserved": false,
+          "transport_edf": 4.809661530295698,
+          "residual_rms": 0.6982842374085382,
+          "r2_native": 0.6217685423511574,
+          "r2_transported": -2.1342010625328403,
+          "compute_gap": 2.7559696048839974
+        }
+      ],
+      "hops_pca": [
+        {
+          "layer_from": 5,
+          "layer_to": 8,
+          "degree": -1,
+          "degree_concentration": 0.9091109308426221,
+          "isometry_defect": 1.015066409326827,
+          "isometry_defect_se": 0.21039946909712445,
+          "topology_preserved": false,
+          "transport_edf": 6.61500452451551,
+          "residual_rms": 0.12538767447046384
+        },
+        {
+          "layer_from": 8,
+          "layer_to": 11,
+          "degree": -1,
+          "degree_concentration": 0.9760345654531338,
+          "isometry_defect": 0.3833169788135986,
+          "isometry_defect_se": 0.1452223498764482,
+          "topology_preserved": true,
+          "transport_edf": 5.997472412420918,
+          "residual_rms": 0.12440926658381846
+        },
+        {
+          "layer_from": 11,
+          "layer_to": 14,
+          "degree": 1,
+          "degree_concentration": 0.8407156375952533,
+          "isometry_defect": 0.23962210898220002,
+          "isometry_defect_se": 0.10298015857127256,
+          "topology_preserved": false,
+          "transport_edf": 7.071220997348918,
+          "residual_rms": 0.12441249817312768
+        }
+      ],
+      "ladder": {
+        "adjacent": [
+          {
+            "layer_from": 5,
+            "layer_to": 8,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": true,
+            "degree": 1,
+            "degree_concentration": 0.575397589336083,
+            "rotation_offset": -0.033985608530662494,
+            "isometry_defect": 0.1715096453686311,
+            "isometry_defect_se": 0.1900391603740407,
+            "min_directional_derivative": 0.3265508053372278,
+            "transport_edf": 3.037870451527084,
+            "smoothing_lambda": 1.6098013334333257,
+            "noise_variance": 1.1918370071446962,
+            "residual_rms": 1.06371655060328,
+            "n_obs": 60,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          },
+          {
+            "layer_from": 8,
+            "layer_to": 11,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": 1,
+            "degree_concentration": 0.5706260008537432,
+            "rotation_offset": 0.2898275291650494,
+            "isometry_defect": 37.89019123275384,
+            "isometry_defect_se": 25.113520730348668,
+            "min_directional_derivative": -18.138398571104293,
+            "transport_edf": 7.2032157867595155,
+            "smoothing_lambda": 0.00043596973950320506,
+            "noise_variance": 0.31194881237444616,
+            "residual_rms": 0.5239257920181425,
+            "n_obs": 60,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          },
+          {
+            "layer_from": 11,
+            "layer_to": 14,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": 1,
+            "degree_concentration": 0.5579872981295445,
+            "rotation_offset": 2.4114500377462447,
+            "isometry_defect": 2.1597175159069453,
+            "isometry_defect_se": 1.022732644313613,
+            "min_directional_derivative": -1.6350527581520824,
+            "transport_edf": 4.809661530295698,
+            "smoothing_lambda": 0.03476243759289588,
+            "noise_variance": 0.5300937335046964,
+            "residual_rms": 0.6982842374085382,
+            "n_obs": 60,
+            "composition_defect": null,
+            "composition_max_studentized": null,
+            "composition_p_value": null,
+            "composition_gauge_reflected": null
+          }
+        ],
+        "two_hop": [
+          {
+            "layer_from": 5,
+            "layer_to": 11,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": 1,
+            "degree_concentration": 0.7712589244188928,
+            "rotation_offset": -0.025622177307731045,
+            "isometry_defect": 2.0934729896263446,
+            "isometry_defect_se": 1.025522347445571,
+            "min_directional_derivative": -1.2919026425501596,
+            "transport_edf": 4.897179680521576,
+            "smoothing_lambda": 0.03401900682751316,
+            "noise_variance": 0.20833454385473954,
+            "residual_rms": 0.4374132473296507,
+            "n_obs": 60,
+            "composition_defect": 1.2332175357221318,
+            "composition_max_studentized": 1.9220366149428245,
+            "composition_p_value": 0.00023591819161927763,
+            "composition_gauge_reflected": false
+          },
+          {
+            "layer_from": 8,
+            "layer_to": 14,
+            "topology_from": "circle",
+            "topology_to": "circle",
+            "topology_preserved": false,
+            "degree": 2,
+            "degree_concentration": 0.7536733517058827,
+            "rotation_offset": 1.4356990180565683,
+            "isometry_defect": 13.961585639293917,
+            "isometry_defect_se": 2.598895718548368,
+            "min_directional_derivative": -5.409735268065016,
+            "transport_edf": 7.3172910348061295,
+            "smoothing_lambda": 0.00033533426858000655,
+            "noise_variance": 0.06189753803483835,
+            "residual_rms": 0.23312836170771553,
+            "n_obs": 60,
+            "composition_defect": 1.7014388922103747,
+            "composition_max_studentized": 9.785468922622805,
+            "composition_p_value": 0.0,
+            "composition_gauge_reflected": true
+          }
+        ]
+      }
+    }
+  }
+}
