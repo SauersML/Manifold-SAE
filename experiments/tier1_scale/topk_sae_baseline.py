@@ -27,14 +27,21 @@ def load_manifest(mp):
     return train, held, t0
 
 
-def load_harvest(harvest_dir, residual_io, cap, heldout_stride):
-    """Load a residual_shard_io harvest into (train_np, held_np, t0) with a
-    row-hash held-out split matching the T1 runner, capped at `cap` train rows."""
-    import sys
-    sys.path.insert(0, residual_io)
-    from residual_shard_io import load_shards
-    r = load_shards(harvest_dir)
-    man = r.manifest
+def _bf16_to_f32(bits):
+    u = np.ascontiguousarray(bits, dtype=np.uint16).astype(np.uint32) << 16
+    return u.view(np.float32)
+
+
+def load_harvest(harvest_dir, residual_io, cap, heldout_stride, heldout_cap=200000):
+    """Load a residual_shard_io bf16 harvest into (train_np, held_np, t0).
+
+    Robust to a live-growing harvest: shard rows are derived from on-disk file
+    size with an explicit-shape memmap (never trusts stale manifest row counts).
+    Row-hash held-out split matches the T1 runner; train capped at `cap` rows."""
+    import glob, os
+    with open(os.path.join(harvest_dir, "manifest.json")) as fh:
+        man = json.load(fh)
+    P = int(man["d_model"])
     t0src = man.get("t0") or man.get("stats") or {}
     t0 = {}
     if t0src.get("mean") is not None:
@@ -42,16 +49,26 @@ def load_harvest(harvest_dir, residual_io, cap, heldout_stride):
     for k in ("scale", "std", "rms", "norm"):
         if t0src.get(k) is not None:
             t0["scale"] = np.asarray(t0src[k], dtype=np.float32); break
+    files = sorted(glob.glob(os.path.join(harvest_dir, "shard_*.bf16")))
     tr, hd = [], []
-    counter = 0; ntr = 0
-    for b in r.batches(4096):
-        m = b.shape[0]
-        hmask = (np.arange(counter, counter + m) % heldout_stride == 0)
-        counter += m
-        if ntr < cap:
-            t = b[~hmask]; t = t[: cap - ntr]; tr.append(t); ntr += t.shape[0]
-        hd.append(b[hmask])
-        if ntr >= cap:
+    counter = 0; ntr = 0; nhd = 0
+    for f in files:
+        rows = os.path.getsize(f) // (P * 2)
+        if rows == 0:
+            continue
+        mm = np.memmap(f, dtype=np.dtype("<u2"), mode="r", shape=(rows, P))
+        for pos in range(0, rows, 4096):
+            b = _bf16_to_f32(np.asarray(mm[pos:pos + 4096]))
+            m = b.shape[0]
+            hmask = (np.arange(counter, counter + m) % heldout_stride == 0)
+            counter += m
+            if ntr < cap:
+                t = b[~hmask][: cap - ntr]; tr.append(t); ntr += t.shape[0]
+            if nhd < heldout_cap:
+                h = b[hmask][: heldout_cap - nhd]; hd.append(h); nhd += h.shape[0]
+            if ntr >= cap and nhd >= heldout_cap:
+                break
+        if ntr >= cap and nhd >= heldout_cap:
             break
     return np.concatenate(tr, 0), (np.concatenate(hd, 0) if hd else None), t0
 
@@ -106,10 +123,11 @@ def main():
     W_dec = torch.nn.functional.normalize(torch.randn(K, P, generator=g), dim=1)
     W_enc = W_dec.clone()                      # tied init
     b_enc = torch.zeros(K)
-    for t in (W_dec, W_enc, b_enc, b_dec):
-        t.requires_grad_(True)
-    Xtr = Xtr.to(dev);
-    if Xho is not None: Xho = Xho.to(dev)
+    # Data stays on CPU (a full harvest is far larger than free GPU memory on a
+    # co-tenant B200); only the model, optimizer state, and the current minibatch
+    # live on the device.
+    Xtr = Xtr.contiguous()
+    if Xho is not None: Xho = Xho.contiguous()
     W_dec, W_enc, b_enc, b_dec = (t.to(dev).detach().requires_grad_(True) for t in (W_dec, W_enc, b_enc, b_dec))
     opt = torch.optim.Adam([W_enc, W_dec, b_enc, b_dec], lr=args.lr)
 
@@ -123,8 +141,8 @@ def main():
 
     t0t = time.time()
     for step in range(args.steps):
-        idx = torch.randint(0, N, (args.batch,), generator=g, device="cpu").to(dev)
-        x = Xtr[idx]
+        idx = torch.randint(0, N, (args.batch,), generator=g, device="cpu")
+        x = Xtr[idx].to(dev)
         xhat = encode_decode(x)
         loss = ((x - xhat) ** 2).sum(1).mean()
         opt.zero_grad(); loss.backward()
@@ -142,7 +160,7 @@ def main():
             mu = X.mean(0)
             sst = float(((X - mu) ** 2).sum())
             for i in range(0, X.shape[0], args.batch):
-                xb = X[i:i + args.batch]
+                xb = X[i:i + args.batch].to(dev)
                 sse += float(((xb - encode_decode(xb)) ** 2).sum())
             return 1.0 - sse / sst if sst > 0 else float("nan")
 

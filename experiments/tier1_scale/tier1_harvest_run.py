@@ -7,38 +7,95 @@ a deterministic ~fraction of rows (row-hash split; works for a single growing
 shard or many), checkpoints the decoder every epoch (resumable), evaluates
 held-out EV, and exports a content-hashed dictionary artifact with T0 baked in.
 
-Reader contract: residual_shard_io.load_shards(dir).batches(n) -> float32
-(<=n, d_model); T0 in reader.manifest["t0"] (mean/std/rms/rogue_dims/scale) or
-the writer's reader.manifest["stats"] (mean/norm) fallback.
+Robust to a LIVE-GROWING harvest: shard row counts are derived from on-disk
+file size with an explicit-shape memmap (bytes = rows * d_model * 2), so a stale
+provisional manifest whose declared rows lag the growing last shard never
+crashes the reshape. Only d_model and T0 are taken from manifest.json; T0 comes
+from manifest["t0"] (mean/std/rms/rogue_dims/scale) or the writer's
+manifest["stats"] (mean/norm) fallback.
 
 Math lives in the Rust core (SparseDictStream); this is thin orchestration.
 CLI-flag driven (no env-var toggles).
 """
-import argparse, hashlib, json, os, sys, time
+import argparse, glob, hashlib, json, os, time
 from pathlib import Path
 import numpy as np
+
+_DISK = np.dtype("<u2")  # bf16 bit-patterns, little-endian
 
 
 def log(m): print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 
-def get_t0(manifest):
-    """Return {mean, scale} float32 arrays from the harvest manifest.
+def bf16_to_f32(bits):
+    u = np.ascontiguousarray(bits, dtype=np.uint16).astype(np.uint32) << 16
+    return u.view(np.float32)
 
-    Prefers the WS-D 't0' block (mean + scale/std/rms); falls back to the
-    ShardWriter 'stats' block (mean + norm). Missing pieces are left as None.
+
+class Harvest:
+    """Self-contained robust reader over shard_*.bf16 files.
+
+    Row counts are computed from file size (not the manifest), so a stale
+    provisional manifest never breaks reads. Memmaps use an explicit shape so a
+    file that grows after open is read only up to its size-at-open.
     """
-    t0 = manifest.get("t0") or manifest.get("T0")
+
+    def __init__(self, out_dir):
+        self.dir = out_dir
+        with open(os.path.join(out_dir, "manifest.json")) as fh:
+            self.manifest = json.load(fh)
+        self.d_model = int(self.manifest["d_model"])
+        self.files = sorted(glob.glob(os.path.join(out_dir, "shard_*.bf16")))
+        self.rows = [os.path.getsize(f) // (self.d_model * 2) for f in self.files]
+        self.total = int(sum(self.rows))
+
+    def _mm(self, i):
+        return np.memmap(self.files[i], dtype=_DISK, mode="r",
+                         shape=(self.rows[i], self.d_model))
+
+    def batches(self, n):
+        parts, have = [], 0
+        for i in range(len(self.files)):
+            if self.rows[i] == 0:
+                continue
+            mm = self._mm(i)
+            pos, R = 0, self.rows[i]
+            while pos < R:
+                take = min(n - have, R - pos)
+                parts.append(np.asarray(mm[pos:pos + take]))
+                have += take
+                pos += take
+                if have == n:
+                    yield bf16_to_f32(parts[0] if len(parts) == 1 else np.concatenate(parts, 0))
+                    parts, have = [], 0
+        if have:
+            yield bf16_to_f32(parts[0] if len(parts) == 1 else np.concatenate(parts, 0))
+
+    def seed_sample(self, n):
+        """~n rows drawn evenly across shards (bf16->f32)."""
+        if self.total == 0:
+            return np.empty((0, self.d_model), dtype=np.float32)
+        out, remaining = [], min(n, self.total)
+        for i in range(len(self.files)):
+            if remaining <= 0 or self.rows[i] == 0:
+                break
+            quota = min(self.rows[i], max(int(round(n * self.rows[i] / self.total)), 1), remaining)
+            out.append(bf16_to_f32(np.asarray(self._mm(i)[:quota])))
+            remaining -= quota
+        return np.concatenate(out, 0) if out else np.empty((0, self.d_model), dtype=np.float32)
+
+
+def get_t0(manifest):
+    t0src = manifest.get("t0") or manifest.get("T0")
     stats = manifest.get("stats")
-    mean = scale = None
-    rogue = None
-    if t0:
-        if t0.get("mean") is not None:
-            mean = np.asarray(t0["mean"], dtype=np.float32)
+    mean = scale = rogue = None
+    if t0src:
+        if t0src.get("mean") is not None:
+            mean = np.asarray(t0src["mean"], dtype=np.float32)
         for k in ("scale", "std", "rms", "norm"):
-            if t0.get(k) is not None:
-                scale = np.asarray(t0[k], dtype=np.float32); break
-        rogue = t0.get("rogue_dims")
+            if t0src.get(k) is not None:
+                scale = np.asarray(t0src[k], dtype=np.float32); break
+        rogue = t0src.get("rogue_dims")
     elif stats:
         if stats.get("mean") is not None:
             mean = np.asarray(stats["mean"], dtype=np.float32)
@@ -75,8 +132,6 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--harvest-dir", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--residual-io", default="/models/sauers_build/gam_fable/examples",
-                    help="dir containing residual_shard_io.py")
     ap.add_argument("--k", type=int, default=32768)
     ap.add_argument("--active", type=int, default=32)
     ap.add_argument("--minibatch", type=int, default=4096)
@@ -85,16 +140,14 @@ def main():
     ap.add_argument("--code-ridge", type=float, default=1e-6)
     ap.add_argument("--decoder-ridge", type=float, default=1e-6)
     ap.add_argument("--tolerance", type=float, default=1e-6)
-    ap.add_argument("--seed-rows", type=int, default=300000)
-    ap.add_argument("--heldout-stride", type=int, default=20, help="1/N rows held out")
+    ap.add_argument("--seed-rows", type=int, default=100000)
+    ap.add_argument("--heldout-stride", type=int, default=20)
     ap.add_argument("--heldout-cap", type=int, default=200000)
     ap.add_argument("--center", dest="center", action="store_true", default=True)
     ap.add_argument("--no-center", dest="center", action="store_false")
     ap.add_argument("--resume", action="store_true")
     args = ap.parse_args()
 
-    sys.path.insert(0, args.residual_io)
-    from residual_shard_io import load_shards, stratified_subsample
     import gamfit
     log(f"gamfit {gamfit.__version__}")
 
@@ -102,12 +155,13 @@ def main():
     ckpt_dir = out / "ckpt"; ckpt_dir.mkdir(exist_ok=True)
     ckpt_dec = ckpt_dir / "decoder.npy"; ckpt_meta = ckpt_dir / "meta.json"
 
-    reader = load_shards(args.harvest_dir)
-    P = reader.d_model
-    t0 = get_t0(reader.manifest)
-    log(f"harvest {args.harvest_dir}: total_tokens={reader.total_tokens} P={P} "
-        f"shards={len(reader.shards)} t0_mean={'y' if t0['mean'] is not None else 'n'} "
-        f"t0_scale={'y' if t0['scale'] is not None else 'n'} rogue={t0.get('rogue_dims')}")
+    hv = Harvest(args.harvest_dir)
+    P = hv.d_model
+    t0 = get_t0(hv.manifest)
+    log(f"harvest {args.harvest_dir}: files={len(hv.files)} rows={hv.total} P={P} "
+        f"t0_mean={'y' if t0['mean'] is not None else 'n'} "
+        f"t0_scale={'y' if t0['scale'] is not None else 'n'} "
+        f"rogue={None if t0.get('rogue_dims') is None else len(t0['rogue_dims'])}")
 
     config = dict(k=args.k, active=args.active, minibatch=args.minibatch,
                   score_tile=args.score_tile, code_ridge=args.code_ridge,
@@ -115,28 +169,23 @@ def main():
                   center=args.center, heldout_stride=args.heldout_stride)
 
     def train_held_batches(mb):
-        """Yield (train_rows, held_rows_or_None) applying the row-hash split."""
         counter = 0
         held_taken = 0
-        for b in reader.batches(mb):
+        for b in hv.batches(mb):
             m = b.shape[0]
-            idx = np.arange(counter, counter + m)
-            hmask = (idx % args.heldout_stride == 0)
+            hmask = (np.arange(counter, counter + m) % args.heldout_stride == 0)
             if held_taken >= args.heldout_cap:
                 hmask[:] = False
             counter += m
             tr = b[~hmask]
             hd = b[hmask]
             if hd.shape[0] and held_taken < args.heldout_cap:
-                room = args.heldout_cap - held_taken
-                hd = hd[:room]; held_taken += hd.shape[0]
+                hd = hd[: args.heldout_cap - held_taken]; held_taken += hd.shape[0]
             else:
                 hd = None
             yield tr, hd
 
-    start_epoch = 0
-    ev_history = []
-    resumed = False
+    start_epoch, ev_history, resumed = 0, [], False
     if args.resume and ckpt_dec.exists() and ckpt_meta.exists():
         seed = np.load(ckpt_dec).astype(np.float32)
         meta = json.loads(ckpt_meta.read_text())
@@ -145,8 +194,8 @@ def main():
         log(f"RESUME epoch {start_epoch} decoder {seed.shape} last_EV "
             f"{ev_history[-1] if ev_history else 'NA'}")
     else:
-        seed = apply_t0(stratified_subsample(reader, args.seed_rows), t0, args.center)
-        log(f"seed sample {seed.shape} (stratified)")
+        seed = apply_t0(hv.seed_sample(args.seed_rows), t0, args.center)
+        log(f"seed sample {seed.shape}")
 
     stream = gamfit.SparseDictStream(
         seed, args.k, active=args.active, minibatch=args.minibatch,
@@ -155,7 +204,6 @@ def main():
         tolerance=args.tolerance)
     log(f"stream K={args.k} active={stream.active} P={P}")
 
-    # Collect the held-out set once (epoch 0); it is identical every epoch.
     held_chunks = []
     t_run0 = time.time(); total_rows = 0
     for epoch in range(start_epoch, args.max_epochs):
@@ -205,16 +253,17 @@ def main():
     np.save(out / "decoder.npy", art.decoder)
     result = {
         "workstream": "WS-C tier1 (qwen3 harvest)", "gamfit_version": gamfit.__version__,
-        "harvest_dir": args.harvest_dir, "model": reader.manifest.get("model", "Qwen3-32B"),
+        "harvest_dir": args.harvest_dir, "model": hv.manifest.get("model", "Qwen3-32B"),
         "K": args.k, "active_L0": int(stream.active), "P": int(P),
-        "total_tokens_available": int(reader.total_tokens),
+        "total_tokens_available": int(hv.total),
         "train_ev_final": float(art.explained_variance),
         "ev_history": [float(e) for e in ev_history],
         "heldout_ev": float(ho_ev), "heldout_rows": int(ho_n),
         "epochs_run": int(art.epochs), "converged": bool(art.converged),
         "total_rows_seen": int(total_rows), "wall_s": round(run_s, 1),
         "throughput_rows_per_s": round(throughput, 1),
-        "t0_center": args.center, "rogue_dims": t0.get("rogue_dims"),
+        "t0_center": args.center,
+        "rogue_dims_count": None if t0.get("rogue_dims") is None else len(t0["rogue_dims"]),
         "content_hash": chash, "config": config, "resumed": resumed,
     }
     (out / "tier1_result.json").write_text(json.dumps(result, indent=2))
