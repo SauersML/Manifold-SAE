@@ -12,9 +12,10 @@ torch process; draws are fsync-checkpointed per fit and resumed by index).
 
 Nulls: **32** rotations, **80** matched-spectrum Gaussians, **5000** label
 permutations, **5000** phase scrambles per set. Empirical p uses the +1
-correction. `year`/`color` are not in `probe_out/` (year was OOM-blocked in W7;
-color lives in a different harvest) — the battery is ready for both via
-`null_battery(X, labels, n_labels=..., cyclic=True)`.
+correction. `weekday`/`month` are the cached W7 harvests; `color` is a cheap
+Qwen color-NAME harvest added here (see the scope caveat below — it is **not**
+W7's big-model color-swatch claim). `year` was OOM-blocked in W7. Any set runs
+via `null_battery(X, labels, n_labels=..., cyclic=True)`.
 
 ## Pass/fail per claim
 
@@ -26,6 +27,9 @@ color lives in a different harvest) — the battery is ready for both via
 | **weekday** | C1 EV parity | gap-closed vs matched-spectrum Gaussian | 1.024 | 0.952 / **p=0.16** | **FAIL** |
 | **weekday** | C2 cyclic order | cyclic-adjacency vs random labelling | 0.714 (5/7) | 0.334 / **p=0.042** | **PASS (marginal)** |
 | **weekday** | C2 basis-real (corrob.) | adjacency-under-rotation ≥ chance95 | — | basis-real **0.22** | **WEAK** |
+| **color-name** | C2 cyclic order (hue) | cyclic-adjacency vs random labelling | 0.125 (1/8) | 0.286 / **p=0.93** | **FAIL** (no circle) |
+| **color-name** | C2 basis-real (corrob.) | adjacency-under-rotation ≥ chance95 | — | basis-real **0.00** | **FAIL** |
+| **color-name** | C1 EV parity | gap-closed vs matched-spectrum Gaussian | 0.999 | 0.650 / **p=0.11** | **n.s.** |
 
 Supplementary phase-locking diagnostic (NOT a gate on C2 — see below):
 
@@ -70,6 +74,24 @@ honest statement of *what kind* of structure it is: low-frequency smoothness, th
 same for both. The sharp higher-harmonic form of this null is the right tool for
 the **G-bsf** curve-manifold and **N-nursery** multi-harmonic claims, where FMF is
 lower — for a single circle it is supplementary.
+
+## Color (name-token analog — important scope caveat)
+
+W7's color claim came from a **big-model color-SWATCH harvest** (`color_geometry.py`,
+D=7168) that cannot run on this box. `null_color.json` here is a **cheap
+Qwen2.5-0.5B color-NAME probe** — 8 hue-wheel words (red…magenta) × 5 templates,
+the same harvest that gave weekday/month. It is a *related analog, not W7's color
+claim*, and it does **not** refute W7's swatch result.
+
+Finding: color-NAME tokens do **not** form a recovered hue circle. The recovered
+angle orders the 8 colors no better than chance (adjacency 1/8, label-perm
+**p=0.93**, i.e. below the chance mean 0.29), no random rotation keeps it above
+chance (**basis-real 0.00**), and FMF is low (0.29 — no fundamental-mode circle).
+The high curved EV (0.82, gap-closed 0.999) is the same low-rank-blob effect the
+matched-spectrum null controls for (C1 p=0.11, n.s.). Interpretation: a small LM's
+color-*word* embeddings do not carry a clean continuous hue cycle the way visual
+swatches in a large model do — the cheap name-token probe is the wrong instrument
+for the hue-circle claim, and says nothing against the swatch-based W7 result.
 
 ## Caveats (honest)
 
