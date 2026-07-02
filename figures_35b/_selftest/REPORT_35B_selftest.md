@@ -228,7 +228,8 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "status": "PASS",
   "chunk_level_split": true,
   "tier0_train_only": true,
-  "matched_currency": "actives"
+  "matched_currency": "actives",
+  "split_policy": null
  }
 }
 ```

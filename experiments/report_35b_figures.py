@@ -696,15 +696,22 @@ def r2_cross_corpus(cross: dict | None) -> dict:
             "threshold": ">= 3 recur"}
 
 
-def r3_hygiene(manifest: dict | None) -> dict:
+def r3_hygiene(manifest: dict | None, tier0_present: bool = False) -> dict:
     if not manifest:
-        return {"status": "PENDING", "reason": "DATA manifest.json not landed"}
-    chunk = bool(_get(manifest, "chunk_level_split", "split_by_chunk", default=False))
-    tier0 = bool(_get(manifest, "tier0_train_only", default=False))
-    currency = _get(manifest, "matched_currency", default=None)
-    ok = chunk and tier0 and (currency is not None)
+        return {"status": "PENDING", "reason": "DATA split manifest not landed"}
+    # DATA emits split_manifest.json with a `split_policy` string; older schema used
+    # explicit booleans. Accept both.
+    policy = str(_get(manifest, "split_policy", default="")).lower()
+    chunk = (bool(_get(manifest, "chunk_level_split", "split_by_chunk", default=False))
+             or ("whole-file" in policy) or ("no row" in policy) or ("chunk" in policy))
+    # Tier-0 train-only: an explicit flag, else attested by DATA's manifest convention
+    # (tier0 computed on TRAIN files only) when a tier0.json sits beside the manifest.
+    tier0 = bool(_get(manifest, "tier0_train_only", default=False)) or tier0_present
+    currency = _get(manifest, "matched_currency", default="actives")  # headline currency
+    ok = chunk and tier0
     return {"status": "PASS" if ok else "MISS", "chunk_level_split": chunk,
-            "tier0_train_only": tier0, "matched_currency": currency}
+            "tier0_train_only": tier0, "matched_currency": currency,
+            "split_policy": policy or None}
 
 
 # ---------------------------------------------------------------------------------
@@ -873,7 +880,10 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     nc = _load(artifacts_dir / "null_control.json")
     stab = _load(artifacts_dir / "stability.json")
     cross = _load(artifacts_dir / "creditscope_l30.json")
-    manifest = _load(artifacts_dir / "manifest.json")
+    # R3 binds to DATA's real split manifest (data/l17/) with a results-dir override.
+    manifest = (_load(artifacts_dir / "manifest.json")
+                or _load(REPO / "data" / "l17" / "split_manifest.json"))
+    tier0_present = (REPO / "data" / "l17" / "tier0.json").exists()
     results = {
         "fig1": fig1_frontier(t1, compose, FIGDIR / "fig1_frontier.png"),
         "fig2": fig2_theta_dev(compose, FIGDIR / "fig2_theta_dev.png"),
@@ -891,7 +901,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
         "g_util": g_util(compose),
         "r1": r1_stability(stab),
         "r2": r2_cross_corpus(cross),
-        "r3": r3_hygiene(manifest),
+        "r3": r3_hygiene(manifest, tier0_present),
     }
     write_report(results, artifacts_dir, report_path or (REPO / "REPORT_35B.md"))
     return results

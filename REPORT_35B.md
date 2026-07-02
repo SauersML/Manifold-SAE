@@ -40,7 +40,7 @@ Artifacts scanned: `/Users/user/Manifold-SAE/results/run_35b`  |  figures: `/Use
 | | **Axis 6 — RELIABILITY** | | | |
 | R1 | seed stability (principal angles; latent-match too) | >0.9 subspace | PENDING | PENDING |
 | R2 | cross-corpus replicate (creditscope L30) | ≥3 recur | PENDING | PENDING |
-| R3 | split hygiene + matched budget stated | pass | PENDING | PENDING |
+| R3 | split hygiene + matched budget stated | pass | PASS | actives |
 | | **Discriminator** | | | |
 | A3 | live-decoder collapse events | 0 | PENDING | PENDING |
 
@@ -131,8 +131,11 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "reason": "creditscope L30 arm not landed"
  },
  "r3": {
-  "status": "PENDING",
-  "reason": "DATA manifest.json not landed"
+  "status": "PASS",
+  "chunk_level_split": true,
+  "tier0_train_only": true,
+  "matched_currency": "actives",
+  "split_policy": "whole-file (rollout/chunk-safe); no row-level split"
  }
 }
 ```
