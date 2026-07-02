@@ -68,6 +68,42 @@ byte-unchanged. The deflation UNIT test passes in isolation. So the machinery is
 correctly gated — it just never engages because the trigger upstream is missing this
 case.
 
+### shadow_cone (task #14) — 590ddac/560d71c (VERDICT: SOUND + honestly reported)
+GatedBSF = Grassmannian block code + SEPARATE JumpReLU presence gate a_g=σ(ℓ_g/τ)·1[ℓ_g>0]
+on ℓ_g=w_gᵀ(x−b_dec)−θ_g, reconstruction Σ a_g z_g D_g — decouples presence (gate) from
+amplitude(‖z_g‖)/identity(direction). Held-out (Xtr/Xte split, AUC on Xte).
+Results (synthetic presence ROC, weak-vs-absent AUC): block_norm 0.467 (≈chance — the
+"shadow"), gate_recon_only 0.468 (ALSO fails), gate_presence_aware 0.999.
+KEY HONEST FINDING (correctly stated in REPORT.md): the UNSUPERVISED recon-only gate does
+NOT recover weak presence (0.468, same as block-norm) — decoupling is NOT free from
+reconstruction; the presence separation (0.999) requires an EXPLICIT presence objective
+(BCE on ground-truth presence labels, presence_supervision=1.0). The report says this
+plainly ("a reconstruction-only gate is not enough … the fix needs an explicit presence
+objective"). So this is honest, even self-critical. CAVEAT for the synthesis doc: any
+"gate/code split decouples presence" line MUST carry "requires explicit presence
+supervision; recon alone doesn't buy it" — else it overclaims. Minor code nit:
+roc_auc l.50-52 computes ranks then overwrites them (dead lines); harmless.
+
+### chart_transfer (task #13) — 2a2c778 (VERDICT: METHOD SOUND, RESULT is a NULL/weak)
+Tests whether a circle chart is a FEATURE property vs a PROMPT-DISTRIBUTION artifact via
+TEMPLATE-level held-out (fit chart+PCA+linear baseline on fit-templates, eval on held-out
+templates; LOTO CV; per-template demean within boundary = no cross-boundary leak; rank/token
+labels used only for eval, not fit). Fair fight: chart-1-coord vs linear-2-PC.
+Methodology is SOUND (proper template split, no leak, honest fair comparison, explicitly
+allows a publishable null). RESULT (5-template LOTO): chart does NOT transfer better than
+the linear plane —
+  weekday: chart_ev_eval 0.542 vs linear2 0.794 → chart1−linear2 = −0.252; coord_consistency
+    0.579; adjacency_eval 0.429 (≈chance).
+  month: chart_ev_eval 0.469 vs linear2 0.543 → chart1−linear2 = −0.074; coord_consistency
+    0.683; adjacency_eval 0.633.
+Both EV-transfer deltas NEGATIVE → the 1-coord chart's held-out-template EV is BELOW the
+2-coord linear plane. Coordinate consistency moderate (0.58/0.68), adjacency weak/moderate.
+So on these 5 templates the "chart transfers invariantly / is a feature not a distribution
+property" claim is NOT supported — it's a NULL (weekday) / weak (month) scoping result. Low
+power (5 templates). Publish as the honest scoping null the harness itself anticipates, NOT
+as a positive transfer-invariance win. The synthesis doc must not cite chart-transfer as a
+positive result.
+
 ## SPEC.md audit of today's landed surface (gam/SPEC.md, 19 rules)
 
 RULE 8 (Python thin wrapper, no math/logic) — VIOLATION:
