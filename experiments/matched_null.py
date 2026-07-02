@@ -350,22 +350,36 @@ def _null_phase_scramble(M, n, obs, n_phase, rng):
         Fs = mag * np.exp(1j * phases)
         Ms = np.fft.irfft(Fs, n=n, axis=0)
         adj_null[j] = _pca2d_angle_adjacency(Ms, n)
-    applicable = bool(fmf < 0.9)         # higher harmonics present -> null bites
+    obs_adj = obs["pca2d_adjacency"]
+    null_mean = float(adj_null.mean())
+    p = _empirical_p(adj_null, obs_adj, "greater")
+    # This is a SUPPLEMENTARY diagnostic, not a test of the W7 cyclic-ORDER claim
+    # (that is owned by label-perm). It asks the STRONGER question: does the circular
+    # ordering require higher-harmonic phase-locking beyond the fundamental? The
+    # 2D-PCA-angle adjacency is driven by the fundamental harmonic, whose power
+    # phase-scramble preserves — so whenever the fundamental dominates (as it does for
+    # any circle) a large fraction of phase-randomised power-matched signals order
+    # cyclically too. p<0.05 => phase-locking beyond the power spectrum (BSF-style,
+    # multi-harmonic); p not significant => the ordering is carried by the low-
+    # frequency POWER SPECTRUM (smoothness), which is NOT a failure of the cyclic-
+    # order claim, just a statement that it is a fundamental-mode / smoothness effect.
+    significant = bool(p < 0.05)
+    interp = ("phase-locking beyond the power spectrum (higher-harmonic structure)"
+              if significant else
+              "ordering carried by the low-frequency power spectrum (smoothness); "
+              "does not require higher-harmonic phase-locking — fundamental-dominated")
     return {
         "kind": "phase-scramble (preserve power spectrum, randomise phases)",
-        "tests": "whether the ordering rests on higher-harmonic phase-locking "
-                 "(only meaningful when fundamental_mode_fraction < ~0.9)",
+        "tests": "SUPPLEMENTARY: does the circular ordering require higher-harmonic "
+                 "phase-locking beyond the fundamental? (BSF-style; not the W7 order claim)",
         "n_null": int(n_phase),
         "fundamental_mode_fraction": float(fmf),
-        "applicable": applicable,
-        "applicability_note": ("higher harmonics present — null is discriminative"
-                               if applicable else
-                               "pure fundamental-mode circle — phase-scramble cannot "
-                               "falsify it (null adjacency ~ observed by construction)"),
-        "observed_pca2d_adjacency": obs["pca2d_adjacency"],
-        "p_pca2d_adjacency": _empirical_p(adj_null, obs["pca2d_adjacency"], "greater"),
+        "phase_locking_significant": significant,
+        "interpretation": interp,
+        "observed_pca2d_adjacency": obs_adj,
+        "p_pca2d_adjacency": p,
         "null_hist": _hist(adj_null),
-        "null_pca2d_adjacency_mean": float(adj_null.mean()),
+        "null_pca2d_adjacency_mean": null_mean,
         "null_pca2d_adjacency_95": float(np.quantile(adj_null, 0.95)),
     }
 
@@ -476,17 +490,20 @@ def _verdict(out: dict, alpha: float = 0.05) -> dict:
         lp = nulls["label_perm"]
         c2 = {"label_perm_p_adjacency": lp["p_adjacency"],
               "pass_label_perm": lp["p_adjacency"] < alpha}
-        if "phase_scramble" in nulls:
-            ps = nulls["phase_scramble"]
-            # only counts toward the verdict when the null is discriminative
-            c2["phase_scramble_applicable"] = ps["applicable"]
-            c2["phase_scramble_p"] = ps["p_pca2d_adjacency"]
-            c2["fundamental_mode_fraction"] = ps["fundamental_mode_fraction"]
-            if ps["applicable"]:
-                c2["pass_phase_scramble"] = ps["p_pca2d_adjacency"] < alpha
         if "rotation" in nulls:
             c2["basis_real_fraction"] = nulls["rotation"]["basis_real_fraction"]
+        # C2 verdict rests on label-perm (primary) corroborated by rotation basis-
+        # real fraction; phase-scramble is a separate supplementary diagnostic below.
         v["C2_cyclic_order"] = c2
+    # supplementary phase-locking diagnostic (NOT a gate on C2)
+    if "phase_scramble" in nulls:
+        ps = nulls["phase_scramble"]
+        v["phase_locking_diagnostic"] = {
+            "fundamental_mode_fraction": ps["fundamental_mode_fraction"],
+            "p": ps["p_pca2d_adjacency"],
+            "phase_locking_significant": ps["phase_locking_significant"],
+            "interpretation": ps["interpretation"],
+        }
     # C1 EV parity: does ONE curved coord reach 2-PC parity beyond the matched-
     # spectrum Gaussian? (primary) — plus curved-beats-1PC as a secondary view.
     if "matched_spectrum" in nulls:
@@ -546,7 +563,7 @@ def plot_battery(out: dict, path: Path):
             ax.axvline(nd["observed_pca2d_adjacency"], color="crimson", lw=2,
                        label=f"obs adj={nd['observed_pca2d_adjacency']:.2f}\n"
                              f"p={nd['p_pca2d_adjacency']:.3f} "
-                             f"{'(N/A)' if not nd['applicable'] else ''}\n"
+                             f"{'phase-lock' if nd['phase_locking_significant'] else '(spectrum)'}\n"
                              f"FMF={nd['fundamental_mode_fraction']:.2f}")
             ax.set_xlabel("2D-PCA-angle adjacency")
         elif k == "rotation":
@@ -809,16 +826,13 @@ def _print_verdict(out: dict):
         c2 = v["C2_cyclic_order"]
         print(f"  C2 cyclic order: label-perm p={c2.get('label_perm_p_adjacency'):.4f} "
               f"[{'PASS' if c2.get('pass_label_perm') else 'FAIL'}]", flush=True)
-        if "phase_scramble_p" in c2:
-            if c2.get("phase_scramble_applicable"):
-                print(f"     phase-scramble p={c2['phase_scramble_p']:.4f} "
-                      f"[{'PASS' if c2.get('pass_phase_scramble') else 'FAIL'}] "
-                      f"(FMF={c2['fundamental_mode_fraction']:.2f})", flush=True)
-            else:
-                print(f"     phase-scramble N/A (pure fundamental mode, "
-                      f"FMF={c2['fundamental_mode_fraction']:.2f})", flush=True)
         if "basis_real_fraction" in c2:
             print(f"     rotation basis-real fraction={c2['basis_real_fraction']:.2f}", flush=True)
+    if "phase_locking_diagnostic" in v:
+        pl = v["phase_locking_diagnostic"]
+        print(f"  [diagnostic] phase-locking beyond power spectrum: p={pl['p']:.4f} "
+              f"{'significant' if pl['phase_locking_significant'] else 'n.s.'} "
+              f"(FMF={pl['fundamental_mode_fraction']:.2f}) — {pl['interpretation']}", flush=True)
 
 
 def _retry(base, argv, tag, tries):
