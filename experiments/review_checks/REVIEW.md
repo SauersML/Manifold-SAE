@@ -40,6 +40,34 @@ publish it. The lane's own regression test is the evidence. The test is well-bui
 BITES (that's why it's red); the fix behind it is incomplete (guard trigger doesn't
 fire on EV≈0 here). The gam-sae test suite is consequently RED on this test.
 
+UPDATE (re-ran at HEAD 228915afa, `cargo test -p gam-sae --lib 2027`):
+  sequential_deflation_gives_both_atoms_material_norm_2027 ......... ok
+  two_circle_whitened_k2_recovers_disjoint_signal_2027 ............. FAILED (EV=-0.0000, reseeds=0)
+  two_circle_separates_at_narrow_and_wide_widths_2027 ............. FAILED (NEW, 228915afa)
+    → "p=16: EV=-0.0000, per-atom even-energy fraction=[0.0,0.0], cocollapse_reseeds=0"
+  => 1 passed, 2 failed. No fit-logic commit landed since my first run (latest gam
+     commits are test-only), so the result is unchanged.
+ROOT CAUSE (code-level, actionable): Parts A/B/C all live INSIDE the co-collapse
+reseed branch (fit_drivers.rs:2449 refit_decoder_sequential_deflation, :2454
+anchor_logits_to_residual_ownership), which is entered only when the TRIGGER at
+fit_drivers.rs (guard above :2411) holds: iteration>0 AND EV ≤ absolute_degeneracy
+_ev_floor (=q/n) AND "reconstruction output has co-vanished (decoders ≈ column mean)".
+On the p=16 whitened two-circle EV=-0.0000 case that trigger NEVER fires (reseeds=0),
+so refit/anchor/cooldown never run. The likely unmet sub-condition is the "output
+co-vanished / EV ≤ q/n null-floor" test on a UNIT-VARIANCE whitened target (the
+reconstruction isn't ≈ the column mean even though EV≈0). Fix the DETECTION trigger,
+not just the downstream reseed logic.
+WIDTH (lead's extra check a): the repro plants at p=16 (n=96) — the SMALL-width regime
+N-nursery found CONVERGES, not the p=96 HANG regime. The new two-width test tries p=16
+then p=96 but DIES at p=16 (never reaches p=96 in output), so the wide-hang pathology
+is not exercised at all. Even the narrow case fails.
+GATING (lead's extra check b): VERIFIED — refit_decoder_sequential_deflation (:2449) +
+anchor (:2454) are inside the co-collapse branch that ends `return Ok(())` at :2455,
+reached only after a reseed is triggered; healthy/K=1 fits that never enter it are
+byte-unchanged. The deflation UNIT test passes in isolation. So the machinery is
+correctly gated — it just never engages because the trigger upstream is missing this
+case.
+
 ## Baseline (established before lanes committed)
 
 Reusable pieces BT1-block MUST build on rather than reimplement:
