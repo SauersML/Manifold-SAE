@@ -286,16 +286,26 @@ def fig4_mdl(mdl: dict | None, out: Path) -> dict:
         import mdl as mdl_mod  # experiments/mdl_ladder/mdl.py (ported to #2085)
     except Exception as e:  # pragma: no cover
         return {"status": "PENDING", "reason": f"mdl module unavailable: {e}"}
-    payload = mdl if "mdl_featurizers" in mdl else {"featurizers": _get(mdl, "featurizers", default=[])}
-    if "mdl_featurizers" in mdl:
-        payload = {"featurizers": mdl["mdl_featurizers"],
-                   "delta2": _get(mdl, "delta2", default=None)}
-        payload = {k: v for k, v in payload.items() if v is not None}
-        payload["featurizers"] = mdl["mdl_featurizers"]
+    # score_json wants a "featurizers" list; COMPOSE emits them under
+    # "mdl_featurizers" (seed_manifest convention) or "featurizers" directly.
+    feats = _get(mdl, "mdl_featurizers", "featurizers", default=[])
+    if not feats:
+        return {"status": "PENDING", "reason": "no featurizers in MDL artifact"}
+    payload = {"featurizers": feats}
+    for opt in ("delta2", "l_param_bits", "block_name", "chart_name"):
+        if _get(mdl, opt) is not None:
+            payload[opt] = mdl[opt]
     scored = mdl_mod.score_json(payload)
     rows = scored.get("rows", [])
     if not rows:
         return {"status": "PENDING", "reason": "MDL score produced no rows"}
+    # Drop non-finite rows (a degenerate featurizer with ev>=1 → residual 0 → infinite
+    # rate; real fits have ev<1). If nothing finite survives, the artifact is degenerate.
+    rows = [r for r in rows
+            if math.isfinite(float(r.get("bits_per_token", r.get("total_bits", float("inf")))))]
+    if not rows:
+        return {"status": "PENDING",
+                "reason": "all MDL rows non-finite (degenerate distortion floor, ev>=1)"}
     names = [r.get("name", str(i)) for i, r in enumerate(rows)]
     bits = [float(r.get("bits_per_token", r.get("total_bits", 0.0))) for r in rows]
     kinds = [r.get("kind", "block") for r in rows]
