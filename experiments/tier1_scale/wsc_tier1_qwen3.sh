@@ -11,7 +11,9 @@ RUNOUT=/dev/shm/sauers_gpu/tier1/qwen3_${TAG}
 LOG=$G/wsc_tier1_qwen3_${TAG}.log
 RC=$G/wsc_tier1_qwen3_${TAG}.rc
 : > "$LOG"
-export RAYON_NUM_THREADS=32 OMP_NUM_THREADS=32 OPENBLAS_NUM_THREADS=32
+# Fleet directive: OPENBLAS/OMP=1 to avoid the BLAS x rayon oversubscription
+# deadlock in gamfit manifold fits; keep rayon threads for the fit itself.
+export RAYON_NUM_THREADS=32 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 source /models/sauers_build/venv_fable/bin/activate
 log(){ echo "[$(date -u +%H:%M:%S)] $*" >> "$LOG"; }
 
