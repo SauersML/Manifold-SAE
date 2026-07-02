@@ -169,7 +169,7 @@ def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     sac_kwargs = dict(
         max_atoms=int(os.environ.get("W9_MAXATOMS", "6")),
-        d_atom=int(os.environ.get("W9_DATOM", "2")),
+        d_atom=int(os.environ.get("W9_DATOM", "1")),
         atom_topology="circle",
         n_iter=int(os.environ.get("W9_NITER", "30")),
         backfit_sweeps=int(os.environ.get("W9_BACKFIT", "2")),
@@ -178,12 +178,27 @@ def main() -> int:
     print(f"[cfg] seeds={SEEDS} sac_kwargs={sac_kwargs}", flush=True)
 
     results = {}
-    Xp, planes = data_planted(
-        N=int(os.environ.get("W9_PLANT_N", "1500")),
-        p=int(os.environ.get("W9_PLANT_P", "32")),
-        n_circ=int(os.environ.get("W9_PLANT_NC", "3")))
-    print(f"[planted] X={Xp.shape} n_circ={planes.shape[0]}", flush=True)
-    results["planted"] = analyze("planted", Xp, planes, SEEDS, sac_kwargs)
+    # Primary dataset: a single clean circle + several linear atoms. SAC's forward
+    # births then each see a well-posed target (one circle, then rank-1 atoms), the
+    # regime the K=1 fit is proven on — unlike a superimposed multi-circle mixture,
+    # where the single-atom birth hits the #1784/#1026 non-PD Arrow-Schur pathology
+    # (documented in the run notes). planes=None -> per-chart subspace is skipped;
+    # latent-vs-union-subspace is the core claim.
+    from ev_budget_frontier import make_planted  # noqa: E402
+    Xm, _kind, _p, _isc, _lab = make_planted(
+        n=int(os.environ.get("W9_MIX_N", "1500")),
+        nc=int(os.environ.get("W9_MIX_NC", "1")),
+        nl=int(os.environ.get("W9_MIX_NL", "4")), seed=0)
+    print(f"[mixed] X={Xm.shape} (1 circle + linear atoms)", flush=True)
+    results["mixed_circle_linear"] = analyze("mixed", Xm, None, SEEDS, sac_kwargs)
+
+    if os.environ.get("W9_PLANTED", "0") == "1":
+        Xp, planes = data_planted(
+            N=int(os.environ.get("W9_PLANT_N", "1500")),
+            p=int(os.environ.get("W9_PLANT_P", "32")),
+            n_circ=int(os.environ.get("W9_PLANT_NC", "3")))
+        print(f"[planted] X={Xp.shape} n_circ={planes.shape[0]}", flush=True)
+        results["planted"] = analyze("planted", Xp, planes, SEEDS, sac_kwargs)
 
     Xw, _ = data_w6()
     if Xw is not None:

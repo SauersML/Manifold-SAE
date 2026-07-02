@@ -99,7 +99,7 @@ def main() -> int:
     res = sac_fit(
         np.ascontiguousarray(train),
         max_atoms=int(os.environ.get("W10_MAXATOMS", str(nc + nl + 2))),
-        d_atom=2, atom_topology="circle",
+        d_atom=1, atom_topology="circle",
         ev_floor=float(os.environ.get("W10_EVFLOOR", "3e-3")),
         n_iter=int(os.environ.get("W10_NITER", "40")),
         backfit_sweeps=int(os.environ.get("W10_BACKFIT", "2")),

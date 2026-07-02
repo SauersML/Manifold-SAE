@@ -183,36 +183,75 @@ def assert_tensor_output(module_wrapper, hook_module, input_ids):
 # --------------------------------------------------------------------------- #
 # Harvest: per-prompt downstream output-Fisher at the LAST position           #
 # --------------------------------------------------------------------------- #
-def harvest_calendar(lm, hook_module, tokenizer, prompts, rank, device, dtype,
-                     oversample=4, hiter=2, trace_probes=8):
-    """Harvest (X_last, U_last, template_mean) per prompt.
+def harvest_last_position_fisher(lm, hook_module, ids, rank, oversample, hiter,
+                                 trace_probes, device, dtype):
+    """Output-Fisher factor U (p, rank) at the LAST token position + all-token acts.
 
-    For each prompt we run ``harvest_downstream_output_fisher_factors`` (the exact
-    real-model call) and keep the LAST-position row: its activation ``X_last``, its
-    downstream output-Fisher factor ``U_last`` (p, r), and the prompt's mean
-    activation over its own tokens (for per-template demeaning). The last position
-    has one future position (itself), so the downstream metric equals the
-    same-position output Fisher there.
+    Reuses gamfit's own harvest internals (``_capture_activations``,
+    ``_top_r_eigenpairs``, ``_pullback_matvec``) but runs the randomized-subspace
+    eigensolve for the LAST row ONLY — the position whose next-token distribution
+    the dose is scored against. This is bit-for-bit the same ``G_n = J_nᵀ F_n J_n``
+    the public ``harvest_output_fisher_factors`` computes for that row (and equals
+    the downstream metric there, since the last position has a single future
+    position — itself), at ~1/T the cost of harvesting every position we discard.
+    Returns ``(act_flat (T, p), U_last (p, rank))``.
     """
     import torch
-    from gamfit.torch.harvest import harvest_downstream_output_fisher_factors
+    from gamfit.torch.harvest import (
+        _capture_activations, _top_r_eigenpairs, _pullback_matvec,
+    )
 
+    act_flat, logits_from_act = _capture_activations(lm.module, hook_module, ids)
+    T, p = int(act_flat.shape[0]), int(act_flat.shape[1])
+    work_dtype = act_flat.dtype if act_flat.dtype in (torch.float32, torch.float64) else torch.float32
+    row = T - 1
+    x_row = act_flat[row].to(work_dtype).detach()
+
+    def f_row(x):
+        return logits_from_act(x, row).to(work_dtype)
+
+    with torch.no_grad():
+        probs = torch.softmax(f_row(x_row), dim=-1)
+
+    def jvp_fn(V):
+        cols = [torch.func.jvp(f_row, (x_row,), (V[:, j].contiguous(),))[1]
+                for j in range(V.shape[1])]
+        return torch.stack(cols, dim=1)
+
+    _out0, vjp_raw = torch.func.vjp(f_row, x_row)
+
+    def vjp_fn(W):
+        cols = [vjp_raw(W[:, j].contiguous())[0] for j in range(W.shape[1])]
+        return torch.stack(cols, dim=1)
+
+    def matvec(V):
+        return _pullback_matvec(jvp_fn, vjp_fn, probs, V)
+
+    gen = torch.Generator(device="cpu")
+    gen.manual_seed(row)
+    evals, evecs = _top_r_eigenpairs(matvec, p, rank, oversample=oversample,
+                                     n_iter=hiter, generator=gen,
+                                     dtype=work_dtype, device=act_flat.device)
+    U_last = (evecs * evals.clamp_min(0.0).sqrt().unsqueeze(0)).detach().to(torch.float64).cpu().numpy()
+    return act_flat.to(torch.float64).cpu().numpy(), U_last
+
+
+def harvest_calendar(lm, hook_module, tokenizer, prompts, rank, device, dtype,
+                     oversample=4, hiter=2, trace_probes=8):
+    """Harvest (X_last, U_last, template_mean) per prompt at the last position."""
     X_last, U_last, tmpl_mean, kept = [], [], [], []
     for pi, prompt in enumerate(prompts):
         ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
         try:
-            shard = harvest_downstream_output_fisher_factors(
-                lm.module, hook_module, ids, rank=rank,
-                oversample=oversample, n_iter=hiter, trace_probes=trace_probes)
+            act_flat, U = harvest_last_position_fisher(
+                lm, hook_module, ids, rank, oversample, hiter, trace_probes, device, dtype)
         except Exception as exc:  # noqa: BLE001
             print(f"[harvest] prompt {pi} '{prompt}' FAILED: "
                   f"{type(exc).__name__}: {str(exc).splitlines()[0][:100]}", flush=True)
             continue
-        X = np.asarray(shard.X, dtype=np.float64)         # (T, p)
-        U = np.asarray(shard.U, dtype=np.float64)         # (T, p, r)
-        X_last.append(X[-1])
-        U_last.append(U[-1])
-        tmpl_mean.append(X.mean(0))
+        X_last.append(act_flat[-1])
+        U_last.append(U)
+        tmpl_mean.append(act_flat.mean(0))
         kept.append(pi)
         if (pi + 1) % 10 == 0:
             print(f"[harvest] {pi + 1}/{len(prompts)} prompts", flush=True)
@@ -320,9 +359,16 @@ def run_sweep(measurer, atoms, lin, doses, n_bases, shard_U_all, c_bar, seed):
         idx = np.arange(len(H_red))
         bases = rng.choice(idx, size=min(n_bases, len(idx)), replace=False)
         for bi in bases:
-            xb = H_red[bi:bi + 1]
-            xb_full = H_full[bi]
-            t0 = np.asarray(sae.project(xb, 0), dtype=np.float64).ravel()
+            # A degenerate (co-collapsed) atom fit can raise inside project/steer;
+            # skip that base rather than losing the whole sweep's results.
+            try:
+                xb = H_red[bi:bi + 1]
+                xb_full = H_full[bi]
+                t0 = np.asarray(sae.project(xb, 0), dtype=np.float64).ravel()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[sweep] atom {k} base {bi}: project failed "
+                      f"({type(exc).__name__}); skipping", flush=True)
+                continue
             G0 = U[bi] @ U[bi].T
             proj = lin_atoms @ xb_full
             j = int(np.argmax(np.abs(proj)))
@@ -330,7 +376,12 @@ def run_sweep(measurer, atoms, lin, doses, n_bases, shard_U_all, c_bar, seed):
             prompt = prompts[bi]
             for dose in doses:
                 for sign in (+1.0, -1.0):
-                    plan = sae.steer(0, t0, t0 + sign * dose)
+                    try:
+                        plan = sae.steer(0, t0, t0 + sign * dose)
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"[sweep] atom {k} base {bi} dose {sign * dose}: steer failed "
+                              f"({type(exc).__name__}); skipping", flush=True)
+                        continue
                     pred = plan.get("predicted_nats")
                     if pred is None or not np.isfinite(pred) or pred <= 0:
                         continue
@@ -436,10 +487,17 @@ def main() -> int:
             print(f"[{feat}] SKIPPED (fit failed)", flush=True)
             continue
         sae, fit_s, kw = got
-        print(f"[{feat}] fit {fit_s:.1f}s (rdim={rdim}) r2={float(sae.reconstruction_r2):.4f} "
+        r2 = float(sae.reconstruction_r2)
+        print(f"[{feat}] fit {fit_s:.1f}s (rdim={rdim}) r2={r2:.4f} "
               f"topo={sae.atom_topologies} kw={kw}", flush=True)
+        r2_floor = float(os.environ.get("DOSE_R2_FLOOR", "0.5"))
+        if r2 < r2_floor or len(sae.atom_topologies) != 1:
+            print(f"[{feat}] SKIPPED: degenerate/co-collapsed fit "
+                  f"(r2={r2:.3f} < {r2_floor} or {len(sae.atom_topologies)} atoms != 1)",
+                  flush=True)
+            continue
         sae.fisher_factors = np.ascontiguousarray(U_red)
-        sae.fisher_provenance = "output_fisher_downstream"
+        sae.fisher_provenance = "output_fisher"
         atoms.append(dict(atom=feat, sae=sae, H_red=H_red, H_full=H, Vt=Vt,
                           raw_mean=tmpl_mean, prompts=kept_prompts,
                           U_full=U_last, fit_seconds=fit_s,
