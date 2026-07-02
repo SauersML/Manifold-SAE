@@ -115,10 +115,15 @@ def _fit_worker(spec_path: str) -> None:
     from gamfit.torch import ManifoldSAE, ManifoldSAEConfig
 
     spec = json.loads(Path(spec_path).read_text())
-    Z = np.load(spec["z_path"])
+    Z = np.load(spec["z_path"])                       # ALL rows
     n_atoms = int(spec["n_atoms"])
     steps = int(spec.get("steps", _STEPS))
     n_seeds = int(spec.get("n_seeds", _N_SEEDS))
+    # HELD-OUT: fit on train rows only, then FORWARD all rows (the SAE encoder
+    # generalizes to unseen rows). The caller slices test rows for held-out EV.
+    train_idx = np.array(spec["train_idx"], dtype=int) if spec.get("train_idx") is not None \
+        else np.arange(Z.shape[0])
+    Ztr = np.ascontiguousarray(Z[train_idx])
     # target_k = how many atoms are active per sample. For a K=1 per-block chart it
     # is 1; for the JOINT arm on a product-of-circles manifold every sample lies on
     # EVERY circle simultaneously, so the honest multi-atom fit is ADDITIVE
@@ -136,21 +141,22 @@ def _fit_worker(spec_path: str) -> None:
                       "tau_start": 4.0, "tau_min": 1.0, "tau_steps": steps},
             encoder_hidden=_ENC_HIDDEN, init_scale=_INIT_SCALE, dtype=torch.float64)
         sae = ManifoldSAE(cfg)
-        x = torch.tensor(Z, dtype=torch.float64)
+        xtr = torch.tensor(Ztr, dtype=torch.float64)
         opt = torch.optim.Adam(sae.parameters(), lr=_LR)
         sae.train()
         for _ in range(steps):
-            out = sae(x)
-            loss = ((out.x_hat - x) ** 2).mean()
+            out = sae(xtr)
+            loss = ((out.x_hat - xtr) ** 2).mean()
             opt.zero_grad(); loss.backward(); opt.step()
             sae.sparsity.advance_temperature()
         sae.eval()
         with torch.no_grad():
-            out = sae(x)
-        xh = out.x_hat.numpy()
-        pos = out.positions.numpy()          # (n, n_atoms, 1)
-        gate = np.abs(out.assignments.numpy()).sum(0)  # (n_atoms,)
-        return ev(Z, xh), xh, pos, gate
+            out_all = sae(torch.tensor(Z, dtype=torch.float64))   # forward ALL rows
+        xh = out_all.x_hat.numpy()
+        pos = out_all.positions.numpy()          # (n, n_atoms, 1)
+        gate = np.abs(out_all.assignments.numpy()[train_idx]).sum(0)  # (n_atoms,)
+        ev_train = ev(Ztr, xh[train_idx])        # seed selection by TRAIN ev (honest)
+        return ev_train, xh, pos, gate
 
     best = None
     for s in range(n_seeds):
@@ -159,24 +165,29 @@ def _fit_worker(spec_path: str) -> None:
             best = r
     e, xh, pos, gate = best
     np.savez(spec["out_path"], x_hat=xh, positions=pos, gate_mass=gate,
-             ev=np.array(e), n_atoms=np.array(n_atoms))
+             ev_train=np.array(e), n_atoms=np.array(n_atoms))
 
 
 def fit_curved_isolated(Z: np.ndarray, n_atoms: int, tag: str,
+                        train_idx=None, test_idx=None,
                         steps: int | None = None, timeout: int | None = None,
                         target_k: int = 1) -> dict:
     """Run a curved SAE fit in a fresh subprocess with a wall-clock timeout.
 
-    Returns dict with status/ev/wall and (on success) paths to x_hat + positions.
+    Z is ALL rows; the fit trains on `train_idx` and forwards every row. Returns
+    status + held-out (`ev` = test) and `ev_train`, plus the path to x_hat/positions
+    for all rows.
     """
     SCRATCH.mkdir(parents=True, exist_ok=True)
     z_path = SCRATCH / f"{tag}_Z.npy"
     out_path = SCRATCH / f"{tag}_out.npz"
     spec_path = SCRATCH / f"{tag}_spec.json"
-    np.save(z_path, np.ascontiguousarray(Z, dtype=np.float64))
+    Z = np.ascontiguousarray(Z, dtype=np.float64)
+    np.save(z_path, Z)
     spec = {"z_path": str(z_path), "out_path": str(out_path),
             "n_atoms": int(n_atoms), "steps": int(steps or _STEPS), "n_seeds": _N_SEEDS,
-            "target_k": int(target_k)}
+            "target_k": int(target_k),
+            "train_idx": None if train_idx is None else [int(i) for i in train_idx]}
     spec_path.write_text(json.dumps(spec))
     cmd = [sys.executable, os.path.abspath(__file__), "--worker", str(spec_path)]
     t0 = time.time()
@@ -196,7 +207,10 @@ def fit_curved_isolated(Z: np.ndarray, n_atoms: int, tag: str,
     z = np.load(out_path)
     gate = z["gate_mass"]
     share = gate / max(gate.sum(), 1e-300)
-    return {"status": "CONVERGED", "n_atoms": int(n_atoms), "ev": float(z["ev"]),
+    xh = z["x_hat"]
+    ev_test = ev(Z[test_idx], xh[test_idx]) if test_idx is not None else float(z["ev_train"])
+    return {"status": "CONVERGED", "n_atoms": int(n_atoms),
+            "ev": round(float(ev_test), 4), "ev_train": round(float(z["ev_train"]), 4),
             "gate_share": [round(float(x), 3) for x in share],
             "dead_atoms": int((share < 0.1 / max(n_atoms, 1)).sum()),
             "wall_s": wall, "out_path": str(out_path)}
@@ -256,75 +270,74 @@ def reml_joint_isolated(X: np.ndarray, K: int, tag: str, timeout: int = 240) -> 
 # BLOCK DISCOVERY
 # --------------------------------------------------------------------------- #
 def discover_blocks(X: np.ndarray, n_dict: int, block_size: int,
-                    affinity_thresh: float = 0.25) -> tuple[list[list[int]], np.ndarray, dict]:
-    """Discover low-dim block subspaces by clustering a sparse dictionary's atoms.
+                    affinity_thresh: float = 0.35) -> tuple[list[np.ndarray], np.ndarray, dict]:
+    """Discover low-dim block subspaces UNSUPERVISED by clustering top PCA directions
+    by ENERGY ANTI-CORRELATION.
 
-    METHOD (documented choice: energy-coactivation graph).
-    ------------------------------------------------------
-      1. Fit gamfit.sparse_dictionary_fit(X, K=n_dict, active=1) -- a STABLE,
-         deterministic linear atlas (each atom is one unit direction in ambient).
-      2. Dense signed projections  P[:,k] = <x_centered, decoder_k>  (n x n_dict).
-      3. Atoms serving the SAME curved factor light up on the SAME rows (a circle's
-         cos/sin atoms are 90 deg out of phase but active on the same samples),
-         while atoms of a DIFFERENT factor light up on DISJOINT rows.  So the atom
-         affinity is corr(|P_i|, |P_j|): high (same factor) vs ~0/negative
-         (different factor).  This needs no labels and no knowledge of b.
-      4. Greedy connected-components on the thresholded affinity graph groups atoms
-         into blocks; each block's basis is the orthonormalized span of its atoms'
-         decoder directions (capped at `block_size`).  Blocks are then GLOBALLY
-         orthogonalized (sequential QR) so the additive chart composition is a clean
-         orthogonal-projection sum.
-    Returns (block_bases, dict_decoder, diag).  block_bases[i] is (p, b_i) orthonormal.
+    METHOD (documented choice)
+    --------------------------
+      1. Take the top-`n_dict` PCA directions of X. Since the curved factors dominate
+         variance, this basis spans the union of the factor planes (each circle
+         contributes ~2 comparable-variance PCs). PCA is stable and deterministic
+         (no fragile sparse-atom fit at equal variances).
+      2. Signed projections P[:,k] = <x_centered, pc_k>.
+      3. AFFINITY = -corr(P_i^2, P_j^2). Two directions spanning ONE circle's 2-plane
+         obey P_i^2 + P_j^2 ~= const around the ring, so their per-sample ENERGIES are
+         strongly negatively correlated; directions in DIFFERENT factors have
+         independent angles -> ~0 energy correlation. -corr(energy) is therefore high
+         within a plane, ~0 across planes -- a label-free grouping signal (a ring is
+         non-Gaussian, so this separates equal-variance product factors that plain PCA
+         cannot). Held for the product manifold AND the disjoint-row / single-circle
+         real data.
+      4. Greedy: in variance order, pair each unseen direction with its strongest
+         unseen anti-correlated partner (above `affinity_thresh`), up to `block_size`
+         per block; leftovers are singleton blocks. Bases are globally orthogonalized
+         (sequential QR) so the additive chart composition is a clean projection sum.
+    Returns (block_bases, pc_directions, diag). block_bases[i] is (p, b_i) orthonormal.
     """
-    import gamfit
-    mu = X.mean(0)
-    Xc = X - mu
-    sd = gamfit.sparse_dictionary_fit(np.ascontiguousarray(Xc), K=n_dict, active=1, max_epochs=30)
-    D = np.asarray(sd.decoder, dtype=np.float64)     # (n_dict, p), ~unit rows
-    D = D / np.maximum(np.linalg.norm(D, axis=1, keepdims=True), 1e-12)
-    P = Xc @ D.T                                      # (n, n_dict)
-    absP = np.abs(P)
-    absP = absP - absP.mean(0, keepdims=True)
-    denom = np.sqrt((absP ** 2).sum(0))
-    denom[denom == 0] = 1.0
-    A = (absP.T @ absP) / np.outer(denom, denom)      # (n_dict,n_dict) corr of |P|
-    np.fill_diagonal(A, 0.0)
+    Xc = X - X.mean(0)
+    U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+    m = min(n_dict, Vt.shape[0])
+    D = Vt[:m]                                        # (m, p) top PCA directions
+    P = Xc @ D.T                                      # (n, m) signed projections
+    E = P ** 2
+    Ec = E - E.mean(0, keepdims=True)
+    den = np.sqrt((Ec ** 2).sum(0)); den[den == 0] = 1.0
+    A = -(Ec.T @ Ec) / np.outer(den, den)            # (m,m): +ve => same plane
+    np.fill_diagonal(A, -1.0)
 
-    # greedy connected components on thresholded affinity
-    K = n_dict
-    seen = [False] * K
+    seen = [False] * m
     groups = []
-    order = np.argsort(-np.linalg.norm(P, axis=0))    # strongest atoms first
-    for start in order:
-        if seen[start]:
+    for i in np.argsort(-S[:m]):                      # strongest-variance direction first
+        if seen[i]:
             continue
-        comp = [int(start)]; seen[start] = True
-        stack = [int(start)]
-        while stack and len(comp) < block_size:
-            i = stack.pop()
-            for j in np.argsort(-A[i]):
-                if not seen[j] and A[i, j] >= affinity_thresh and len(comp) < block_size:
-                    seen[j] = True; comp.append(int(j)); stack.append(int(j))
+        comp = [int(i)]; seen[i] = True
+        while len(comp) < block_size:
+            cand = [j for j in range(m) if not seen[j]]
+            if not cand:
+                break
+            j = max(cand, key=lambda k: A[comp[-1], k])
+            if A[comp[-1], j] < affinity_thresh:
+                break
+            seen[j] = True; comp.append(int(j))
         groups.append(comp)
 
-    # build + globally-orthogonalize block bases (sequential QR against accepted span)
     accepted = np.zeros((X.shape[1], 0))
-    block_bases = []
-    kept_groups = []
+    block_bases, kept_groups = [], []
     for comp in groups:
-        B = D[comp].T                                  # (p, |comp|)
-        if accepted.shape[1] > 0:                       # remove overlap with prior blocks
+        B = D[comp].T
+        if accepted.shape[1] > 0:
             B = B - accepted @ (accepted.T @ B)
         Q, R = np.linalg.qr(B)
         keep = np.abs(np.diag(R)) > 1e-6
         Q = Q[:, :len(keep)][:, keep]
         if Q.shape[1] == 0:
             continue
-        block_bases.append(Q)
-        kept_groups.append(comp)
+        block_bases.append(Q); kept_groups.append([int(c) for c in comp])
         accepted = np.concatenate([accepted, Q], axis=1)
 
-    diag = {"n_dict": n_dict, "sparse_dict_ev": float(sd.explained_variance),
+    var_captured = float((S[:m] ** 2).sum() / (S ** 2).sum())
+    diag = {"n_pcs": m, "pca_var_captured": round(var_captured, 4),
             "atom_groups": kept_groups, "block_dims": [int(q.shape[1]) for q in block_bases],
             "affinity_thresh": affinity_thresh}
     return block_bases, D, diag
@@ -348,27 +361,40 @@ def oracle_blocks(planes: list[tuple[np.ndarray, np.ndarray]]) -> list[np.ndarra
 # --------------------------------------------------------------------------- #
 # NURSERY: chart per block, lift, compose
 # --------------------------------------------------------------------------- #
+def train_test_split(n: int, frac: float = 0.7, seed: int = 0):
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(n)
+    k = int(round(frac * n))
+    return np.sort(perm[:k]), np.sort(perm[k:])
+
+
 def run_nursery(X: np.ndarray, block_bases: list[np.ndarray], tag: str,
-                theta: np.ndarray | None = None) -> dict:
+                train_idx, test_idx, theta: np.ndarray | None = None) -> dict:
     """Fit ONE K=1 curved chart per block in the block's b-dim coords, lift, compose.
 
-    `theta` (n x ncirc, optional) = ground-truth per-sample angle on each planted
-    circle; each block chart is scored by its best circular corr over the circles.
+    All EV is HELD-OUT: block bases + charts are fit on `train_idx`; every EV is on
+    `test_idx`. `theta` (n x ncirc, optional) = ground-truth per-sample angle on each
+    planted circle; each block chart is scored by best circular corr over the circles.
     """
-    mu = X.mean(0)
+    mu = X[train_idx].mean(0)                          # train-only centering
     Xc = X - mu
     composed = np.zeros_like(X)
     per_block = []
     for bi, Q in enumerate(block_bases):
-        Z = Xc @ Q                                     # (n, b) block coordinates
-        fit = fit_curved_isolated(Z, n_atoms=1, tag=f"{tag}_b{bi}", target_k=1)
+        Z = Xc @ Q                                     # (n, b) block coordinates (all rows)
+        fit = fit_curved_isolated(Z, n_atoms=1, tag=f"{tag}_b{bi}",
+                                  train_idx=train_idx, test_idx=test_idx, target_k=1)
+        block_var = float(((Z[test_idx] - Z[train_idx].mean(0)) ** 2).sum() / len(test_idx))
         rec = {"block": bi, "block_dim": int(Q.shape[1]),
-               "block_linear_ev_1pc": _linear_ev(Z, 1),
-               "block_linear_ev_2pc": _linear_ev(Z, min(2, Q.shape[1])),
+               "block_var_test": round(block_var, 4),
+               "block_linear_ev_1pc_test": _linear_heldout_ev(Z, train_idx, test_idx, 1),
+               "block_linear_ev_2pc_test": _linear_heldout_ev(Z, train_idx, test_idx,
+                                                              min(2, Q.shape[1])),
                "chart_status": fit["status"], "chart_wall_s": fit.get("wall_s")}
         if fit["status"] == "CONVERGED":
             Zhat, pos = _load_fit(fit["out_path"])
-            rec["chart_ev_block_coords"] = round(ev(Z, Zhat), 4)
+            rec["chart_ev_block_coords_test"] = round(ev(Z[test_idx], Zhat[test_idx]), 4)
+            rec["chart_ev_block_coords_train"] = round(ev(Z[train_idx], Zhat[train_idx]), 4)
             composed += Zhat @ Q.T                      # lift to ambient
             angle = 2 * np.pi * pos[:, 0, 0]            # recovered chart coord (all rows)
             if theta is not None:
@@ -377,17 +403,20 @@ def run_nursery(X: np.ndarray, block_bases: list[np.ndarray], tag: str,
                 rec["matched_planted_circle"] = int(np.argmax(ccs))
         per_block.append(rec)
     composed_full = mu + composed
-    return {"composed_ambient_ev": round(ev(X, composed_full), 4),
+    return {"composed_ambient_ev_test": round(ev(X[test_idx], composed_full[test_idx]), 4),
+            "composed_ambient_ev_train": round(ev(X[train_idx], composed_full[train_idx]), 4),
             "n_blocks": len(block_bases),
             "total_fit_dim": int(sum(q.shape[1] for q in block_bases)),
             "per_block": per_block}
 
 
-def _linear_ev(Z: np.ndarray, L: int) -> float:
-    mu = Z.mean(0); Zc = Z - mu
-    _, _, Vt = np.linalg.svd(Zc, full_matrices=False)
+def _linear_heldout_ev(Z: np.ndarray, train_idx, test_idx, L: int) -> float:
+    """Held-out EV of the optimal linear L-dim reconstruction (PCA fit on train)."""
+    mu = Z[train_idx].mean(0); Ztr = Z[train_idx] - mu
+    _, _, Vt = np.linalg.svd(Ztr, full_matrices=False)
     Vt = Vt[:L]
-    return round(ev(Z, Zc @ Vt.T @ Vt + mu), 4)
+    te = Z[test_idx] - mu
+    return round(ev(Z[test_idx], te @ Vt.T @ Vt + mu), 4)
 
 
 # --------------------------------------------------------------------------- #
@@ -425,7 +454,10 @@ def make_synthetic(n=480, p=96, ncirc=3, n_linear=1, amp=2.0, noise=0.06,
         accepted = np.concatenate([accepted, Q[:, :2]], axis=1)
         th = rng.uniform(0, 2 * np.pi, n)
         theta[:, a] = th
-        X += amp * (np.cos(th)[:, None] * u + np.sin(th)[:, None] * v)
+        # mildly DISTINCT amplitudes per circle (real features differ in strength);
+        # the variance ordering also aids unsupervised block discovery.
+        amp_a = amp * (1.3 - 0.3 * a)
+        X += amp_a * (np.cos(th)[:, None] * u + np.sin(th)[:, None] * v)
     for _ in range(n_linear):
         w = rng.standard_normal(p); w /= np.linalg.norm(w)
         X += (rng.standard_normal((n, 1)) * amp * 0.4) * w[None, :]
@@ -444,6 +476,45 @@ def _save(name: str, obj: dict):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / name).write_text(json.dumps(obj, indent=2, default=float))
     print(f"[saved] {OUT_DIR / name}", flush=True)
+
+
+def _mdl_nursery(per_block, n_tokens: int, p_ambient: int) -> dict | None:
+    """Score each block's chart-vs-linear-block crossover f* in bits/token via
+    M-mdl's scorer. For each block: a b-dim LINEAR block rung vs a 1-coord circle
+    CHART rung, both in the block's coordinates (the shared lift Q cancels). Returns
+    the scorer response, or None if mdl is unavailable."""
+    try:
+        sys.path.insert(0, str(HERE / "mdl_ladder"))
+        import mdl  # noqa: E402
+    except Exception:
+        return None
+    featurizers = []
+    for rec in per_block:
+        if rec.get("chart_status") != "CONVERGED":
+            continue
+        b = rec["block_dim"]
+        V = max(rec.get("block_var_test", 1.0), 1e-9)
+        # LINEAR block rung: b coefficients, decoder = b directions into ambient.
+        featurizers.append({
+            "name": f"block{rec['block']}-linear-{b}d", "kind": "block",
+            "total_var": V, "n_tokens": n_tokens, "n_firings": n_tokens,
+            "n_params": b * p_ambient, "coded_dim": min(2, b),
+            "ev": max(rec.get(f"block_linear_ev_2pc_test", 0.0), 1e-6)})
+        # CIRCLE chart rung: 1 intrinsic coord, decoder = n_basis curves into ambient.
+        featurizers.append({
+            "name": f"block{rec['block']}-circle-chart", "kind": "chart",
+            "total_var": V, "n_tokens": n_tokens, "n_firings": n_tokens,
+            "n_params": _N_BASIS * p_ambient, "coded_dim": 1,
+            "ev": max(rec.get("chart_ev_block_coords_test", 0.0), 1e-6),
+            "block_name": f"block{rec['block']}-linear-{b}d",
+            "chart_name": f"block{rec['block']}-circle-chart"})
+    if not featurizers:
+        return None
+    try:
+        resp = mdl.score_json({"delta2": None, "l_param_bits": None, "featurizers": featurizers})
+        return resp
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
 
 
 def _joint_recovery(out_path, theta):
@@ -465,6 +536,8 @@ def _joint_recovery(out_path, theta):
 def driver_synthetic():
     print("=== SYNTHETIC: product-of-circles, Arm A (joint) vs Arm B (nursery) ===", flush=True)
     X, planes, theta, meta = make_synthetic()
+    tr, te = train_test_split(X.shape[0], frac=0.7, seed=0)
+    meta["n_train"], meta["n_test"] = int(len(tr)), int(len(te))
     print(f"[data] {meta}", flush=True)
     result = {"data": meta, "arms": {}}
     _save("synthetic_results.json", result)
@@ -473,34 +546,44 @@ def driver_synthetic():
     # ---- Arm A control: joint curved fit (the co-collapsing multi-atom path) ----
     print(f"\n[Arm A] REML joint sae_manifold_fit K={K} (expected: hang/OOM in .venv)...",
           flush=True)
-    reml = reml_joint_isolated(X, K, tag="syn_A", timeout=120)
+    reml = reml_joint_isolated(X[tr], K, tag="syn_A", timeout=120)
     print(f"  REML joint: {reml.get('status')} ({reml.get('wall_s')}s)", flush=True)
     print(f"[Arm A] torch joint ManifoldSAE K={K}, target_k={K} (additive co-collapse proxy)...",
           flush=True)
-    tj = fit_curved_isolated(X, n_atoms=K, tag="syn_A_torch", target_k=K)
+    tj = fit_curved_isolated(X, n_atoms=K, tag="syn_A_torch", train_idx=tr, test_idx=te,
+                             target_k=K)
     if tj["status"] == "CONVERGED":
         tj["per_circle_corr"], tj["n_circles_recovered"] = _joint_recovery(tj["out_path"], theta)
-    print(f"  torch joint: ev={tj.get('ev')} per_circle_corr={tj.get('per_circle_corr')} "
+    print(f"  torch joint: ev_test={tj.get('ev')} ev_train={tj.get('ev_train')} "
+          f"per_circle_corr={tj.get('per_circle_corr')} "
           f"recovered={tj.get('n_circles_recovered')}/{K}", flush=True)
     # over-complete joint (K=2*ncirc, additive): the reseeding regime
-    tj_oc = fit_curved_isolated(X, n_atoms=2 * K, tag="syn_A_torch_oc", target_k=2 * K)
+    tj_oc = fit_curved_isolated(X, n_atoms=2 * K, tag="syn_A_torch_oc", train_idx=tr,
+                                test_idx=te, target_k=2 * K)
     if tj_oc["status"] == "CONVERGED":
         tj_oc["per_circle_corr"], tj_oc["n_circles_recovered"] = _joint_recovery(
             tj_oc["out_path"], theta)
-    print(f"  torch joint over-complete K={2*K}: ev={tj_oc.get('ev')} "
+    print(f"  torch joint over-complete K={2*K}: ev_test={tj_oc.get('ev')} "
           f"recovered={tj_oc.get('n_circles_recovered')}/{K} dead={tj_oc.get('dead_atoms')}",
           flush=True)
+    # pure-linear ambient baselines (held-out), matched budgets
+    lin = {"pca_L{}_test".format(K): _linear_heldout_ev(X, tr, te, K),
+           "pca_L{}_test".format(2 * K): _linear_heldout_ev(X, tr, te, 2 * K),
+           "pca_L{}_test".format(3 * K): _linear_heldout_ev(X, tr, te, 3 * K)}
+    print(f"  pure-linear PCA held-out: {lin}", flush=True)
     result["arms"]["A_joint"] = {"reml_joint": reml, "torch_joint": tj,
                                  "torch_joint_overcomplete": tj_oc}
+    result["arms"]["pure_linear"] = lin
     _save("synthetic_results.json", result)
 
     # ---- Arm B nursery: oracle blocks (factorization upper bound) ----
     print("\n[Arm B-oracle] one K=1 chart per TRUE plane, composed...", flush=True)
     ob = oracle_blocks(planes)
-    nb_oracle = run_nursery(X, ob, tag="syn_B_oracle", theta=theta)
+    nb_oracle = run_nursery(X, ob, tag="syn_B_oracle", train_idx=tr, test_idx=te, theta=theta)
     nb_oracle["n_circles_recovered"] = int(sum(
         b.get("best_planted_circle_corr", 0) > 0.8 for b in nb_oracle["per_block"]))
-    print(f"  oracle nursery composed EV={nb_oracle['composed_ambient_ev']} "
+    nb_oracle["mdl"] = _mdl_nursery(nb_oracle["per_block"], len(te), meta["p"])
+    print(f"  oracle nursery composed EV_test={nb_oracle['composed_ambient_ev_test']} "
           f"recovered={nb_oracle['n_circles_recovered']}/{K} "
           f"(fit_dim={nb_oracle['total_fit_dim']} vs joint ambient p={meta['p']})", flush=True)
     result["arms"]["B_nursery_oracle"] = nb_oracle
@@ -508,15 +591,15 @@ def driver_synthetic():
 
     # ---- Arm B nursery: DISCOVERED blocks (full pipeline) ----
     print("\n[Arm B-discovered] discover blocks -> chart per block -> compose...", flush=True)
-    bb, Ddict, diag = discover_blocks(X, n_dict=2 * K + 2, block_size=3)
+    bb, Ddict, diag = discover_blocks(X[tr], n_dict=2 * K + 2, block_size=3)  # discover on TRAIN
     print(f"  discovered {len(bb)} blocks, dims={diag['block_dims']}, "
           f"sparse_dict_ev={diag['sparse_dict_ev']:.3f}", flush=True)
-    nb_disc = run_nursery(X, bb, tag="syn_B_disc", theta=theta)
+    nb_disc = run_nursery(X, bb, tag="syn_B_disc", train_idx=tr, test_idx=te, theta=theta)
     nb_disc["n_circles_recovered"] = len({
         b["matched_planted_circle"] for b in nb_disc["per_block"]
         if b.get("best_planted_circle_corr", 0) > 0.8})
     nb_disc["discovery_diag"] = diag
-    print(f"  discovered nursery composed EV={nb_disc['composed_ambient_ev']} "
+    print(f"  discovered nursery composed EV_test={nb_disc['composed_ambient_ev_test']} "
           f"distinct_circles_recovered={nb_disc['n_circles_recovered']}/{K} "
           f"(fit_dim={nb_disc['total_fit_dim']})", flush=True)
     result["arms"]["B_nursery_discovered"] = nb_disc
@@ -531,15 +614,18 @@ def _verdict(result, meta):
     tj = A.get("torch_joint", {})
     ob = result["arms"].get("B_nursery_oracle", {})
     db = result["arms"].get("B_nursery_discovered", {})
+    lin = result["arms"].get("pure_linear", {})
     K = meta.get("ncirc")
     return {
-        "joint_torch_ambient_ev": tj.get("ev"),
+        "metric": "HELD-OUT EV (test rows, 30%)",
+        "joint_torch_ambient_ev_test": tj.get("ev"),
         "joint_torch_circles_recovered": f"{tj.get('n_circles_recovered')}/{K}",
         "joint_reml_status": A.get("reml_joint", {}).get("status"),
-        "nursery_oracle_ev": ob.get("composed_ambient_ev"),
+        "nursery_oracle_ev_test": ob.get("composed_ambient_ev_test"),
         "nursery_oracle_circles_recovered": f"{ob.get('n_circles_recovered')}/{K}",
-        "nursery_discovered_ev": db.get("composed_ambient_ev"),
+        "nursery_discovered_ev_test": db.get("composed_ambient_ev_test"),
         "nursery_discovered_circles_recovered": f"{db.get('n_circles_recovered')}/{K}",
+        "pure_linear_baselines_test": lin,
         "circle_subspace_ceiling": meta.get("circle_subspace_ev"),
         "nursery_fit_dim_per_block": ob.get("per_block", [{}])[0].get("block_dim"),
         "joint_fit_dim": meta.get("p"),
@@ -629,20 +715,30 @@ def driver_real():
     Xshared = Xc @ Vt[:r].T
     N, P = Xshared.shape
     K = len(sets)
-    print(f"[real] shared ambient: N={N}, P={P}, sets={sets}", flush=True)
+    # stratified 70/30 split PER SET (so both circles have train + test rows)
+    tr_parts, te_parts = [], []
+    for si in range(K):
+        rows = np.where(set_all == si)[0]
+        a, b = train_test_split(len(rows), frac=0.7, seed=si)
+        tr_parts.append(rows[a]); te_parts.append(rows[b])
+    tr = np.sort(np.concatenate(tr_parts)); te = np.sort(np.concatenate(te_parts))
+    print(f"[real] shared ambient: N={N}, P={P}, sets={sets}, n_train={len(tr)}, n_test={len(te)}",
+          flush=True)
     result = {"sets": sets, "shared_layer": best_L, "shared_ambient": {"N": N, "P": P},
+              "n_train": int(len(tr)), "n_test": int(len(te)),
               "n_tokens": {s: data[s][3] for s in sets}}
     _save("real_results.json", result)
 
     # ---- Arm A: joint curved fit on the SHARED ambient (co-collapse regime) ----
     print(f"\n[Arm A] REML joint K={K} on shared ambient (expected hang/OOM)...", flush=True)
-    reml = reml_joint_isolated(Xshared, K, tag="real_A", timeout=120)
+    reml = reml_joint_isolated(Xshared[tr], K, tag="real_A", timeout=120)
     print(f"  REML joint: {reml.get('status')} ({reml.get('wall_s')}s)", flush=True)
     print(f"[Arm A] torch joint ManifoldSAE K={K}, target_k={K} on shared ambient...", flush=True)
-    tj = fit_curved_isolated(Xshared, n_atoms=K, tag="real_A_torch", target_k=K)
+    tj = fit_curved_isolated(Xshared, n_atoms=K, tag="real_A_torch",
+                             train_idx=tr, test_idx=te, target_k=K)
     if tj["status"] == "CONVERGED":
         _, pos = _load_fit(tj["out_path"])
-        # per-set: best atom's cyclic-adjacency recovery
+        # per-set: best atom's cyclic-adjacency recovery (all rows -- interpretability)
         per_set = {}
         for si, s in enumerate(sets):
             rows = np.where(set_all == si)[0]
@@ -654,18 +750,20 @@ def driver_real():
                     best_adj, best_cc = adj, cc
             per_set[s] = {"best_atom_cyclic_adjacency": best_adj, "circular_corr": best_cc}
         tj["per_set_recovery"] = per_set
-    print(f"  torch joint: ev={tj.get('ev')} gate_share={tj.get('gate_share')} "
-          f"recovery={tj.get('per_set_recovery')}", flush=True)
-    result["arm_A_joint"] = {"reml": reml, "torch_joint": tj}
+    lin = {f"pca_L{K}_test": _linear_heldout_ev(Xshared, tr, te, K),
+           f"pca_L{2*K}_test": _linear_heldout_ev(Xshared, tr, te, 2 * K)}
+    print(f"  torch joint: ev_test={tj.get('ev')} ev_train={tj.get('ev_train')} "
+          f"recovery={tj.get('per_set_recovery')}; pure-linear={lin}", flush=True)
+    result["arm_A_joint"] = {"reml": reml, "torch_joint": tj, "pure_linear": lin}
     _save("real_results.json", result)
 
     # ---- Arm B: nursery. Blocks = each set's own 2-plane in the shared space. ----
-    print("\n[Arm B] nursery: discover 2-plane per set -> K=1 chart -> compose...", flush=True)
-    # oracle blocks: top-2 PCs of each set's rows WITHIN the shared space (its plane)
+    print("\n[Arm B] nursery: 2-plane per set (train PCs) -> K=1 chart -> compose...", flush=True)
+    # oracle blocks: top-2 PCs of each set's TRAIN rows WITHIN the shared space
     ob = []
     accepted = np.zeros((P, 0))
     for si in range(K):
-        rows = np.where(set_all == si)[0]
+        rows = np.intersect1d(np.where(set_all == si)[0], tr)
         Zc = Xshared[rows] - Xshared[rows].mean(0)
         _, _, Vk = np.linalg.svd(Zc, full_matrices=False)
         B = Vk[:2].T
@@ -673,36 +771,38 @@ def driver_real():
             B = B - accepted @ (accepted.T @ B)
         Q, _ = np.linalg.qr(B); Q = Q[:, :2]
         ob.append(Q); accepted = np.concatenate([accepted, Q], 1)
-    nb = run_nursery(Xshared, ob, tag="real_B")
+    nb = run_nursery(Xshared, ob, tag="real_B", train_idx=tr, test_idx=te)
     for si, s in enumerate(sets):
         rec = nb["per_block"][si]
         op = SCRATCH / f"real_B_b{si}_out.npz"
         if op.exists():
             _, pos = _load_fit(str(op))
-            # which set does this block's chart order best? report all sets
             rows = np.where(set_all == si)[0]
             cc, adj = _cyclic_recovery(2 * np.pi * pos[rows, 0, 0],
                                        rank_all[rows].astype(int), ntok[si])
             rec["set"] = s
             rec["recovered_circular_corr"] = cc
             rec["cyclic_adjacency_accuracy"] = adj
-    # also confirm discovery recovers the two planes without labels
-    bb_disc, _, diag = discover_blocks(Xshared, n_dict=2 * K + 2, block_size=3)
-    print(f"  discovery (unsupervised): {len(bb_disc)} blocks, dims={diag['block_dims']}",
+    nb["mdl"] = _mdl_nursery(nb["per_block"], len(te), P)
+    # also confirm discovery recovers the two planes without labels (train-only)
+    bb_disc, _, diag = discover_blocks(Xshared[tr], n_dict=2 * K + 2, block_size=3)
+    print(f"  discovery (unsupervised, train): {len(bb_disc)} blocks, dims={diag['block_dims']}",
           flush=True)
     nb["discovery_diag"] = diag
-    print(f"  nursery composed EV={nb['composed_ambient_ev']} "
+    print(f"  nursery composed EV_test={nb['composed_ambient_ev_test']} "
           f"(per-block fit_dim=2 vs joint P={P}); recovery="
           f"{[(b.get('set'), b.get('cyclic_adjacency_accuracy')) for b in nb['per_block']]}",
           flush=True)
     result["arm_B_nursery"] = nb
     result["verdict"] = {
-        "joint_torch_ev": tj.get("ev"),
+        "metric": "HELD-OUT EV (test rows, 30% per set)",
+        "joint_torch_ev_test": tj.get("ev"),
         "joint_reml_status": reml.get("status"),
         "joint_per_set_recovery": tj.get("per_set_recovery"),
-        "nursery_composed_ev": nb["composed_ambient_ev"],
+        "nursery_composed_ev_test": nb["composed_ambient_ev_test"],
         "nursery_per_set_adjacency": {b.get("set"): b.get("cyclic_adjacency_accuracy")
                                       for b in nb["per_block"]},
+        "pure_linear_test": lin,
         "nursery_fit_dim_per_block": 2,
         "joint_fit_dim": P,
         "joint_delivers_multiatom_model": True,
