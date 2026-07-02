@@ -102,9 +102,25 @@ MONTH_TEMPLATES = [
     "The new law took effect in {w}",
 ]
 
+# Hue-ordered color names — an intrinsically CYCLIC feature (the hue wheel wraps
+# violet->red). The plan flags the color hue-loop as the natural real curved chart to
+# dose; steering it is the cleanest large-arc test of the chart's path integral.
+COLORS = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "magenta"]
+COLOR_TEMPLATES = [
+    "The sky turned a deep shade of {w}",
+    "She painted the whole wall {w}",
+    "His favorite color has always been {w}",
+    "The traffic light glowed bright {w}",
+    "They dyed the fabric a vivid {w}",
+    "The sunset faded from gold to {w}",
+    "He bought a car that was {w}",
+    "The flag in the corner was {w}",
+]
+
 FEATURE_BANK = {
     "weekday": (WEEKDAYS, WEEKDAY_TEMPLATES, True),   # (words, templates, periodic)
     "month": (MONTHS, MONTH_TEMPLATES, True),
+    "color": (COLORS, COLOR_TEMPLATES, True),
 }
 
 
