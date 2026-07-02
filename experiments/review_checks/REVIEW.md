@@ -42,6 +42,28 @@ factors" — not yet "at production width on real data." The trajectory across t
 (EV -0.0000/reseeds=0 → EV 0.43 but no separation → 3/3 separated) is honestly documented
 below.
 
+GATING AUDIT (lead's request — fix must engage ONLY for cold all-zero decoders, leaving
+warm/healthy/K=1 byte-unchanged): VERIFIED.
+- The gate at fit_drivers.rs (guard before the call at ~:3764):
+  `max_decoder_norm = max_k ‖B_k‖; if !(max_decoder_norm > 0.0) { seed_cold_start_disjoint_charts(...) }`.
+  Engages ONLY when the whole dictionary decoder has co-vanished (max‖B_k‖==0, the cold
+  seed). ANY warm/placed decoder (any atom nonzero) skips it → byte-for-byte untouched.
+  Comment confirms; max_iter==0 freeze handled separately above.
+- Ran the K=1/warm-path tests at HEAD 16662c4f1: `decoder_norm_guard_is_noop_for_k1` ok,
+  `k1_gate_modes_do_not_pin_assignment_to_one` ok, `amortized_warm_start_matches_or_beats_
+  cold_inner_solve` ok. So K=1 + warm-start paths are unaffected. (K=1 does hit the cold
+  gate when its single decoder is all-zero, but the noop-for-k1 guard test passes, so K=1
+  behavior is preserved.)
+- 2027 suite 3/3 ok at HEAD 16662c4f1 (re-confirmed).
+SEPARATE FAILURE (NOT co-collapse): `fast_encode_matches_per_row_warm_start` (tests_olmo.rs
+:679) FAILED — asserts batched fast-encode == per-row warm-start to 1e-12. This is an
+ENCODE-lane test (tests_olmo.rs last touched by 2fc0fba3b "sae(encode): amplitude-aware
+routing"); the co-collapse commits (7a93b1d06/50b8c52b7/16662c4f1) touch fit_drivers.rs/
+assignment.rs, NOT the encode path, so this failure CANNOT be caused by the co-collapse
+fix. Flag to the encode lane: a fast-encode vs warm-start numerical-parity regression
+(likely from the amplitude-aware routing change). Out of my named-lanes scope but it's a
+RED gam-sae test that a build pass will hit.
+
 ### [HISTORY] O-manifold co-collapse fix was NOT effective — repro test FAILED at earlier HEADs
 Task #8 is marked completed, but I RAN `cargo test -p gam-sae --lib
 cocollapse_disjoint_2027` at gam HEAD:
