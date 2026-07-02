@@ -68,6 +68,49 @@ byte-unchanged. The deflation UNIT test passes in isolation. So the machinery is
 correctly gated — it just never engages because the trigger upstream is missing this
 case.
 
+## SPEC.md audit of today's landed surface (gam/SPEC.md, 19 rules)
+
+RULE 8 (Python thin wrapper, no math/logic) — VIOLATION:
+- `gamfit/_sparse_dictionary.py:334` `BlockSparseDictionaryFit.transform` reimplements
+  the BLOCK OOS routing IN NUMPY: l.354 raw tied projection w=x·D_{g,r}, l.356
+  `gate = np.linalg.norm(w, axis=2)` (group-ℓ₂ gate), then block-TopK + tied signed
+  codes — duplicating Rust block.rs (block_projections_row/block_gates/route_row_blocks
+  /code_row). Contrast the ATOM lane (l.81, l.131) which correctly DELEGATES to the
+  Rust FFI `sparse_dictionary_transform`. Fix: add a Rust FFI
+  `block_sparse_dictionary_transform` and make the Python a thin call, mirroring the
+  atom lane. Also minor: `.reconstruct` helpers (l.64, l.327) do numpy for-loops that
+  duplicate Rust `*Fit::reconstruct` (diagnostic; lower priority).
+RULE 19 (no magic/arbitrary constants) — VIOLATIONS/NOTES:
+- `SAE_COCOLLAPSE_RESEED_COOLDOWN_ITERS = 3` (assignment.rs) — hard-coded algorithmic
+  constant, arbitrary (already flagged; O-manifold told to derive). Sibling
+  `SAE_DICTIONARY_COCOLLAPSE_RESEED_BUDGET = 3` is the same pattern (pre-existing).
+- block.rs `BlockSparseConfig::default`: frame_ridge 1e-9, tolerance 1e-6, minibatch
+  512, block_tile 1024, max_epochs 30 — these are USER-TUNABLE config defaults (lower
+  severity than an in-algorithm constant), but frame_ridge/tolerance are undived
+  regularizers (arbitrary magnitudes). Note, not a hard violation.
+RULE 3 (posterior mean default, never MAP) — PRE-EXISTING NOTE:
+- The SAE manifold assignment uses `AssignmentMode::ibp_map(...)` (MAP gate) as the
+  path exercised throughout (e.g. the #2027 repro). Tension with rule 3's
+  "posterior mean must always be the default." Pre-existing, not introduced today;
+  logged for completeness.
+Other 16 rules: no NEW violations spotted in today's block-sparse/co-collapse surface.
+
+## O-solve lane state (git history + test run)
+Distinct NEW O-solve commits today: effectively none — its deliverables landed via the
+fleet batch (e09e6956c mixture_link gate widening) and prior commits (98e588051 W12
+arrow-Schur decline test). The lane is DONE + GREEN, not stalled:
+- `cargo test -p gam-solve --lib arrow_schur_decline` → 2 passed / 0 failed:
+  absent_dense_beta_block_declines_not_fatal (asserts GpuRequiresDenseSystem, NOT
+  SchurFactorFailed) + present_dense_beta_block_is_not_declined_as_absent. GPU-decline
+  contract verified.
+- mixture_link gate widening (LogLog/Cauchit 5-jet Fisher) verified earlier + FD-tested.
+- fisher_weight tests passed earlier (exit 0).
+Recommend: no re-task needed for correctness; the one open thread is confirming EVERY
+caller of the arrow-Schur GPU path routes GpuRequiresDenseSystem → CPU fallback (the
+decline tests prove the variant is emitted; a caller audit would prove the fallback is
+wired at each site — latent_inner.rs:371 matches SchurFactorFailed, should also handle
+the new variant).
+
 ## Baseline (established before lanes committed)
 
 Reusable pieces BT1-block MUST build on rather than reimplement:
