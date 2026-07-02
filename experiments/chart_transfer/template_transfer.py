@@ -41,7 +41,9 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
 
 HERE = Path(__file__).resolve().parent
 EXP = HERE.parent                                   # experiments/
-PROBE_OUT = EXP / "probe_out"
+# harvest source: default the original 5-template probe cache; CHART_TRANSFER_HARVEST
+# overrides with a richer cache (e.g. the 14-template harvest_more/).
+PROBE_OUT = Path(os.environ.get("CHART_TRANSFER_HARVEST", EXP / "probe_out"))
 OUT_DIR = Path(os.environ.get("CHART_TRANSFER_OUT", HERE / "template_out"))
 
 # import block_nursery for the isolated chart fit + circular stats (no reimplementation)
@@ -205,19 +207,23 @@ def run_set(name, r=8):
               f"lin1={s.get('linear1_ev_eval')} lin2={s.get('linear2_ev_eval')}", flush=True)
     ok = [s for s in loto if s.get("chart_status") == "CONVERGED"]
 
-    def mean(key):
+    def agg(key, fn=np.mean):
         vals = [s[key] for s in ok if key in s]
-        return round(float(np.mean(vals)), 3) if vals else None
+        return round(float(fn(vals)), 3) if vals else None
 
+    cc = [s["coord_consistency_circ_corr"] for s in ok if "coord_consistency_circ_corr" in s]
     result["loto"] = loto
     result["loto_summary"] = {
         "n_folds": len(ok),
-        "coord_consistency_circ_corr": mean("coord_consistency_circ_corr"),
-        "coord_median_abs_offset_deg": mean("coord_median_abs_offset_deg"),
-        "adjacency_eval_mean": mean("adjacency_eval_templates"),
-        "chart_ev_eval_mean": mean("chart_ev_eval"),
-        "linear1_ev_eval_mean": mean("linear1_ev_eval"),
-        "linear2_ev_eval_mean": mean("linear2_ev_eval"),
+        "coord_consistency_circ_corr": agg("coord_consistency_circ_corr"),
+        "coord_consistency_median": agg("coord_consistency_circ_corr", np.median),
+        "coord_consistency_frac_over_0.8": (round(float(np.mean(np.array(cc) > 0.8)), 2)
+                                            if cc else None),
+        "coord_median_abs_offset_deg": agg("coord_median_abs_offset_deg", np.median),
+        "adjacency_eval_mean": agg("adjacency_eval_templates"),
+        "chart_ev_eval_mean": agg("chart_ev_eval"),
+        "linear1_ev_eval_mean": agg("linear1_ev_eval"),
+        "linear2_ev_eval_mean": agg("linear2_ev_eval"),
     }
     return result
 
@@ -236,14 +242,19 @@ def main():
     verdict = {}
     for name, res in allres["sets"].items():
         ls = res["loto_summary"]
+        c, l1, l2 = (ls["chart_ev_eval_mean"], ls["linear1_ev_eval_mean"],
+                     ls["linear2_ev_eval_mean"])
         verdict[name] = {
+            "n_templates": res["n_templates"], "n_tokens": res["n_tokens"],
             "coord_consistency_circ_corr": ls["coord_consistency_circ_corr"],
             "adjacency_eval_mean": ls["adjacency_eval_mean"],
-            "chart_ev_eval_mean": ls["chart_ev_eval_mean"],
-            "linear2_ev_eval_mean": ls["linear2_ev_eval_mean"],
-            "chart1_vs_linear2_transfer": (
-                None if ls["chart_ev_eval_mean"] is None or ls["linear2_ev_eval_mean"] is None
-                else round(ls["chart_ev_eval_mean"] - ls["linear2_ev_eval_mean"], 3)),
+            "chart_ev_eval_mean": c,
+            "linear1_ev_eval_mean": l1,
+            "linear2_ev_eval_mean": l2,
+            # the fair fights: chart uses 1 coord (compare to lin1); a circle needs 2
+            # linear dims (compare to lin2). chart1>=lin1 and chart1~=lin2 = chart wins.
+            "chart1_minus_linear1": None if c is None or l1 is None else round(c - l1, 3),
+            "chart1_minus_linear2": None if c is None or l2 is None else round(c - l2, 3),
         }
     allres["verdict"] = verdict
     (OUT_DIR / "template_transfer.json").write_text(json.dumps(allres, indent=2, default=float))
