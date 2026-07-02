@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: **BT1 now GREEN** (`4a06940cd`, `cargo test -p gam-sae --lib block` 17/0 — gauge-invariance + recovery verified) → SAFE NOW; **G-bsf synthetic committed** (`33731de`: Grassmannian R²=0.986, vanilla 0.82, real stable-rank 1.0→3.4); **N-nursery** = structure-recovery-under-matched-budget (weekday adj 1.0 vs joint 0.429), never an EV win (linear 0.696>joint 0.629>nursery 0.576); **P-null real-weekday null p-values PULLED to PENDING** (uncommitted `null_out/`); **K≥2 co-collapse fix repro RED** (`649ff7d`, trigger never fires) → unpublishable._
+_Status: live document, updated as lanes commit. Last sync: **CENTERPIECE added** — the unified real-data ladder (§2): BSF reproduced (direction 36.6 → block 6.4 bits/token, selection cost 32→3) then extended one rung (circle-chart codes 1 intrinsic coord; block→chart `f*`≈12–22 on weekday/month). BT1 GREEN (`4a06940cd`, 17/0); G-bsf synthetic committed (`33731de`: Grassmannian 0.9855, vanilla 0.8185) + cyclic held-out EV (weekday 0.82, month 0.95); N-nursery = recovery-not-EV; P-null null p-values PENDING (uncommitted); K≥2 co-collapse repro RED → unpublishable._
 
 ---
 
@@ -56,6 +56,39 @@ The crossover is **SNR-independent** at matched precision and **`f* = ∞` for a
 (a straight feature frees no coordinate) — so the ladder self-controls: curvature only pays
 where curvature exists.
 
+### The unified real-data ladder — BSF reproduced, then extended one rung
+
+**Rungs 1–4, BSF reproduced** (G-bsf, OLMo self-qualia L40, matched budget F=64/L0=8): the
+block code's bits/token fall as the block widens, because the selection cost `log₂ C(G,k)`
+collapses — the paper's "blocks beat directions" MDL result, with the mechanism visible.
+
+| rung | bits/token | selection bits/firing | val EV |
+|---|---:|---:|---:|
+| direction (TopK, b=1) | **36.6** | 32.0 | 0.449 |
+| block b=2 | 19.5 | 15.1 | 0.425 |
+| block b=4 | 11.0 | 6.9 | 0.399 |
+| block b=8 | **6.4** | 3.0 | 0.325 |
+
+**Rung 5, one rung further** (M-mdl `score_json`, cyclic weekday/month — where curvature
+exists, and where G-bsf's own block-finding lands: a single b≈4 block captures the cycle at
+held-out EV 0.82/0.95, cyclic adjacency 1.0, coord stable rank 2.4 = the circle's extrinsic
+dim). The circle-chart codes that cycle from **one intrinsic coordinate** (the angle) where the
+block codes ~2 extrinsic dims — continuing the descent by collapsing the *code dimension*:
+
+| feature | block (held-out EV) | circle-chart | Φ (extra harmonics) | crossover `f*` |
+|---|---|---|---:|---:|
+| weekday | b=2, EV 0.82, adj 1.0 | d_i=1 (angle) | 12 | ≈22 (matched `2p`=12) |
+| month | b=2, EV 0.95, adj 1.0 | d_i=1 (angle) | 12 | ≈16 (matched `2p`=12) |
+
+A weekday/month feature fires far more than ~12–22 times in any corpus (`f ≫ f*`), so the
+curved chart has the shortest description. **Directions collapse the selection cost, blocks
+collapse it further, and the chart collapses the code dimension (2→1 coordinate per firing) —
+three rungs, each removing a different term of the description length.** (Rungs 1–4 are OLMo,
+a linear axis where a chart is degenerate; the chart rung is realized on the cyclic feature.
+Artifact: `mdl_ladder/unified_ladder.json`, scorer `mdl_ladder/unified_ladder.py`.)
+
+Supporting — the crossover across regimes (single-feature, `g_dict=1`):
+
 | regime | direction | 2-block | circle-chart | crossover `f*` | winner at `f ≫ f*` |
 |---|---|---|---|---:|---|
 | frontier planted circle (p=9, high SNR) | infeasible | feasible | **shortest past f≈11** | ≈9–11 | **chart** |
@@ -78,7 +111,7 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 | lane / component | claim under test | result | verdict | status |
 |---|---|---|---|---|
 | **G-bsf** — faithful BSF reimpl (`bsf_baseline/`) | block code recovers planted subspaces; beats TopK at matched budget | synthetic subspace recovery: **Grassmannian principal-angle R²=0.986**, vanilla 0.82 (identical budget; recovered stable rank 2.9 vs planted b=4); real-data block **stable rank climbs 1.0→3.4 as b:1→8** (reproduces the paper's ≈3); on OLMo self-qualia L40 (a *linear* axis) TopK b=1 EV **0.4489** best, BSF EV falls 0.425→0.325 | **SAFE NOW** — SOUND / faithful (R-review verified) | landed — `metrics.json` committed (`33731de`) |
-| **G-bsf** — cyclic block finding | one block captures a whole cycle (weekday/month) | single block captures ~80% variance, **in-block cyclic adjacency 1.00**, coord stable rank 2.4 (the circle's extrinsic dim), 7/8 blocks active | **QUALIFIED** — structural claim holds | landed — **cyclic `full_ev`=0.976 is IN-SAMPLE, do not publish as generalization** |
+| **G-bsf** — cyclic block finding | one block captures a whole cycle (weekday/month) | single block captures ~80% variance, **held-out EV (leave-one-template-out) weekday 0.82 / month 0.95**, in-block **cyclic adjacency 1.00**, coord stable rank 2.4 (the circle's extrinsic dim) | **SAFE NOW** — structural claim + held-out EV | landed (`992c97b`) — in-sample number renamed `full_ev_insample`; held-out EV is the publishable one |
 | **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **SAFE NOW** — scorer SOUND (R-review hand-verified) | landed (in-sample EVs) |
 | **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **SAFE NOW** — strongest real-model result | landed — weekday circle only (month co-collapse on pre-fix build) |
 | **P-null** — matched-null battery (`matched_null.py`) | real cyclic claims survive matched nulls | *Descriptive W7 facts (committed `curved_feature_probes.json`):* curved(1 coord) ≈ linear(2 PC) ≫ linear(1 PC); month cyclic adjacency clean, weekday 0.714. *Matched-null p-values:* **PENDING** — `null_out/null_weekday.json` (real harvest, current `matched_null.py`) is **not committed**, so no null p-value is citeable | **code SOUND** (R-review 5fd1465); **null verdict PENDING a committed artifact** | PENDING — P-null committing `null_out/*.json`; refresh once on disk & R-review-verified |
@@ -139,13 +172,15 @@ claims. Stated plainly:
    (c) **Small-N noise:** weekday adjacency 1.0 but circular_corr only 0.243 on ~28 test rows —
    treat the real recovery numbers as suggestive, not decisive.
 
-   **Related — the K≥2 co-collapse "fix" is currently UNVALIDATED (repro RED).** O-manifold landed
-   a full fix chain (deflation+ownership `465ad67a0`, reseed cooldown `3ddf58c03`, repro
-   `f7991e5c8`), but R-review's re-runs at HEAD (`10a6f56`, `649ff7d`) show the repro test **failing
-   (2 fail / 1 pass)**: the reseed trigger never fires (reseeds=0, EV≈−0.0000), and the P=16 case
-   is not the P=96 hang regime. So "we fixed the K≥2 co-collapse" **must not be published** — as of
-   now it is demonstrated *not* to fire, not demonstrated fixed. (REML is OOM-blocked in `.venv`,
-   so this can only be exercised on the torch path or a small planted case.)
+   **Related — the K≥2 co-collapse "fix" is RED end-to-end.** O-manifold's root-cause fix chain
+   landed (deflation/anchor/ownership `465ad67a0`, reseed cooldown `3ddf58c03`, repro `f7991e5c8`)
+   and its components are individually verified, **but the collapse detector does not fire on the
+   stuck-at-null mode** — the reseed trigger never engages (reseeds=0, EV≈−0.0000), so Parts A/B/C
+   never run and its own regression test is RED (R-review `10a6f56`/`649ff7d`: 2 fail / 1 pass;
+   only the deflation unit guard passes; P=16 is not the P=96 hang regime). Trigger fix in progress
+   (O-manifold, task #8 reopened). So "we fixed the K≥2 co-collapse" **must not be published**; any
+   "additive generative model / joint K≥2 curved fit works" line must stay hedged to *K=1 +
+   block-sparse Tier-1 only — the joint K≥2 curved fit still co-collapses (repro red)*.
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a

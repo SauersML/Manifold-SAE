@@ -1,0 +1,81 @@
+{
+  "segment_A_bsf_reproduced": {
+    "source": "bsf_baseline/metrics.json['real'] (G-bsf, OLMo self-qualia L40)",
+    "claim": "block code beats direction code in bits/token; mechanism = selection cost log2 C(G,k) collapses 32.0 -> 3.0 bits/firing as blocks widen",
+    "spine": [
+      {
+        "rung": "direction (TopK)",
+        "b": 1,
+        "G": 64,
+        "k": 8,
+        "bits_per_token": 36.643,
+        "selection_bits_per_firing": 32.04,
+        "val_ev": 0.449,
+        "data": "OLMo self-qualia L40 (linear axis), matched F=64/L0=8"
+      },
+      {
+        "rung": "block b=2",
+        "b": 2,
+        "G": 32,
+        "k": 4,
+        "bits_per_token": 19.5,
+        "selection_bits_per_firing": 15.13,
+        "val_ev": 0.425,
+        "data": "OLMo self-qualia L40 (linear axis), matched F=64/L0=8"
+      },
+      {
+        "rung": "block b=4",
+        "b": 4,
+        "G": 16,
+        "k": 2,
+        "bits_per_token": 11.015,
+        "selection_bits_per_firing": 6.91,
+        "val_ev": 0.399,
+        "data": "OLMo self-qualia L40 (linear axis), matched F=64/L0=8"
+      },
+      {
+        "rung": "block b=8",
+        "b": 8,
+        "G": 8,
+        "k": 1,
+        "bits_per_token": 6.365,
+        "selection_bits_per_firing": 3.0,
+        "val_ev": 0.325,
+        "data": "OLMo self-qualia L40 (linear axis), matched F=64/L0=8"
+      }
+    ]
+  },
+  "segment_B_curved_extension": {
+    "source": "M-mdl mdl.score_json on the cyclic weekday/month feature; block rung = G-bsf cyclic block-finding (bsf_baseline/metrics.json['cyclic'])",
+    "claim": "on a curved feature the circle-chart codes 1 intrinsic coordinate vs the block's ~2 extrinsic dims; block->chart crossover f* = 2p firings",
+    "per_feature": {
+      "weekday": {
+        "p_ambient": 6,
+        "b_ext": 2,
+        "d_i": 1,
+        "n_basis": 4,
+        "block_held_out_ev": 0.822,
+        "block_coord_stable_rank": 2.36,
+        "cyclic_adjacency": 1.0,
+        "phi_extra_params": 12,
+        "f_star": 21.53,
+        "f_star_matched_simple_2p": 12.0,
+        "delta_code_bits_per_firing": 0.4806
+      },
+      "month": {
+        "p_ambient": 6,
+        "b_ext": 2,
+        "d_i": 1,
+        "n_basis": 4,
+        "block_held_out_ev": 0.953,
+        "block_coord_stable_rank": 2.41,
+        "cyclic_adjacency": 1.0,
+        "phi_extra_params": 12,
+        "f_star": 16.39,
+        "f_star_matched_simple_2p": 12.0,
+        "delta_code_bits_per_firing": 1.2773
+      }
+    },
+    "f_star_2p_at_cyclic_p6": 12
+  }
+}
