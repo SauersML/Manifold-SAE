@@ -147,6 +147,12 @@ claims. Stated plainly:
      matched-spectrum null (p=0.16) — on weekday the "one curved coord = 2-PC parity" is *not*
      distinguishable from what a 1-D curve gets on a matched spectrum. So weekday cyclic order is
      "marginal (p≈.04)", never strong, and weekday EV-parity-as-circle-signature must not be claimed.
+   - **Color-name — a clean negative (scoped).** A cheap Qwen color-NAME probe (8 hue words × 5
+     templates) shows the tokens do **not** form a recovered hue circle (cyclic adjacency 1/8,
+     label-perm **p=0.93**; basis-real 0.00). This is the discipline working — not every
+     plausibly-cyclic token feature is a circle. Scope caveat: this is the name-token analog, **not**
+     W7's big-model color-SWATCH claim (`color_geometry.py`, D=7168, unrunnable on this box), so it
+     neither is nor refutes that result.
    - The phase-scramble is n.s. for both and is reported as a **diagnostic, not a gate**: the ordering
      is carried by the low-frequency power spectrum (smoothness), which does not require
      higher-harmonic phase-locking — the honest reading, not a failure.
@@ -193,15 +199,18 @@ claims. Stated plainly:
    0.243 on ~28 rows) — suggestive, not decisive.
 
    **Related — the K≥2 co-collapse pathology is now reproduced AND fixed on the deterministic repro.**
-   R-review confirms the #2027 suite is **3/3 GREEN at HEAD (`7a93b1d06`)**, including the
-   structural-separation test: on the deterministic two-circle repro, **EV recovers AND the atoms
-   separate onto distinct curved factors, at both widths**. The fix is cold-start sequential CHART
-   deflation. Scope honestly: this is **not yet validated at production width on real data** — REML
-   remains width-blocked in the current venv (a node rerun is staged). The evidence quality is worth
-   noting: one biting regression test tracked the whole fix chain **broken → EV-only → separated**,
-   so the green is earned, not asserted. The additive-generative-model / joint-K≥2 line accordingly
-   softens from "still co-collapses" to **"fixed on the deterministic repro; production-width
-   validation pending."**
+   R-review independently re-ran the #2027 suite: **3/3 GREEN at HEAD (`7a93b1d06`)**, including the
+   structural-separation test — on the deterministic two-circle repro, **EV recovers AND the atoms
+   separate onto distinct curved factors at both widths** (per-factor even-fraction [0.998, 0.101] at
+   p=16 and [0.963, 0.210] at p=96 — each atom owns one circle). The fix is cold-start sequential
+   CHART deflation. Scope honestly: **not yet validated at production width on real data** (REML
+   remains width-blocked in the current venv; a node REML rerun is staged) and the full manifold
+   regression suite is still in progress. The evidence quality is itself worth noting: one biting
+   regression test tracked the whole fix chain **broken → EV-only → separated**, so the green is
+   earned, not asserted. The additive-generative-model / joint-K≥2 line accordingly softens from
+   "still co-collapses" to **"fixed on the deterministic repro; production-width validation pending"**,
+   and the nursery route (§4.4) **independently validates the same factorization principle the fix
+   now applies at cold start.**
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a
