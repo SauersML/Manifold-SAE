@@ -403,7 +403,17 @@ TIMEOUT_BLOCKED at width. Gate results:
    2 extra 1-dim discovered blocks (chart_ev 0.40/0.53) just soak leftover linear
    background — harmless. Honest read: "3/3 planes found+charted; 2/3 angles recover
    at corr>0.8, the third at 0.77 (matching the oracle's 0.75)".
-4. REPRODUCIBILITY — reduced-n (n=210, seed=7, 250 steps) spot-run: see below.
+4. REPRODUCIBILITY — reduced-n (n=210, seed=7, 250 steps) spot-run
+   (review_checks/repro_nursery.py): CORE recovery REPRODUCES, EV-parity does NOT.
+   - joint torch 0.6122; oracle nursery 0.7956 (2/3); DISCOVERED nursery 0.6024 (2/3,
+     corrs 0.933/0.90); circle ceiling 0.891.
+   - ROBUST: 2/3 circle recovery reproduces (structure claim holds under n/seed change).
+   - N-SENSITIVE: at n=210 the DISCOVERED arm mis-segments (blocks [3,1,2,1,1] vs the
+     headline's clean [2,2,2,1,1]) and loses EV — discovered 0.60 << oracle 0.80, and
+     does NOT beat joint (0.60 vs 0.61). So the headline "discovered ≈ oracle,
+     discovery loses nothing" is NOT robust to sample size; it holds at n=480 but the
+     energy-anticorr discovery degrades at n=210. State "discovery matches oracle AT
+     n=480", not as a general claim.
 On this p=96 synthetic the nursery DOES beat joint torch on held-out EV (0.834 vs
 0.756) AND recovers more circles (2 vs 1), and REML is width-blocked — the honest
 "no-joint-solve delivery" story. But linear PCA-6 (0.883) still beats nursery on raw
