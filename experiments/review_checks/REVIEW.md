@@ -22,7 +22,27 @@ in the doc. (2) BT1's committed core did NOT compile (3 pattern errors) — flag
 (3) N-nursery real result reframed: recovery win, NOT an EV win (linear beats both).
 (4) **The K≥2 co-collapse "fix" DOES NOT WORK — its own repro test is RED at HEAD.**
 
-### [HIGHEST] O-manifold co-collapse fix is NOT effective — repro test FAILS at HEAD
+### [HIGHEST — NOW RESOLVED] O-manifold co-collapse fix — repro suite GREEN 3/3 after 7a93b1d06
+RESOLUTION: after "sae: cold-start sequential CHART deflation separates K≥2 atoms"
+(7a93b1d06), I re-ran `cargo test -p gam-sae --lib 2027` → 3 passed / 0 failed:
+  sequential_deflation_gives_both_atoms_material_norm_2027 ......... ok
+  two_circle_whitened_k2_recovers_disjoint_signal_2027 ............. ok
+  two_circle_separates_at_narrow_and_wide_widths_2027 ............. ok  (WAS FAILING)
+The structural-separation test — the one that stayed red through the seeding fix (atoms
+both on one circle, even-energy fractions both >0.5) — now PASSES: the cold-start
+sequential CHART deflation genuinely separates the two atoms onto the distinct planted
+circles at BOTH widths, with materially positive EV. So the K≥2 whitened co-collapse is
+FIXED on the #2027 repro (EV recovers AND factors separate). My HIGHEST finding is closed.
+CAVEAT for publication: this is verified on the synthetic whitened two-circle repro
+(p=16 + wide); it is a genuine biting regression test that went red→green across the fix
+chain (good evidence). Production REML-at-full-width transfer is a separate question (REML
+still OOM/width-blocked in .venv), so frame as "the K≥2 co-collapse pathology is
+reproduced and FIXED on the deterministic repro; the joint fit now separates curved
+factors" — not yet "at production width on real data." The trajectory across the chain
+(EV -0.0000/reseeds=0 → EV 0.43 but no separation → 3/3 separated) is honestly documented
+below.
+
+### [HISTORY] O-manifold co-collapse fix was NOT effective — repro test FAILED at earlier HEADs
 Task #8 is marked completed, but I RAN `cargo test -p gam-sae --lib
 cocollapse_disjoint_2027` at gam HEAD:
   two_circle_whitened_k2_recovers_disjoint_signal_2027 ... FAILED
