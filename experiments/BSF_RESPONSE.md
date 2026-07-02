@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: BT1 FFI/tests commit `097b1c1de` landed (green pending R-review); N-nursery arms + P-null month/color still PENDING._
+_Status: live document, updated as lanes commit. Last sync: R-review verdicts encoded (weekday cyclic order QUALIFIED marginal p≈.04, month robust, C1 EV-parity safe); G-bsf synthetic recovery corrected 0.76→0.82; BT1 confirmed NOT compiling (`e01c2fd`); N-nursery arms running/uncommitted → PENDING with two mandatory caveats pre-recorded. Untracked result artifacts flagged for lane commit._
 
 ---
 
@@ -73,13 +73,19 @@ per-lane JSON interface: `mdl_ladder/DERIVATION.md`, `mdl_ladder/README.md`.
 
 | lane / component | claim under test | result | verdict | status |
 |---|---|---|---|---|
-| **G-bsf** — faithful BSF reimpl (`bsf_baseline/`) | block code recovers planted subspaces; beats TopK at matched budget | synthetic subspace recovery R²=0.76 (vanilla); on OLMo self-qualia L40 (a linear axis) TopK b=1 EV **0.4489** is best, BSF EV falls 0.43→0.32 as b grows (higher stable rank, lower EV) | **SOUND / faithful** (R-review verified numerically) | landed |
-| **G-bsf** — cyclic block finding | one block captures a whole cycle (weekday/month) | winning block stable rank ≈2, **in-block cyclic adjacency 1.00**, 7/8 blocks active | structural claim holds | landed — **cyclic `full_ev` is IN-SAMPLE, do not publish as generalization** |
-| **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **scorer SOUND** (R-review hand-verified) | landed (in-sample EVs) |
-| **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **strongest real-model result** | landed — weekday circle only (month co-collapse on pre-fix build) |
-| **P-null** — matched-null battery (`null_out/`) | real weekday cyclic claims survive matched nulls | **circular correlation 0.93, p=0.010 (survives)**; discrete adjacency 0.43, p=0.43 (**fails**); C1 gap-closed p=0.48 (**fails vs matched-spectrum**) | **partially nulled** — continuous circularity real, discrete ordering at chance | landed (real weekday); month/color PENDING |
-| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | data harness landed (n=480, p=96, 3 circles, subspace EV 0.878); `arms: {}` | `PENDING` — A/B arms not yet run | PENDING |
-| **BT1** — Rust block-sparse Tier-1 (gam `097b1c1de`) | gauge-invariant block-sparse core | gauge invariance verified numerically (gate/loss invariant to O(b) rotation to 1e-15; negative control bites). Follow-up commit adds FFI + Python surface + `block_tests.rs` (gauge/recovery), addressing the two compile/test blockers R-review flagged on `a6f2c0e28`. | **DESIGN SOUND**; FFI + tests landed | PENDING R-review re-verify (`cargo test -p gam-sae` green) |
+Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED** (publishable only with the stated hedge) · **PENDING** (no validated/committed number yet — never cite).
+
+| lane / component | claim under test | result | verdict | status |
+|---|---|---|---|---|
+| **G-bsf** — faithful BSF reimpl (`bsf_baseline/`) | block code recovers planted subspaces; beats TopK at matched budget | synthetic subspace recovery mean **R²=0.82** (vanilla, 5 seeds, val EV 0.89); on OLMo self-qualia L40 (a *linear* axis) TopK b=1 EV **0.4489** is best, BSF EV falls 0.425→0.325 as b grows (higher stable rank, lower EV) | **SAFE NOW** — SOUND / faithful (R-review verified real numbers numerically) | landed — real/cyclic numbers backed; `metrics.json` synthetic phase on disk, **pending G-bsf commit** |
+| **G-bsf** — cyclic block finding | one block captures a whole cycle (weekday/month) | winning block stable rank ≈2, **in-block cyclic adjacency 1.00**, 7/8 blocks active | **QUALIFIED** — structural claim holds | landed — **cyclic `full_ev`=0.976 is IN-SAMPLE, do not publish as generalization** |
+| **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **SAFE NOW** — scorer SOUND (R-review hand-verified) | landed (in-sample EVs) |
+| **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **SAFE NOW** — strongest real-model result | landed — weekday circle only (month co-collapse on pre-fix build) |
+| **P-null** — matched-null battery (`null_out/`, `matched_null.py`) | real cyclic claims survive matched nulls | **month cyclic order robust** (n=12, adj 0.83); **weekday cyclic order MARGINAL** (adj 0.71 at n=7, p≈0.04, and fragile — the single-seed battery re-fit scores lower/at chance); **C1 EV-parity safe**; continuous circular correlation significant | **SAFE NOW** for month order + C1 EV-parity; **QUALIFIED** for weekday (marginal p≈.04) — R-review verified (commit 5fd1465) | landed per R-review REVIEW.md; **raw `null_out/` JSONs pending P-null commit**; month/color full battery PENDING |
+| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | design VALID (R-review commit 5fd1465); result arms actively running & **uncommitted** (arms JSON in flux at last poll) | **PENDING** — no validated headline yet | PENDING (see §4.4 for the two mandatory caveats before any headline) |
+| **BT1** — Rust block-sparse Tier-1 (gam `097b1c1de`) | gauge-invariant block-sparse core | gauge invariance verified numerically by review (gate/loss invariant to O(b) rotation to 1e-15; negative control bites). FFI + `block_tests.rs` added. **But R-review (e01c2fd) confirms `gam-sae` still does NOT compile** — 3 edition-2024 pattern errors in `block.rs`; tests cannot run. | **DESIGN SOUND, NOT GREEN** | **PENDING** — does not compile (`cargo test -p gam-sae` fails to build); no BT1 number is publishable |
+
+**Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
 
 ---
 
@@ -95,27 +101,39 @@ claims. Stated plainly:
    fit. The REML→bits map (§2) is the same accounting the criterion performs, cited to source,
    but not read off a converged `v`.
 
-2. **Real cyclic-probe claims are only partially validated.** On the real weekday harvest the
-   matched-null battery (P-null) **fails** the discrete cyclic-adjacency claim (p=0.43, at
-   chance) and **fails** the "one curved coord = 2-PC parity is a *circle* signature" claim
-   against a matched-spectrum Gaussian (p=0.48). What **survives** is the continuous circular
-   correlation (0.93, p=0.010) and the dose calibration (§3). So the defensible real-model
-   claims are: (a) the recovered angle is continuously circular, and (b) the chart's dose
-   metric predicts interventions — **not** that the discrete token ordering beats chance on
-   35 samples. Month/color nulls are still PENDING.
+2. **Real cyclic-probe claims are matched-null-scoped — this is a feature, not a bug.** We ran
+   BSF's own matched-null discipline against our W7 circle probes (P-null, R-review-verified,
+   commit `5fd1465`), and it correctly scopes what we may claim:
+   - **Month (n=12, adjacency 0.83): robust cyclic order — SAFE.**
+   - **Weekday (n=7): MARGINAL.** The headline adjacency 0.71 clears the label-permutation null
+     only at **p≈0.04**, and it is fragile: the battery's single-seed budget re-fit scores lower
+     (toward chance), pushing the effective p up. Publish weekday cyclic order as *"marginal
+     (p≈.04)"*, never as a strong result.
+   - **C1 EV-parity (one curved coord ≈ two linear PCs): SAFE** as a representational claim.
+     The matched-spectrum null shows the *parity itself is not unique to circles* (a smooth 1-D
+     curve on a matched spectrum closes a similar gap) — a scoping note on what the parity
+     proves, not a refutation that it holds.
+   - **Survivor:** the continuous circular correlation is significant, and the dose calibration
+     (§3) is the strongest real-model result. That two of our own weekday claims are only
+     marginal, honestly reported, is what makes the surviving ones (month order, C1 parity,
+     continuous circularity, dose) credible.
 
-3. **BT1 block-sparse core: tests landed, green not yet re-verified.** R-review flagged
-   `a6f2c0e28` for a missing `block_tests.rs` and a `&mut Array2` vs `ArrayView2` type error.
-   The follow-up commit `097b1c1de` ("block-sparse FFI + Python surface + gauge/recovery tests")
-   adds `block_tests.rs` (now present in `crates/gam-sae/src/sparse_dict/`) and the FFI/Python
-   surface, addressing both blockers. R-review has **not yet re-reviewed** `097b1c1de`, so
-   `cargo test -p gam-sae` green is still PENDING that verification — we do not claim it passes
-   without evidence.
+3. **BT1 block-sparse core does NOT compile — no BT1 number is publishable.** R-review's
+   re-review (`e01c2fd`) confirms `gam-sae` fails to build: 3 edition-2024 pattern errors in
+   `block.rs`, so `cargo test -p gam-sae` cannot run and the gauge/recovery tests are unexecuted
+   (the gauge property is verified only by review's out-of-tree numeric replica). The design is
+   sound and the FFI surface (`gamfit.block_sparse_dictionary_fit`) is written, but every BT1
+   result stays PENDING until the crate compiles and the tests pass.
 
-4. **N-nursery A/B has not run.** Only the synthetic data harness landed; the head-to-head
-   (joint K≥2 co-collapse control vs the nursery arm) is `arms: {}`. No verdict yet — the
-   control must be actually invoked and recorded even on non-convergence (not skipped so the
-   nursery "wins" by default).
+4. **N-nursery has no validated headline yet, and two caveats are MANDATORY when it lands.**
+   The design is valid (R-review): the joint-K co-collapse control is honestly bounded (REML
+   attempted in a capped subprocess, recorded `TIMEOUT_BLOCKED`), and the discovered arm uses no
+   labels. But the result arms are still running/uncommitted. When a headline lands it MUST carry:
+   (a) **the co-collapse cure is demonstrated on a TORCH-proxy fitter, not REML** — REML, the
+   production fitter the hypothesis is really about, is recorded BLOCKED here, so transfer is
+   UNESTABLISHED; and (b) **the real-data Arm B blocks are set-membership-supervised** (each
+   set's top-2 PCs); the fully-unsupervised `discover_blocks` result is the publishable number
+   and the oracle/set-supervised arm is only the labeled ceiling. All nursery EVs are in-sample.
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a
@@ -126,7 +144,14 @@ claims. Stated plainly:
    argument (`f*` depends on parameter counts and the spectrum, not on generalization), but the
    absolute bits inherit their source probe's in/out-sample status.
 
-7. **Dose calibration shows the weekday circle only.** The 12-token month loop triggers the
+7. **Several result artifacts are on disk but not yet committed.** `bsf_baseline/metrics.json`
+   (synthetic phase), `null_out/*.json`, and `block_nursery/*.json` are untracked in this shared
+   working tree (not gitignored — the lanes have not `git add`-ed them). Numbers cited from them
+   are per R-review's committed verification (`REVIEW.md`); the owning lanes must commit the raw
+   artifacts before these become directly citeable. This is why the P-null and G-bsf-synthetic
+   cells carry a "pending commit" note despite the runs having executed.
+
+8. **Dose calibration shows the weekday circle only.** The 12-token month loop triggers the
    pre-fix multi-modal auto-grow/co-collapse in that build; re-run against the guard-patched
    build before claiming month/hue dose calibration.
 
