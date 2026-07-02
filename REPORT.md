@@ -3,133 +3,129 @@
 _Assembled continuously by WS-J from the committed results under `experiments/`.
 Six headline figures (SAC_PLAN Part 4) plus throughput. Every number is pulled
 from a committed result file; pending cells name the workstream that fills them.
-Last refreshed: 2026-07-02._
+Last refreshed: 2026-07-02 (S1 guard surgery landed; W8 real-model dose + W7
+frontier probes committed)._
 
-**Program revision (STAGE1_DIAGNOSIS.md, supersedes SAC_PLAN Part 1).** A deep
-code read + numeric computation of the guard thresholds on the repo's own OLMo
-fixtures re-diagnosed the K>=2 failure: the joint optimizer is probably fine — it
-is being executed by its own **miscalibrated supervision**. The collapse bar
-(`collapse_ev_bar = 0.5 x pca_ev_ceiling`, dense rank-q reference) is a category
-error against a k-active-sparse dictionary, evaluated even at iteration 0 on the
-cold seed, and it flattens the outer objective via the wall cost. So:
+**Program status (STAGE1_DIAGNOSIS.md, supersedes SAC_PLAN Part 1).** The K>=2
+failure was re-diagnosed as **miscalibrated supervision**, not joint-fit
+architecture: the collapse bar (`0.5 x pca_ev_ceiling`, a dense rank-q reference)
+is a category error against a k-active-sparse dictionary, evaluated even at
+iteration 0 on the cold seed, walling the outer objective.
 
-- **Stage 1 (CRITICAL PATH, ~100-line diff) — guard surgery**: restore the
-  collapse trigger to absolute degeneracy (EV<=eps AND co-vanished decoders); any
-  surviving data bar must be **sparsity-matched** (`fraction * EV(sparse_dictionary_fit)`);
-  never evaluate a bar at iter 0 / without stalled-progress; restrict the outer
-  WALL to non-finite probes + absolute degeneracy; replace the seed-startup 0.10
-  floor with best-of-candidates + finiteness. Acceptance = **program ignition**:
-  exact W6 repro (OLMo-3-7B, top-128, K=8) completes with a real EV in minutes;
-  W5 compose emits a composed EV; the K=3 planted coin-flip becomes deterministic.
-- **Stage 2 (revises SAC) — growth as production mode**: the stagewise engine
-  already exists (`structure_harvest`); the change is an **inversion of mode**, not
-  a new subsystem — evidence-raced per-atom births from the whitened residual
-  factor, Sigma refreshed between births, warm-started backfits, one terminal
-  joint pass for evidence/certs/`dictionary_artifact` hash. Growth makes EV
-  monotone in K by construction even if Stage 1 fully revives the joint fit.
+- **Stage 1 (guard surgery) — LANDED** (gam `8f14b403d`): absolute-degeneracy
+  collapse floor, no iteration-0 reseed. Early corroboration: W7's REML
+  `sae_manifold_fit` now returns **finite in-sample EVs** (weekday 0.525, month
+  0.243, year 0.335, color 0.627 at n_iter=60) where the pre-S1 build recorded
+  `NONCONVERGENCE_1784` / `OOM_KILLED`. The live-SAC scoreboard cells are now
+  gated on the growth-mode **fit run on the post-S1 build**, not on Stage 1 itself.
+- **Stage 2 (growth as production mode)** — Rust `fit_stagewise` driver +
+  guards-off K=1 lane landed (gam `4b1aa0a6b`); evidence-raced per-atom births
+  make EV monotone in K by construction. WS-A owns the live run.
 
-Every "live SAC run" pending note below is therefore now **gated on Stage 1
-guard surgery landing** (program ignition), then filled by the Stage-2 growth-mode
-fit. The pending cells are the program's actual deliverable; they are named.
+**Pending metric-meaning sweep (MATH_REVIEW.md Section E, owner M-bench).** Several
+eval relabels are queued and will touch cells 1/3 when M-bench lands: "matched-K"
+-> matched effective-width/L0 (E2), train-PCA "upper bound" -> `train_pca_reference`
++ a test-PCA oracle ceiling (E7), probing F1 -> `oracle_best_f1` (E5). This
+report already uses the honest framings (parity is labeled a *parameter-accounting
+upper bound*, W7 compares curved(1) vs linear(1)/linear(2) at matched intrinsic
+width); the cells will be re-worded to M-bench's final vocabulary on landing.
 
 ## Scoreboard
 
 | # | figure | headline (committed) | source | pending -> filled by |
 |---|--------|----------------------|--------|----------------------|
-| 1 | **parity** — composed held-out EV >= external TopK at matched K/L0 | curved ceiling **0.994** at Theta=108 vs linear-dict saturation **0.974**; ~0.020 EV inaccessible to any linear budget under top-1 routing | `frontier_out/report.md` s2-3 | live composed held-out EV vs external TopK on real shards — **Stage 1 ignition -> WS-A growth fit + WS-C** |
-| 2 | **structure** — typed atoms; dEV monotone in births | evidence-limited curved cutoff **K=3** recovers planted curved count 3; noise-floor global-dEV **5e-4**; per-atom circle-vs-line gap 0.047-0.057 vs 4-5e-4 | `frontier_out/results.json` s3 | dEV monotone in K *by construction* (Stage-2 growth) + shipped type/Theta/band/id-report per atom — **WS-A / WS-J T2 tier** |
-| 3 | **semantics** — calendar recovered unsupervised, correct cyclic order | **weekday** cyclic-adjacency **0.71 (5/7)**, **month 0.83 (10/12)**; one curved coord = two linear PCs (weekday EV 0.584 vs lin-1PC 0.444 / lin-2PC 0.580; month 0.598 vs 0.316 / 0.586). Real Qwen2.5-0.5B | `probe_out/NOTES.md`, `curved_feature_probes.json` | frontier-model (Qwen3-32B L24/32/40 harvests on node2) calendar + year + REML cross-check — **WS-F #7** (probe harvests done, #12) |
-| 4 | **control** — dose slope ~ 1, tight R^2 | chart `predicted_nats` **unbiased**: slope **0.847**, R^2 **0.807**, median meas/pred **1.103**, over ~4 decades of KL. Teacher head | `dose_out/report.md` | real-model dose on OLMo-3 (single most important figure) — **WS-F #6**, node2 GPU |
-| 5 | **stability** — subspace agreement >> latent, hashed | deterministic linear tier: latent cos **1.000**, union-span cos **1.000**, **hashes identical** across seeds 0/1/2; aux random-tiling latent 0.845 / subspace 0.833 (byte-unstable). `dictionary_artifact` v1 hash port validated | `stability_out/seed_stability_table.md` | curved-SAE subspace>>latent gap on SAC output (manifold fit non-convergent pre-Stage-1) — **WS-A + WS-F #8** |
+| 1 | **parity** — composed held-out EV >= external TopK at matched K/L0 | curved ceiling **0.994** at Theta=108 vs linear-dict saturation **0.974**; ~0.020 EV inaccessible to any linear budget under top-1 routing (parameter-accounting bound) | `frontier_out/report.md` s2-3 | live composed held-out EV vs external TopK on real shards — **WS-A growth fit (post-S1) + WS-C**; label sweep per MATH_REVIEW E2/E7 |
+| 2 | **structure** — typed atoms; dEV monotone in births | evidence-limited curved cutoff **K=3** recovers planted curved count 3; noise-floor global-dEV **5e-4**; per-atom circle-vs-line gap 0.047-0.057 vs 4-5e-4 | `frontier_out/results.json` s3 | dEV monotone in K *by construction* (Stage-2 growth run) + shipped type/Theta/band/id-report per atom — **WS-A / WS-J T2 tier** |
+| 3 | **semantics** — calendar recovered unsupervised, correct cyclic order | clean: real **Qwen2.5-0.5B** weekday adj **0.71 (5/7)**, month **0.83 (10/12)**, curved(1)=linear(2). Frontier **Qwen3-32B** (committed): **color cyclic ordering adj=1.000** recovered unsupervised; weekday/month noisier at 7-12 tokens; REML EV 0.24-0.63 | `probe_out/`, `frontier_probe_out/summary.md` | larger per-feature token counts to de-noise frontier CV; year open-interval atom — **WS-D bigger probe harvest / WS-A** |
+| 4 | **control** — dose slope ~ 1, tight R^2 | **REAL Llama-3.1-8B (layer 16)**: chart `predicted_nats` slope **0.908**, R^2 **0.951**, median meas/pred **0.881** (unbiased); the bare-linear-latent baseline is mis-calibrated **~10x** (median ratio 10.0, mean\|log\| 2.38 vs chart 0.52) | `dose_real_out/report.md` | (done — real model; teacher stand-in slope 0.847/R^2 0.807 was the prior placeholder) |
+| 5 | **stability** — subspace agreement >> latent, hashed | deterministic linear tier: latent cos **1.000**, union-span cos **1.000**, **hashes identical** across seeds 0/1/2; aux random-tiling latent 0.845 / subspace 0.833 (byte-unstable) | `stability_out/seed_stability_table.md` | curved-SAE subspace>>latent gap on post-S1 SAC output — **WS-A + WS-F #8** |
 | 6 | **disentanglement** — absorption/SCR beat matched linear SAE | — | — | SAEBench subset + absorption/SCR, composed vs T1-only ablation (*the disentanglement delta is the thesis*) — **WS-F #10** |
-| 7 | **throughput** — T1 hours; T2 <= day; encode >= 1e5 rows/s | — | — | T1 K=32k x 50M wall-clock — **WS-C #3**; encode rows/s + fallback by freq decile — **WS-E #15**; harvest done (Qwen3-32B, 667k+ tok/layer) — **WS-D #11-13** |
+| 7 | **throughput** — T1 hours; T2 <= day; encode >= 1e5 rows/s | — | — | T1 K=32k x 50M wall-clock — **WS-C #3**; encode rows/s + fallback by freq decile — **WS-E #15**; harvest live (Qwen3-32B, 667k+ tok/layer) — **WS-D** |
 
-## The load-bearing "before" evidence (why Stage 1 exists)
+## Headline: control is now real (the single most important figure)
 
-The whitened-convergence probe on **real OLMo-3-7B-Instruct** activations
-(`whitened_convergence_results.json`, layers 15-17, top-48 PCA, anisotropy 6.8x)
-is the failure in one file: every K>=2 joint fit returns `NONCONVERGENCE_1784` or
-`OOM_KILLED`. STAGE1_DIAGNOSIS attributes this to the guard stack executing the
-cold seed against an unreachable dense-EV bar at iteration 0 and walling the outer
-objective — not to the joint-fit architecture. Seed-stability and the frontier
-independently record the same non-convergence. So figures 1, 2, 5 currently show
-the linear / K=1 / accounting half; **Stage 1 guard surgery is what promotes them
-to live composed measurements** (acceptance = W6 repro completes in minutes).
+SAC_PLAN calls real-model dose calibration "the single most important figure in
+the program." It landed (WS-F W8, `dose_real_out/`): on **Llama-3.1-8B-Instruct**
+layer-16 weekday-token activations, a K=1 circle chart's `predicted_nats` —
+computed from the chart's attached downstream output-Fisher metric *before* the
+edit — predicts the **measured** output KL from actually patching the forward pass
+with slope **0.908** and R^2 **0.951** over n=288 (atom, base, dose, sign) points.
+It is unbiased (median measured/predicted 0.881). The task baseline — a bare
+linear SAE latent scaled by matched push-norm, carrying no metric — is
+mis-calibrated by ~10x (median ratio 10.0). This is the curved atom's payoff made
+concrete: calibrated dosing falls out of the chart itself.
+
+## The load-bearing "before" evidence (why Stage 1 was needed)
+
+The whitened-convergence probe on **real OLMo-3-7B-Instruct**
+(`whitened_convergence_results.json`, layers 15-17, anisotropy 6.8x): every K>=2
+joint fit returned `NONCONVERGENCE_1784` or `OOM_KILLED`, attributed to the guard
+stack executing the cold seed against an unreachable dense-EV bar at iteration 0.
+Stage 1 guard surgery (landed) targets exactly this; W7's now-finite REML EVs are
+the first post-surgery evidence the fault line was supervision, not architecture.
+Figures 1, 2, 5 still show the linear / K=1 / accounting half until the post-S1
+growth fit runs.
 
 ## Detail per figure
 
 **1 - Parity.** `frontier_out` (planted real-shaped synthetic, p=9, 3 curved + 3
-linear): linear/sparse dictionaries measured live; the curved side is an honest
-parameter-accounting **upper bound** against measured per-atom geometry (pre-Stage-1
-the joint solver OOM'd). Durable point survives the caveat: under top-1 routing a
-straight atom cannot trace a circle, so ~0.020 EV is inaccessible to linear at any
-budget — exactly what curved atoms recover. Live parity vs external TopK is gated
-on Stage 1.
+linear): linear/sparse measured live; curved side is an honest parameter-accounting
+**upper bound** against measured per-atom geometry (pre-S1 the joint solver OOM'd).
+Durable point survives: under top-1 routing a straight atom cannot trace a circle,
+so ~0.020 EV is inaccessible to linear at any budget. Live parity vs external TopK
+is the post-S1 WS-A/WS-C deliverable. (MATH_REVIEW E2/E7 will relabel the bound.)
 
 **2 - Structure.** Evidence-limited curved cutoff falls exactly at the circle/line
 boundary (global dEV 0.047-0.057 circles, 4-5e-4 lines), recovering the planted
 curved count unsupervised. Stage-2 growth makes dEV monotone in births by
 construction; the artifact T2 tier (WS-J) ships each atom's topology, curvature
-Theta, shape band, and identifiability report — the typed-atom contract in
-`ARTIFACT_SCHEMA.md`.
+Theta, shape band, and identifiability report.
 
-**3 - Semantics.** Cleanest real-data headline today. On real Qwen2.5-0.5B a
-single curved coordinate reconstructs a weekday/month token as well as two linear
-PCs and, unlike any single linear direction, expresses the cyclic wrap (Sun-Mon,
-Dec-Jan): adjacency 0.71 / 0.83. Year control validated on synthetic (Spearman
-1.00) after the real year harvest was OOM-reaped. Frontier repro (Qwen3-32B probe
-harvests weekday/month/year/color at L24/32/40 already on node2) is WS-F #7.
+**3 - Semantics.** Two committed views. Clean (real **Qwen2.5-0.5B**): a single
+curved coordinate reconstructs weekday/month as well as two linear PCs and
+expresses the cyclic wrap (adjacency 0.71 / 0.83). Frontier (real **Qwen3-32B**,
+WS-D harvest, `frontier_probe_out/`): the win is uneven at these tiny per-feature
+token counts (7-15) — **color recovers perfect cyclic ordering (adjacency 1.000)**
+where a single linear PC scores 0.000, and in-sample month curved(1) 0.192 beats
+linear-1PC 0.125; weekday/month held-out CV is noisy and does not cleanly beat
+linear-1PC. REML `sae_manifold_fit` now returns finite EVs (0.24-0.63). Honest
+read: the curved advantage is real and feature-specific (cyclic color/month), and
+de-noising the frontier CV needs larger probe harvests. Year uses a circle atom on
+a monotone arc (no rank-1 open-interval manifold in the torch backend yet).
 
-**4 - Control.** The chart carries an output-Fisher metric and `steer`
-path-integrates it to predict an intervention's output shift in nats before the
-edit; unbiased across ~4 decades (slope 0.847, R^2 0.807, median ratio 1.10). A
-bare linear SAE latent carries no metric and is mis-calibrated ~3x. Teacher head;
-one-line real-model swap queued as WS-F #6.
+**4 - Control.** See headline above. Real Llama-3.1-8B; slope 0.908, R^2 0.951,
+unbiased; bare-linear baseline off ~10x. `dose_real_out/report.md`.
 
 **5 - Stability.** The `dictionary_artifact` v1 content hash (ported to Python,
 byte-validated against the Rust hash — the same port WS-J's artifact layer reuses)
 makes seed agreement provable: the deterministic linear tier is byte-identical
 across seeds. The curved-SAE subspace>>latent figure needs convergent multi-seed
-manifold fits, which arrive with Stage 1 + Stage-2 growth — WS-F #8.
+manifold fits on the post-S1 build — WS-F #8.
 
 **6 - Disentanglement / 7 - Throughput.** Not yet measured; downstream of the
-composed dictionary + scale harvest. The WS-D scale harvest exists (Qwen3-32B,
-fineweb, layers 24/32/40, 667k+ tokens/layer on node2:/dev/shm/sauers_gpu/harvest/).
+composed dictionary + scale harvest (Qwen3-32B, fineweb, layers 24/32/40, 667k+
+tokens/layer, live on node2).
 
-## T0 data-plane contract (WS-D, now matched)
+## T0 data-plane contract (WS-D, matched)
 
-WS-D's harvest manifests (node2 `/dev/shm/sauers_gpu/harvest/`, Qwen3-32B,
-`d_model=5120`, layers 24/32/40) are the T0 source. Finalized manifests carry a
-`t0` block (`compute_t0`): per-dim `mean`/`std`/`rms`, `scale_median_std` (robust
-whitening reference), and a nested `rogue_dims` = **massive-activation dims**
-(`{"index":[...], "rms":..., "rms_over_median":..., "mad_z":...}`, rule
-`rms>5*median_rms OR MAD-z>8`; ~376 dims at L24). WS-J's `load_t0_from_manifest`
-passes this block through verbatim and folds `rogue_dims.index` + per-dim scale
-stats into the content hash; provisional manifests (`stats:{mean,norm}` only) fall
-back cleanly. Verified against a real node2 manifest. See `ARTIFACT_SCHEMA.md`.
+WS-D harvest manifests (node2 `/dev/shm/sauers_gpu/harvest/`, Qwen3-32B,
+`d_model=5120`, layers 24/32/40). Finalized manifests carry a `t0` block
+(`compute_t0`): per-dim `mean`/`std`/`rms`, `scale_median_std`, and a nested
+`rogue_dims` massive-activation block (`{"index":[...],"rms":...,"rms_over_median":
+...,"mad_z":...}`, rule `rms>5*median_rms OR MAD-z>8`; ~376 dims at L24). WS-J's
+`load_t0_from_manifest` passes it through verbatim (provisional manifests now also
+carry T0) and folds `rogue_dims.index` + per-dim scale stats into the content
+hash. Verified against a real node2 manifest. See `ARTIFACT_SCHEMA.md`.
 
 ## Artifact / verbs status (WS-J)
 
 | deliverable | state |
 |---|---|
 | `ARTIFACT_SCHEMA.md` (contract other WS emit into) | **done** — `/Users/user/gam/ARTIFACT_SCHEMA.md` (T0 matches WS-D finalized format) |
-| `TieredArtifact` (T0 u T1 u T2 u Sigma u encoder u hash), save/load, content hash | **done** — `examples/tiered_artifact.py`; save==reload hash verified; T2 hash mirrors `dictionary_artifact.rs` (order/scale/reflection invariant) |
+| `TieredArtifact` (T0 u T1 u T2 u Sigma u encoder u hash), save/load, content hash | **done** — `examples/tiered_artifact.py`; save==reload verified; T2 hash mirrors `dictionary_artifact.rs`; 8-check selftest green |
 | loaders for WS-A / WS-C / WS-E / WS-D formats | **done** — `load_sac_result`, `load_tier1_artifact`, `load_encoder`, `load_t0_from_manifest` (defensive; absent tier recorded, never faked) |
-| `fit` verb | **done** — drives T1 + SAC/growth T2 -> artifact dir (`fit_artifact` / CLI) |
-| `encode` verb | **done** — amortized encoder + exact-solve certificate fallback, hash-bound; fallback rate by freq decile |
-| `steer` verb | **done** — pass-through to `ManifoldSAE.steer` (W8 dose machinery) |
-| `diff` verb | **done** — per-tier hash deltas + Hungarian latent match + principal-angle subspace agreement (W9 harness) |
+| `fit` / `encode` / `steer` / `diff` verbs | **done** — fit (T1 + SAC/growth T2), encode (amortized + exact-solve certificate fallback, hash-bound), steer (ManifoldSAE.steer / W8 dose), diff (per-tier hash + Hungarian latent + principal-angle subspace) |
 
-Sigma (structured-residual whitening) is stubbed `pending` until WS-A exposes it
+Sigma (structured-residual whitening) stays stubbed `pending` until WS-A exposes it
 as a standalone Python object; encoder tier loads WS-E's bundle when present.
-Nothing above requires a Rust build.
-
-## Environment note (local fit blocker)
-
-The curved SAC `fit` OOM-kills locally (exit 137) even at n=150/p=8 — the same
-memory blocker every workstream hit with `sae_manifold_fit`, and consistent with
-STAGE1_DIAGNOSIS (the guard/wall loop burns to timeout/OOM on real-shaped data).
-The `fit` plumbing is verified correct (drives the real fitter through live
-per-birth EV traces; T1 + serialization + diff fully exercised with a real
-`sparse_dictionary_fit`: deterministic decoder, hashes identical across seeds,
-reload-stable). Live curved composition belongs on node2, post Stage 1.
+Nothing in WS-J requires a Rust build.
