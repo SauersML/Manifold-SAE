@@ -77,8 +77,8 @@ block codes ~2 extrinsic dims — continuing the descent by collapsing the *code
 
 | feature | block (held-out EV) | circle-chart | Φ (extra harmonics) | crossover `f*` |
 |---|---|---|---:|---:|
-| weekday | b=2, EV 0.82, adj 1.0 | d_i=1 (angle) | 12 | ≈22 (matched `2p`=12) |
-| month | b=2, EV 0.95, adj 1.0 | d_i=1 (angle) | 12 | ≈16 (matched `2p`=12) |
+| weekday | b=4 (≈2 eff. dims, rank 2.4), EV 0.82, adj 1.0 | d_i=1 (angle) | 12 | ≈22 (matched `2p`=12) |
+| month | b=4 (≈2 eff. dims, rank 2.4), EV 0.95, adj 1.0 | d_i=1 (angle) | 12 | ≈16 (matched `2p`=12) |
 
 A weekday/month feature fires far more than ~12–22 times in any corpus (`f ≫ f*`), so the
 curved chart has the shortest description. **Directions collapse the selection cost, blocks
