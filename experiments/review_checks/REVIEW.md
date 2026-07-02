@@ -173,3 +173,56 @@ This is task-#7 "land fleet batch", NOT yet the co-collapse fix (#8 pending).
   directions). Sound.
 PENDING: `cargo test -p gam-sae` green + the co-collapse repro/fix (#8) when it
 lands — the repro test must BITE on pre-fix code.
+
+### M-mdl — commit 75f6304 (VERDICT: scorer SOUND, one latent caveat)
+Hand-verified mdl.py scorer against a toy (all terms exact match):
+code_coeff=0.5·log2(1+v/δ²), dict=n_params·l_param, total, bits/token — all match.
+- Units consistent (bits throughout); rate term is exact scalar R(D)=0.5log2(1+SNR).
+- Selection bits `log2 C(G,k)` present in `score()` for EVERY featurizer (both arms).
+- Crossover `dcode = code_b−code_c` correctly OMITS selection (verified == hand
+  code_b−code_c); this cancels ONLY when block & chart share (G,k). In every built
+  ladder both use g_dict=1,k_active=1 → sel=0, so harmless. CAVEAT: if a lane feeds
+  a JSON payload with DIFFERENT g_dict/k_active for block vs chart, crossover_firings
+  silently ignores the selection difference (mdl.py:185-192). Not triggered by the
+  committed ladders; flag if any lane passes asymmetric (G,k).
+- NOTE: all built ladders use IN-SAMPLE ev (insample_ev / same-X spectra). The MDL
+  bits/token are descriptive, not held-out — fine for the crossover argument, but
+  the underlying EVs inherit whatever in/out-sample status their source probe has.
+
+### BT1-block — commit a6f2c0e28 (VERDICT: DESIGN SOUND, but DOES NOT COMPILE + tests absent)
+Design reviewed in full (block.rs, 1108 lines) and the gauge math verified
+numerically (replicating the exact Rust `block_gates`+`reconstruct_row`):
+gate error 0.0 under a random O(b) rotation, selection identical, loss error
+3.5e-15; negative control (2× scale) DOES change the loss (property bites).
+- Gauge invariance CORRECT BY CONSTRUCTION: routing/report see a block only through
+  `‖w_g‖₂=‖x D_gᵀ‖₂` (block_gates l.216, invariant to w_g→w_gRᵀ); reconstruction is
+  `γ·x D_gᵀD_g` (reconstruct_row l.238) and `D_gᵀD_g` is invariant to D_g→RD_g since
+  RᵀR=I. Holds for ANY left-O(b), orthonormal or not.
+- Signed codes, no ReLU (code_row l.495 `gamma*wr`, can be negative). Presence
+  (`‖z_g‖₂` gate) vs amplitude (signed z_g) decoupled.
+- ONE shared scalar γ, closed-form LS refresh (refresh_gamma l.557). 
+- REUSES GrassmannFrame::polar_update for the Stiefel step (orthonormalize_block
+  l.298, refresh_frames l.664) — NOT a reimplementation. GS fallback only for
+  rank-deficient seeds.
+- Revival seeds from worst-residual ROWS (never PCs, house rule), distinct row
+  groups so revived blocks don't duplicate (revive_dead_blocks l.693).
+- stable_rank_symmetric is a gauge invariant (trace/λmax, l.889). Consistent.
+- Fit loop: seed(farthest-point, reused)→[γ→frames→revive→re-encode→EV]. EV is
+  HELD-IN (in-sample) — standard for a dict fit, but any headline comparing BT1 EV
+  must keep that consistent.
+ISSUES:
+  [HIGH] Commit a6f2c0e28 DOES NOT COMPILE. (1) block.rs ends with
+    `#[cfg(test)] #[path="block_tests.rs"] mod block_tests;` but block_tests.rs does
+    NOT exist → `cargo test -p gam-sae` fails to build the whole crate's tests.
+    (2) refresh_frames (l.597) & revive_dead_blocks (l.696) hold `decoder: &mut
+    Array2` and the committed code called `reconstruct_row(xi, decoder, …)` where
+    the param is `ArrayView2` — a type error that breaks even `cargo build`. BT1 is
+    fixing #2 in the working tree now (decoder→decoder.view()); #1 (the tests) is
+    task #10, still pending.
+  [HIGH] The load-bearing gauge/parity/recovery tests DO NOT EXIST yet
+    (block_tests.rs absent). The gauge invariance is currently code-correct + my
+    numeric check passes, but there is NO in-repo test. When it lands it MUST:
+    rotate D_g→R·D_g and RE-ENCODE (the tied code follows automatically — there is
+    no separately-stored code to rotate), assert gate+loss identical, AND include
+    the negative control (a norm-changing map must change loss) or it won't bite.
+    Also assert frames stay orthonormal after refresh_frames.
