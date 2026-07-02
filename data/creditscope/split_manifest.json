@@ -1,0 +1,44 @@
+{
+  "format": "npy",
+  "layer": null,
+  "dim": 2048,
+  "n_files": 8,
+  "seed": 0,
+  "heldout_target": 50000,
+  "train_target": 0,
+  "split_policy": "whole-file (rollout/chunk-safe); no row-level split",
+  "n_train_tokens": 309921,
+  "n_heldout_tokens": 50081,
+  "n_unused_files": 0,
+  "train_files": [
+    "chunk_0000.npy",
+    "chunk_0001.npy",
+    "chunk_0003.npy",
+    "chunk_0004.npy",
+    "chunk_0005.npy",
+    "chunk_0006.npy",
+    "chunk_0007.npy"
+  ],
+  "heldout_files": [
+    "chunk_0002.npy"
+  ],
+  "file_tokens": {
+    "chunk_0000.npy": 50069,
+    "chunk_0001.npy": 50000,
+    "chunk_0002.npy": 50081,
+    "chunk_0003.npy": 50026,
+    "chunk_0004.npy": 50017,
+    "chunk_0005.npy": 50035,
+    "chunk_0006.npy": 50020,
+    "chunk_0007.npy": 9754
+  },
+  "nan_counts": {
+    "train": 0,
+    "heldout": 0
+  },
+  "artifacts": {
+    "train": "L30_train.f32.npy",
+    "heldout": "L30_heldout.f32.npy",
+    "tier0": "tier0.json"
+  }
+}
