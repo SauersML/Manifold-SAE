@@ -81,12 +81,15 @@ collapsing the *code dimension*:
 | **month** (flagship) | b=4 (≈2 eff. dims, rank 2.4), EV 0.95 | d_i=1 (angle), order 10/12 | 12 | **≈16** (matched `2p`=12) |
 | weekday (marginal, §4.2) | b=4 (≈2 eff. dims), EV 0.82 | d_i=1, order 5/7 (p≈.04) | 12 | ≈22 (matched `2p`=12) |
 
-A month/weekday feature fires far more than ~12–22 times in any corpus (`f ≫ f*`), so the
-curved chart has the shortest description. **Directions collapse the selection cost, blocks
-collapse it further, and the chart collapses the code dimension (2→1 coordinate per firing) —
-three rungs, each removing a different term of the description length.** (Rungs 1–4 are OLMo,
-a linear axis where a chart is degenerate; the chart rung is realized on the cyclic feature.
-Artifact: `mdl_ladder/unified_ladder.json`, scorer `mdl_ladder/unified_ladder.py`.)
+Even the small probe already fires the feature **35 (weekday) / 60 (month)** times — above this
+matched-precision crossover `f*≈12–22` — so the chart is already the shorter description here; a
+recurring date/month token fires far more still across a real corpus (`f ≫ f*`). We flag the honest
+gap: the *corpus-scale* firing count is asserted, not measured — `mdl_ladder/deployment_firing_counts.py`
+computes it from a supplied corpus and returns "blocked" until one is passed. **Directions collapse
+the selection cost, blocks collapse it further, and the chart collapses the code dimension (2→1
+coordinate per firing) — three rungs, each removing a different term of the description length.**
+(Rungs 1–4 are OLMo, a linear axis where a chart is degenerate; the chart rung is realized on the
+cyclic feature. Artifact: `mdl_ladder/unified_ladder.json`, scorer `mdl_ladder/unified_ladder.py`.)
 
 Supporting — the crossover across regimes (single-feature, `g_dict=1`):
 
@@ -94,7 +97,7 @@ Supporting — the crossover across regimes (single-feature, `g_dict=1`):
 |---|---|---|---|---:|---|
 | frontier planted circle (p=9, high SNR) | infeasible | feasible | **shortest past f≈11** | ≈9–11 | **chart** |
 | synthetic 12-circle (p=16, high SNR) | infeasible | 10.27 b/tok | **9.42 b/tok** | 32–37 | **chart** |
-| real weekday/month (p=16, SNR≈1) | infeasible | shortest at f=35–60 | past f≈100 | 96–122 | **chart** (only at corpus scale) |
+| real weekday/month (p=16, SNR≈1) | infeasible | shortest at f=35–60 | past f≈100 | 96–122 | **chart** at `f>96` — corpus count unmeasured (§2) |
 | year / any line (control) | infeasible | **shortest** | never | ∞ | block |
 
 A direction is **distortion-infeasible on every circle** — it cannot reach circle fidelity at
