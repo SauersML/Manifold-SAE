@@ -134,6 +134,55 @@ def build_prompts(words, templates):
     return prompts, np.asarray(widx), None
 
 
+def _circ_mean(a):
+    return float(np.arctan2(np.sin(a).sum(), np.cos(a).sum()))
+
+
+def _circ_corr(a, b):
+    """Jammalamadaka-Sarma circular-circular correlation in [-1, 1]."""
+    a0 = a - _circ_mean(a)
+    b0 = b - _circ_mean(b)
+    num = float(np.sum(np.sin(a0) * np.sin(b0)))
+    den = float(np.sqrt(np.sum(np.sin(a0) ** 2) * np.sum(np.sin(b0) ** 2)))
+    return num / den if den > 0 else 0.0
+
+
+def cyclic_ordering(H_red, widx_kept, words):
+    """Test that the calendar words wrap around the fitted loop in order.
+
+    Period-free: the per-word mean activation (in the reduced fit frame) lies on the
+    fitted closed curve, so the top-2 PCA plane of the W word-means IS the loop's plane.
+    Each word gets an unambiguous angle there; we score its circular correlation with the
+    calendar order (invariant to the loop's rotation and traversal direction) and report
+    the consecutive angular gaps INCLUDING last->first — the wraparound (e.g. Dec->Jan)
+    is a real datum only if that closing gap matches the others.
+    """
+    W = len(words)
+    present = [w for w in range(W) if int((widx_kept == w).sum()) > 0]
+    if len(present) < 3:
+        return None
+    means = np.stack([H_red[widx_kept == w].mean(0) for w in present])  # (W', rdim)
+    m = means - means.mean(0, keepdims=True)
+    _, _, Vt2 = np.linalg.svd(m, full_matrices=False)
+    xy = m @ Vt2[:2].T
+    ang = np.arctan2(xy[:, 1], xy[:, 0])                    # (W',) angle on the loop plane
+    ideal = 2.0 * np.pi * np.arange(len(present)) / len(present)
+    corr = max(_circ_corr(ang, ideal), _circ_corr(ang, -ideal))
+    order_by_angle = [present[i] for i in np.argsort(ang)]
+    # rotate the angle-sorted order so it starts at calendar index 0's position, then
+    # check it equals the calendar sequence forward or backward (a clean wraparound).
+    seq = order_by_angle
+    fwd = [present[(present.index(seq[0]) + k) % len(present)] for k in range(len(present))]
+    wrap_ok = (seq == fwd) or (seq == fwd[::-1])
+    gaps = np.diff(np.concatenate([np.sort(ang), np.sort(ang)[:1] + 2 * np.pi]))
+    return dict(circ_corr=float(corr),
+                words_present=[words[w] for w in present],
+                angles_rad=ang.tolist(),
+                order_by_angle=[words[w] for w in order_by_angle],
+                wraparound_in_order=bool(wrap_ok),
+                gap_uniformity=float(1.0 - np.std(gaps) / (np.mean(gaps) + 1e-12)))
+
+
 # --------------------------------------------------------------------------- #
 # Model plumbing                                                              #
 # --------------------------------------------------------------------------- #
@@ -318,7 +367,7 @@ class MeasuredKL:
         def _splice(_m, _i, out):
             flat = out.reshape(-1, out.shape[-1])
             rows = [flat[i] for i in range(flat.shape[0])]
-            rows[-1] = rows[-1] + delta_t.to(out.dtype)
+            rows[-1] = rows[-1] + delta_t.to(device=out.device, dtype=out.dtype)
             return torch.stack(rows, 0).reshape(out.shape)
 
         h = self.hook_module.register_forward_hook(_splice)
@@ -452,7 +501,22 @@ def main() -> int:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     t0 = time.time()
     tok = AutoTokenizer.from_pretrained(model_dir)
-    hf = AutoModelForCausalLM.from_pretrained(model_dir, torch_dtype=dtype).to(device).eval()
+    # DOSE_MODEL_DTYPE lets a large MoE load in bf16 (weights) while the harvest/patch
+    # math still runs in DOSE_DTYPE (act_flat upcasts to float32 internally). DOSE_DEVICE_MAP
+    # spreads a model too large for one card across GPUs via accelerate; ids then live on
+    # the embedding's device and every patched delta is placed on the hook output's device.
+    _mdtype = os.environ.get("DOSE_MODEL_DTYPE", "")
+    model_dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16,
+                   "float32": torch.float32, "float64": torch.float64}.get(_mdtype, dtype)
+    dev_map = os.environ.get("DOSE_DEVICE_MAP", "")
+    if dev_map:
+        hf = AutoModelForCausalLM.from_pretrained(
+            model_dir, torch_dtype=model_dtype, device_map=dev_map).eval()
+        device = hf.get_input_embeddings().weight.device
+        print(f"[model] device_map={dev_map}; input embeddings on {device}", flush=True)
+    else:
+        hf = AutoModelForCausalLM.from_pretrained(
+            model_dir, torch_dtype=model_dtype).to(device).eval()
     for p in hf.parameters():
         p.requires_grad_(False)
     lm = LogitsLM(hf)
@@ -514,9 +578,16 @@ def main() -> int:
             continue
         sae.fisher_factors = np.ascontiguousarray(U_red)
         sae.fisher_provenance = "output_fisher"
+        widx_kept = np.asarray(widx)[kept]
+        order = cyclic_ordering(H_red, widx_kept, words)
+        if order is not None:
+            print(f"[{feat}] cyclic-ordering circ_corr={order['circ_corr']:.3f} "
+                  f"wraparound_in_order={order['wraparound_in_order']} "
+                  f"gap_uniformity={order['gap_uniformity']:.3f} "
+                  f"order={order['order_by_angle']}", flush=True)
         atoms.append(dict(atom=feat, sae=sae, H_red=H_red, H_full=H, Vt=Vt,
                           raw_mean=tmpl_mean, prompts=kept_prompts,
-                          U_full=U_last, fit_seconds=fit_s,
+                          U_full=U_last, fit_seconds=fit_s, cyclic_ordering=order,
                           reconstruction_r2=float(sae.reconstruction_r2)))
         all_U.append(U_last)
 
@@ -561,6 +632,7 @@ def main() -> int:
             per_atom=[dict(atom=a["atom_name"],
                            reconstruction_r2=a["reconstruction_r2"],
                            atom_topologies=list(a["sae"].atom_topologies),
+                           cyclic_ordering=a.get("cyclic_ordering"),
                            n_rows=len(a["H_full"]), fit_seconds=a["fit_seconds"]) for a in atoms],
             mean_reconstruction_r2=float(np.mean([a["reconstruction_r2"] for a in atoms])),
             metric_provenance="OutputFisher downstream (harvest_downstream_output_fisher_factors)"),
