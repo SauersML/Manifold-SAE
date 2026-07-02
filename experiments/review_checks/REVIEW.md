@@ -243,6 +243,27 @@ arrow-Schur decline test). The lane is DONE + GREEN, not stalled:
   contract verified.
 - mixture_link gate widening (LogLog/Cauchit 5-jet Fisher) verified earlier + FD-tested.
 - fisher_weight tests passed earlier (exit 0).
+### O-solve hardening — 16662c4f1 stale-hbb short-circuit (VERDICT: fix SOUND; genuine silent-wrongness catch)
+Reviewed the fix logic (arrow_schur.rs:222) + regression test (decline_tests.rs:94):
+- The gap it closes: a system with an AUTHORITATIVE matrix-free `penalty_op` but a
+  STALE still-present (k,k) `hbb` block passes the `hbb.dim()==(k,k)` shape gate, so
+  the dense device Schur path (which reads ONLY `hbb`) would proceed and compute the
+  WRONG Newton step from stale curvature — worse than a missed decline (silent
+  wrongness, not a crash).
+- The fix: `if sys.penalty_op.is_some() { return Err(GpuRequiresDenseSystem{..}) }`
+  placed BEFORE the shape gate. CORRECT: when penalty_op is authoritative the dense-hbb
+  device path cannot produce a correct step, so declining to the matrix-free CPU lane
+  (which reads penalty_op) is the right routing. Defense-in-depth at the entry even
+  though `try_device_arrow_direct` already short-circuits this shape.
+- Regression test `present_but_stale_hbb_with_penalty_op_declines_not_wrong_step`
+  constructs exactly that scenario (present (k,k) hbb + penalty_op) and asserts decline.
+Test-pass confirmation: pending the 3-test `arrow_schur_decline` run (in progress).
+PUNCH LIST (owed, per team-lead): O-solve's FULL gam-solve suite run was truncated at
+its time cap with two slow sae_resident residency-parity tests still executing (all that
+ran passed, no final summary). A full clean `cargo test -p gam-solve` run is owed —
+alongside O-manifold's gam-sae full regression (which currently has the unrelated
+encode-lane RED `fast_encode_matches_per_row_warm_start`).
+
 Caller-audit thread — CLOSED (team-lead audited directly; no fix needed). The
 GpuRequiresDenseSystem variant lives on the DEVICE enum ArrowSchurGpuFailure and is
 absorbed at gpu/arrow_schur_gpu.rs:39 BEFORE any caller sees it: it switches the solve
