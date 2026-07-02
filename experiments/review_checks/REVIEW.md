@@ -71,7 +71,36 @@ at test time — no hardcoded oracle), a failure means the ANALYTIC derivative n
 matches the objective it differentiates → these are CODE BUGS (derivative regressions),
 NOT tests-need-update.
 
-### FINALIZED TABLE (full gam-sae run captured 20 failures)
+### CORRECTIONS (both my Cluster A attribution AND Cluster C were WRONG)
+My full-suite sweep (b287m4uce) ran at a STALE pre-b4d103f57 HEAD, and I attributed
+Cluster A by diff-reading rather than the authoritative git-archive A/B. Two errors:
+
+[CLUSTER A — ATTRIBUTION OVERTURNED by O-ard, gam#2087] My "suspect 8950ee951 (line
+1038)" is WRONG. `1038` in `..ibp_cross_row_woodbury_1038` is a GitHub ISSUE number, NOT
+a source line — my "smoking gun" was a coincidence. O-ard ran a git-archive A/B at
+8dacd721d (PARENT of the ARD/EFS rework) and all 12 derivative failures reproduce
+BYTE-IDENTICALLY there → 8950ee951 AND acfb8718e are EXONERATED (same as e09e6956c). The
+12 are PRE-EXISTING derivative bugs spanning issues #2022/#1416/#1625/#1417/#1038/#2021/
+#1784/#1026 — NOT introduced by any of today's suspects. My FD-vs-analytic VERDICT (these
+are genuine CODE BUGS, not stale tests) STANDS and is corroborated; only the commit
+attribution was mine-in-error. O-ard is fixing the 8 genuine derivative bugs one commit
+each (step2 β-grad first); I re-verify each as it lands. LESSON: git-archive A/B is the
+authoritative attribution method; diff-name-matching is not.
+
+[CLUSTER C — RETRACTED] The 2 co-collapse guard tests
+(decoder_norm_guard_reseeds_all_atoms_on_total_co_collapse_k3,
+co_collapse_multistart_restores_best_basin_not_last_reseed) are GREEN at current HEAD
+(4a040d122, b4d103f57 ancestor) — I re-ran `cargo test -p gam-sae --lib co_collapse` →
+4 passed / 0 failed. They were only transiently red at 7a93b1d06 (the anchor+cooldown
+that b4d103f57 removed broke them); my sweep captured that stale state. REMOVE them from
+the red list. O-manifold confirmed independently; agreed.
+
+Net: of my "20", ~12 are the PRE-EXISTING derivative cluster (owner O-ard, gam#2087), the
+encode cluster (~5) remains 2fc0fba3b-suspect (NOT yet A/B-confirmed — treat as tentative),
+2 co-collapse guard tests RETRACTED (green), and the misc (row_jet/structure_harvest)
+are pre-existing/independent.
+
+### ORIGINAL TABLE (SUPERSEDED — attribution errors above; kept for history)
 
 CLUSTER A — DERIVATIVE-CONSISTENCY (FD/oracle vs analytic). VERDICT: CODE BUG.
 SUSPECT: **8950ee951** (shared-ARD "every derivative/trace/EFS/IFT-RHS" rework) +
