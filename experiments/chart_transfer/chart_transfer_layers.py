@@ -261,7 +261,10 @@ def main() -> int:
                            os.path.join(here, "..", "probe_out"))
     out = os.environ.get("CT_OUT", os.path.join(here, "out"))
     os.makedirs(out, exist_ok=True)
-    pca_dim = int(os.environ.get("CT_PCA", "40"))
+    # 8 PCs: the circle is 2-D extrinsically, so ~8 dims capture it with margin
+    # while keeping n/p ~ 4 (n=35/60 tokens) — p≈n overfits the chart and makes the
+    # K=1 inner solve oscillate (#1026 EV-degrade/restore churn) with noisy coords.
+    pca_dim = int(os.environ.get("CT_PCA", "8"))
     n_iter = int(os.environ.get("CT_NITER", "30"))
     seed = int(os.environ.get("CT_SEED", "0"))
 
