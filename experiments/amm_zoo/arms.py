@@ -78,6 +78,40 @@ def train_arm(
     return model
 
 
+def train_sasa(dataset, *, block_size: int = 2, steps: int = 3000, lr: float = 3e-3,
+               batch_size: int = 4096, aux_k_blocks: int = 4, seed: int = 0) -> BSF:
+    """SASA-style arm (Subspace-Aware SAE, arXiv 2606.06333): a FREE encoder (like
+    vanilla) but with **learned decoder SUBSPACES** — each block's decoder is
+    re-orthonormalised (Stiefel) every step — plus block-level sparsity (block-
+    TopK). It is the LLM-side cousin of BSF: subspace-aware but with no tied
+    encoder and no curvature model. Reuses BSF's module (forward/decode/reproject);
+    only the training loop differs from ``train_bsf`` (reproject in vanilla mode)."""
+    n_blocks, k_blocks, _l0 = matched_budget(dataset, block_size)
+    cfg = BSFConfig(
+        d_model=dataset.d, n_blocks=n_blocks, block_size=block_size, k_blocks=k_blocks,
+        mode="vanilla", aux_k_blocks=min(aux_k_blocks, n_blocks), seed=seed,
+    )
+    model = BSF(cfg)
+    xtr = torch.tensor(dataset.train.x, dtype=torch.float64)
+    n = xtr.shape[0]
+    gen = torch.Generator().manual_seed(seed)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    model.train()
+    reproj_every = 20
+    for step in range(steps):
+        xb = xtr if batch_size >= n else xtr[torch.randint(0, n, (batch_size,), generator=gen)]
+        out = model(xb)
+        loss = ((out.x_hat - xb) ** 2).mean() + out.aux_loss
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        if step % reproj_every == 0:
+            model.reproject_stiefel()  # subspace-aware: orthonormalise every block
+    model.reproject_stiefel()
+    model.eval()
+    return model
+
+
 @torch.no_grad()
 def _extract_blocks(model: BSF, x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """(``z_sparse[N,G,b]``, ``active[N,G] bool``, ``decoder[G,b,d]``) on rows ``x``."""
@@ -108,6 +142,7 @@ def bsf_recovered(model: BSF, dataset, split: str = "test") -> list[RecoveredFac
                 active=act,
                 topology="linear",  # subspace — BSF has no topology model
                 intrinsic_dim=b,
+                embedding_dim=b,
                 n_params=b * dataset.d,
                 name=f"blk{gi}",
             )
@@ -199,6 +234,8 @@ def ours_recovered(model: BSF, dataset, split: str = "test") -> list[RecoveredFa
                 active=act,
                 topology=topo,
                 intrinsic_dim=dim,
+                embedding_dim=b,  # the block's ambient span is still b even when
+                #                  the intrinsic (ring) dim is 1
                 # A ring chart codes 1 intrinsic coord (cheaper) but shares the b×d
                 # block decoder; a blob keeps the full b-wide code.
                 n_params=b * dataset.d,
@@ -213,6 +250,7 @@ ARMS = {
     "topk_sae": {"mode": "vanilla", "block_size": 1, "chart": False},
     "bsf_vanilla": {"mode": "vanilla", "block_size": 2, "chart": False},
     "bsf_grassmann": {"mode": "grassmann", "block_size": 2, "chart": False},
+    "sasa": {"mode": "sasa", "block_size": 2, "chart": False},
     "ours": {"mode": "grassmann", "block_size": 2, "chart": True},
 }
 
@@ -220,9 +258,12 @@ ARMS = {
 def run_arm(dataset, arm: str, *, steps: int = 3000, seed: int = 0) -> list[RecoveredFactor]:
     """Train one named arm and return its recovered factors on the TEST split."""
     spec = ARMS[arm]
-    model = train_arm(
-        dataset, mode=spec["mode"], block_size=spec["block_size"], steps=steps, seed=seed
-    )
+    if spec["mode"] == "sasa":
+        model = train_sasa(dataset, block_size=spec["block_size"], steps=steps, seed=seed)
+    else:
+        model = train_arm(
+            dataset, mode=spec["mode"], block_size=spec["block_size"], steps=steps, seed=seed
+        )
     if spec["chart"]:
         return ours_recovered(model, dataset, "test")
     return bsf_recovered(model, dataset, "test")

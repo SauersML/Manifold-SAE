@@ -57,6 +57,7 @@ class RecoveredFactor:
     topology: str
     intrinsic_dim: int
     n_params: int
+    embedding_dim: int = 0  # recovered ambient subspace dim (b); 0 = "= block size"
     name: str = ""
     meta: dict = field(default_factory=dict)
 
@@ -202,6 +203,17 @@ def geodesic_pairwise(coord: np.ndarray, topology: str) -> np.ndarray:
         )
         dot = np.clip(xyz @ xyz.T, -1.0, 1.0)
         return np.arccos(dot)
+    if topology == "helix":
+        t = coord[:, 0]  # arc length along a helix is proportional to |Δt| (non-closed)
+        return np.abs(t[:, None] - t[None, :])
+    if topology == "mobius":
+        # No global isometric chart; use the ambient 3-D embedding's chord distance
+        # as the geometry the recovered code should respect.
+        from amm import embed_unit
+
+        xyz = embed_unit("mobius", coord)
+        diff = xyz[:, None, :] - xyz[None, :, :]
+        return np.sqrt((diff * diff).sum(-1))
     # linear (or fallback): Euclidean in coords.
     diff = coord[:, None, :] - coord[None, :, :]
     return np.sqrt((diff * diff).sum(-1))
@@ -301,7 +313,15 @@ def score_arm(
             "contribution_r2": round(float(r2m[i, j]), 4),
             "topology_guess": rf.topology,
             "topology_correct": bool(rf.topology == tf.topology),
-            "dim_guess": int(rf.intrinsic_dim),
+            # Intrinsic (topological) dimension vs embedding-span (ambient subspace)
+            # dimension — reported separately; a good typing gets BOTH.
+            "intrinsic_dim_true": int(tf.intrinsic_dim),
+            "intrinsic_dim_guess": int(rf.intrinsic_dim),
+            "intrinsic_dim_correct": bool(rf.intrinsic_dim == tf.intrinsic_dim),
+            "embedding_dim_true": int(tf.block_dim),
+            "embedding_dim_guess": int(rf.embedding_dim),
+            "embedding_dim_correct": bool(rf.embedding_dim == tf.block_dim),
+            # Back-compat alias (intrinsic).
             "dim_correct": bool(rf.intrinsic_dim == tf.intrinsic_dim),
             "n_matched_tokens": int(rows_v.size),
         }
@@ -331,7 +351,12 @@ def score_arm(
             "topology_id_accuracy": round(
                 float(np.mean([r["topology_correct"] for r in recs])), 4
             ),
-            "dim_accuracy": round(float(np.mean([r["dim_correct"] for r in recs])), 4),
+            "intrinsic_dim_accuracy": round(
+                float(np.mean([r["intrinsic_dim_correct"] for r in recs])), 4
+            ),
+            "embedding_dim_accuracy": round(
+                float(np.mean([r["embedding_dim_correct"] for r in recs])), 4
+            ),
             "mean_circular_corr": _mean("circular_corr", recs),
             "mean_geodesic_spearman": _mean("geodesic_spearman", recs),
         }
@@ -341,7 +366,8 @@ def score_arm(
     overall = {
         "mean_contribution_r2": round(float(np.mean([r["contribution_r2"] for r in per_factor])), 4),
         "topology_id_accuracy": round(float(np.mean([r["topology_correct"] for r in per_factor])), 4),
-        "dim_accuracy": round(float(np.mean([r["dim_correct"] for r in per_factor])), 4),
+        "intrinsic_dim_accuracy": round(float(np.mean([r["intrinsic_dim_correct"] for r in per_factor])), 4),
+        "embedding_dim_accuracy": round(float(np.mean([r["embedding_dim_correct"] for r in per_factor])), 4),
         "n_recovered": len(recovered),
         "n_true": dataset.G,
         "n_matched": len(per_factor),
@@ -429,6 +455,7 @@ def _oracle_recovered(dataset, split: str) -> list[RecoveredFactor]:
                 active=sp.active[:, g].copy(),
                 topology=f.topology,
                 intrinsic_dim=f.intrinsic_dim,
+                embedding_dim=f.block_dim,
                 n_params=f.block_dim * dataset.d,
                 name=f"oracle{g}",
             )

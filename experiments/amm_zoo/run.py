@@ -49,7 +49,7 @@ SCRATCH = Path(os.environ.get(
     "AMM_SCRATCH",
     "/private/tmp/claude-501/-Users-user/8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/amm_work"))
 
-ARMS = ["topk_sae", "bsf_vanilla", "bsf_grassmann", "ours"]
+ARMS = ["topk_sae", "bsf_vanilla", "bsf_grassmann", "sasa", "ours"]
 
 
 # --------------------------------------------------------------------------- #
@@ -221,8 +221,8 @@ def make_figures(master, out: Path) -> None:
         return
     r2, _ = _agg(master)
     sigmas = sorted(master["config"]["sigmas"])
-    topos = ["circle", "arc", "torus", "sphere", "linear"]
-    colors = {"topk_sae": "#888", "bsf_vanilla": "#4C78A8", "bsf_grassmann": "#F58518", "ours": "#54A24B"}
+    topos = ["circle", "arc", "torus", "sphere", "helix", "mobius", "linear"]
+    colors = {"topk_sae": "#888", "bsf_vanilla": "#4C78A8", "bsf_grassmann": "#F58518", "sasa": "#B279A2", "ours": "#54A24B"}
 
     fig, axes = plt.subplots(1, len(topos), figsize=(4 * len(topos), 3.6), sharey=True)
     for ax, topo in zip(axes, topos):
@@ -266,7 +266,7 @@ def make_figures(master, out: Path) -> None:
 def _write_report(master, out: Path) -> None:
     r2, topoid = _agg(master)
     sigmas = sorted(master["config"]["sigmas"])
-    topos = ["circle", "arc", "torus", "sphere", "linear"]
+    topos = ["circle", "arc", "torus", "sphere", "helix", "mobius", "linear"]
     lines = ["# AMM zoo — Appendix-H replication/beat\n",
              f"Config: {json.dumps(master['config'])}\n",
              "## Contribution R² (held-out), mean over seeds\n"]

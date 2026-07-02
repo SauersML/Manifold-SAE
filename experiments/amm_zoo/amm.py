@@ -41,14 +41,20 @@ from typing import Any
 import numpy as np
 
 # Topology registry: (name, intrinsic_dim d_i, ambient block dim b, count).
+# helix = non-closed curved 1-D; mobius = orientation-reversing 2-D strip — the two
+# cases where topology typing (vs a plain subspace) matters most.
 ZOO = [
     ("circle", 1, 2, 8),
     ("torus", 2, 4, 4),
     ("sphere", 2, 3, 4),
     ("arc", 1, 2, 4),
+    ("helix", 1, 3, 2),
+    ("mobius", 2, 3, 2),
     ("linear", 2, 2, 4),
 ]
-MAX_INTRINSIC = 2  # torus/sphere/linear carry 2 intrinsic coords; circle/arc carry 1
+MAX_INTRINSIC = 2  # >=2-intrinsic factors carry 2 coords; 1-D carry 1 (2nd = NaN)
+HELIX_T = 4.0 * np.pi  # helix parameter range (2 turns), non-closed
+HELIX_PITCH = 0.16  # z-rise so the axial extent ≈ the ring radius
 
 
 @dataclass(frozen=True)
@@ -97,11 +103,28 @@ def _embed_linear(coords: np.ndarray) -> np.ndarray:
     return coords[:, :2]
 
 
+def _embed_helix(coords: np.ndarray) -> np.ndarray:
+    t = coords[:, 0]
+    z = HELIX_PITCH * (t - HELIX_T / 2.0)  # axial rise, centred so z ~ [-1, 1]
+    return np.stack([np.cos(t), np.sin(t), z], axis=1)
+
+
+def _embed_mobius(coords: np.ndarray) -> np.ndarray:
+    theta, w = coords[:, 0], coords[:, 1]  # theta in [0,2pi), w in [-1,1] (width)
+    half = 0.5 * w
+    rad = 1.0 + half * np.cos(theta / 2.0)  # the θ/2 half-twist -> orientation reversal
+    return np.stack(
+        [rad * np.cos(theta), rad * np.sin(theta), half * np.sin(theta / 2.0)], axis=1
+    )
+
+
 _EMBED = {
     "circle": _embed_circle,
     "arc": _embed_arc,
     "torus": _embed_torus,
     "sphere": _embed_sphere,
+    "helix": _embed_helix,
+    "mobius": _embed_mobius,
     "linear": _embed_linear,
 }
 
@@ -126,6 +149,11 @@ def _sample_coords(topology: str, n: int, factor: Factor, rng: np.random.Generat
         # Uniform on S^2: cos φ ~ U(-1,1), λ ~ U(0,2π).
         out[:, 0] = np.arccos(rng.uniform(-1.0, 1.0, n))
         out[:, 1] = rng.uniform(0.0, 2.0 * np.pi, n)
+    elif topology == "helix":
+        out[:, 0] = rng.uniform(0.0, HELIX_T, n)
+    elif topology == "mobius":
+        out[:, 0] = rng.uniform(0.0, 2.0 * np.pi, n)
+        out[:, 1] = rng.uniform(-1.0, 1.0, n)
     elif topology == "linear":
         out[:, 0] = rng.standard_normal(n)
         out[:, 1] = rng.standard_normal(n)

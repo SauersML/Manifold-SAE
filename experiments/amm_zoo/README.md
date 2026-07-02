@@ -21,7 +21,15 @@ manifold contributions plus isotropic noise, over a 24-factor **zoo**:
 | torus | 4 | 2 | 4 | `2-in-4` |
 | sphere | 4 | 2 | 3 | `2-in-3` |
 | arc | 4 | 1 | 2 | open (boundary), never wraps |
+| helix | 2 | 1 | 3 | **non-closed** curved 1-D (`cos,sin,pitch·t`) |
+| mobius | 2 | 2 | 3 | orientation-**reversing** strip (half-twist `θ/2`) |
 | linear | 4 | 2 | 2 | Gaussian **control — curvature must NOT win here** |
+
+Helix and Möbius are the cases where topology typing matters most: a non-closed
+curved 1-D and an orientation-reversing 2-D surface both look like a "subspace" to
+a block featurizer. **Intrinsic** (topological) and **embedding-span** (ambient
+`b`) dimension are scored separately per factor — e.g. helix is intrinsic-1 but
+embedding-3.
 
 - Noise `σ ∈ {0.02, 0.05, 0.1, 0.2} × signal-RMS` (matched absolute floor across
   splits); `n = 200k / 50k` train/test; **5 seeds**.
@@ -41,6 +49,9 @@ reimplemented.
 - `topk_sae` — TopK-SAE, `b=1` directions.
 - `bsf_vanilla` — vanilla Block-Sparse Featurizer, `b=2`.
 - `bsf_grassmann` — Grassmannian BSF, `b=2` (tied `γ`, Stiefel decoder).
+- `sasa` — **Subspace-Aware SAE** (arXiv 2606.06333), the LLM-side cousin: free
+  encoder + **learned decoder subspaces** (per-block Stiefel reprojection every
+  step) + block-level sparsity. Subspace-aware but no tied encoder, no curvature.
 - `ours` — Grassmannian **block T1** (== `bsf_grassmann`) **→ per-block K=1 circle
   chart**: classify each block's code cloud (ring vs blob by relative radial
   spread), and on ring blocks **denoise onto the fitted circle** (radius fixed,
@@ -84,3 +95,14 @@ $VENV run.py --quick    # -> results_quick.json (smaller n/steps)
 Each `(seed, σ, arm)` cell runs in its own subprocess with a wall-clock timeout
 and retries (the box has an OOM reaper); `results*.json` is written incrementally
 after every cell, so an interrupted sweep resumes with all completed cells intact.
+
+## Extending with new arms (schema stability)
+
+The output schema is **arm-additive**: each `(seed, σ, arm)` is an independent
+cell, and every arm is just a name in `arms.ARMS` that returns a list of
+`metrics.RecoveredFactor` (contribution, coord, active, topology + intrinsic +
+embedding dim, `n_params`). A future arm — e.g. gamfit's forthcoming
+`atom_topology="linear_block"` (γ_g(t)=t·D_g, BSF as a literal special case of the
+manifold SAE) — slots in by adding its name and a `RecoveredFactor` producer;
+existing cells need **no rescoring**, and it is compared on the same Hungarian +
+MDL + null battery as every other arm.
