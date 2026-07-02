@@ -40,6 +40,23 @@ publish it. The lane's own regression test is the evidence. The test is well-bui
 BITES (that's why it's red); the fix behind it is incomplete (guard trigger doesn't
 fire on EV≈0 here). The gam-sae test suite is consequently RED on this test.
 
+UPDATE 2 (after seeding fix 50b8c52b7 "seed cold cocollapse decoders", re-ran 2027):
+  sequential_deflation_gives_both_atoms_material_norm_2027 ......... ok
+  two_circle_whitened_k2_recovers_disjoint_signal_2027 ............. ok  (EV now >0.20, was -0.0000)
+  two_circle_separates_at_narrow_and_wide_widths_2027 ............. FAILED
+    → "p=16: EV=0.4298, per-atom even-energy fraction=[0.997, 0.713], reseeds=0 —
+       atoms did NOT separate onto the two planted circles (both even-energy fracs >0.5
+       = structural co-collapse: EV looks fine but neither circle is recovered)"
+  => 2 passed, 1 failed (was 1/2). PROGRESS but NOT fixed. The seeding fix raised EV
+     above the collapse floor (so the EV-only test passes), BUT the two atoms STILL do
+     not SEPARATE onto the two distinct circles — a STRUCTURAL co-collapse the EV test
+     can't see and the two-width structure test correctly catches. reseeds=0: the
+     detection trigger still never fires (now EV=0.43 is above the null floor, so the
+     "EV≤floor" condition is even further from firing). So "K≥2 co-collapse fixed" is
+     STILL FALSE for the structural (factor-separation) claim — only the EV-collapse is
+     repaired. Do not publish "recovers the distinct curved factors" until the
+     separation test (even-energy fractions straddling 0.5) is green.
+
 UPDATE (re-ran at HEAD 228915afa, `cargo test -p gam-sae --lib 2027`):
   sequential_deflation_gives_both_atoms_material_norm_2027 ......... ok
   two_circle_whitened_k2_recovers_disjoint_signal_2027 ............. FAILED (EV=-0.0000, reseeds=0)
@@ -523,7 +540,15 @@ pulled to PENDING or corrected:
     cyclic adjacency 1.00 ✓, 7/8 blocks active ✓, winning stable rank 1.98 ✓,
     full_ev 0.976 correctly flagged in-sample.)
 
-  [HIGH] P-null REAL-weekday results (§3 row 5 + §4.2): "circular correlation 0.93,
+  [RESOLVED] P-null real results now COMMITTED (f0ece22, null_out/null_weekday.json +
+    null_month.json). They exist and are HONEST, matching my qualified assessment:
+    MONTH (n=60) — C2 label-perm p=0.0004 (robust), basis_real_fraction 1.0, C1 EV-parity
+    gap_closed p=0.012 PASS. WEEKDAY (n=35) — C2 p=0.042 (marginal) BUT basis_real_fraction
+    only 0.22 (fragile), C1 EV-parity gap_closed p=0.16 FAILS. So month robust, weekday
+    marginal-C2/failed-C1. NOTE the real numbers (0.042 / 0.16 / 0.0004 / 0.012) do NOT
+    match the doc's earlier fabricated 0.93/0.010/0.43/0.48 — confirming those were
+    placeholders; the committed reality is honest and is what to publish.
+  [WAS-HIGH, now historical] P-null REAL-weekday results (§3 row 5 + §4.2): "circular correlation 0.93,
     p=0.010", "discrete adjacency 0.43, p=0.43", "C1 gap-closed p=0.48" trace to NO
     artifact. null_out/ contains ONLY null_synthetic_weekday.json, which is (a) the
     SYNTHETIC planted-circle set (name="weekday" but n=35 planted), NOT the real
