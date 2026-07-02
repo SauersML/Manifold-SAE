@@ -4,6 +4,42 @@ Reviewer for the block-sparse + curved-chart featurizer fleet. Repos polled:
 `/Users/user/gam` (main) and `/Users/user/Manifold-SAE` (main). I edit nothing
 but this file.
 
+## EXECUTIVE SUMMARY (final) — per-lane verdict + publication safety
+
+| lane | verdict | safe to publish |
+|---|---|---|
+| G-bsf | SOUND / faithful (numerically verified: γ scalar, block-TopK by ‖z_g‖₂, Stiefel QR, gauge invariance, AuxK-on-residual, no leak) | Real EV sweep (TopK 0.4489 > BSF as b grows), cyclic adjacency 1.0, synthetic recovery vanilla R²=0.82 / grassmann 0.986. NOT the cyclic full_ev (0.976, IN-SAMPLE). Doc's old "0.76" was wrong→corrected to 0.82. |
+| M-mdl | scorer SOUND (hand-verified exact); selection-bits caveat CLOSED (1d9f843) | MDL ladder f*=2p / crossover table (cites results.json). In-sample EVs — descriptive not held-out. |
+| P-null | SOUND; catches its own traps; well-calibrated; no peeking | C1 EV-parity + MONTH cyclic order (adj 0.83, n=12). WEEKDAY cyclic order only as MARGINAL (p≈.04, fragile). The doc's earlier real-weekday numbers (0.93/0.010, 0.43/0.43) were UNBACKED→now removed/qualified. |
+| N-nursery | design VALID; held-out caveat CLOSED (adfe50d); no leak; subprocess-isolated | Real held-out: nursery WINS on factor RECOVERY (weekday adj 1.0 vs joint 0.429), NOT on EV (linear PCA-4 0.696 > joint 0.629 > nursery 0.576). REML CONVERGED on the small P=16 case so it does NOT show co-collapse. Synthetic arms not yet run. Frame as recovery, not EV. |
+| BT1-block | DESIGN SOUND + now GREEN (gam HEAD): 17/17 block tests pass incl. gauge (with negative control), planted recovery, frame orthonormality. FFI clean (no #[allow], full-path prelude). Reuses GrassmannFrame::polar_update. | The gauge-invariance + planted-recovery PROPERTY (verified numerically + 17 in-repo tests). No headline EV number yet (fitter EV is in-sample). Earlier commit didn't compile (3 edition-2024 pattern errors, now fixed 4a06940cd). |
+| O-manifold | fleet-batch landing CLEAN (byte-identical hunks, tests relocated not dropped, reachable_rank fix sound); co-collapse cooldown LOGICALLY SOUND (debounces without masking) + repro test now landed (bites by construction) | The landing + reachable_dictionary_rank correctness fix. Co-collapse "fix": publishable ONLY with the 2027 repro green (verifying) — it's a small-P/torch demonstration, not full-width REML. |
+| O-solve | mixture_link gate widening SOUND (LogLog/Cauchit 5-jet Fisher genuinely implemented + FD-tested to 1e-12) | The gate widening / Firth-Jeffreys on LogLog+Cauchit. |
+
+BIGGEST CATCHES (calcification prevented): (1) synthesis doc cited an UNBACKED G-bsf
+synthetic R²=0.76 and UNBACKED real-weekday P-null numbers — both now corrected/qualified
+in the doc. (2) BT1's committed core did NOT compile (3 pattern errors) — flagged, fixed.
+(3) N-nursery real result reframed: recovery win, NOT an EV win (linear beats both).
+(4) **The K≥2 co-collapse "fix" DOES NOT WORK — its own repro test is RED at HEAD.**
+
+### [HIGHEST] O-manifold co-collapse fix is NOT effective — repro test FAILS at HEAD
+Task #8 is marked completed, but I RAN `cargo test -p gam-sae --lib
+cocollapse_disjoint_2027` at gam HEAD:
+  two_circle_whitened_k2_recovers_disjoint_signal_2027 ... FAILED
+  → "[#2027 repro] K=2 whitened two-circle EV = -0.0000, cocollapse_reseeds = 0"
+    (expected EV > 0.20; panics at tests_cocollapse_disjoint_2027.rs:157)
+  sequential_deflation_gives_both_atoms_material_norm_2027 ... ok
+So on the intended repro the K=2 whitened two-circle fit STILL co-collapses (EV≈0 =
+the null floor) AND the co-collapse reseed guard NEVER FIRED (reseeds=0) across 60
+`run_joint_fit_arrow_schur` iterations. The collapse-detection trigger is not catching
+this case, so the cooldown/anchor/disjoint-refit machinery (which I reviewed as
+logically sound) never engages end-to-end. The deflation UNIT guard passes in
+isolation, but the full joint fit does not recover the signal.
+CONSEQUENCE: "we fixed the K≥2 whitened co-collapse" is FALSE at this HEAD — do NOT
+publish it. The lane's own regression test is the evidence. The test is well-built and
+BITES (that's why it's red); the fix behind it is incomplete (guard trigger doesn't
+fire on EV≈0 here). The gam-sae test suite is consequently RED on this test.
+
 ## Baseline (established before lanes committed)
 
 Reusable pieces BT1-block MUST build on rather than reimplement:
