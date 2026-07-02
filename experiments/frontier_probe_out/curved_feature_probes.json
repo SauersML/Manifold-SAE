@@ -1,0 +1,311 @@
+{
+  "meta": {
+    "source": "WS-D Qwen3-32B residual harvest (frontier scale)",
+    "model": "/models/Qwen3-32B",
+    "layers": [
+      24,
+      32,
+      40
+    ],
+    "harvest_root": "/dev/shm/sauers_gpu/harvest"
+  },
+  "results": {
+    "weekday": {
+      "layer": 32,
+      "n_samples": 35,
+      "n_tokens": 7,
+      "cyclic": true,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.8989896776433026,
+      "layer_diag": {
+        "24": {
+          "best_abs_spearman_top8pc": 0.6159663865546219
+        },
+        "32": {
+          "best_abs_spearman_top8pc": 0.7324929971988795
+        },
+        "40": {
+          "best_abs_spearman_top8pc": 0.49047619047619045
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": 0.06229024937636478,
+        "linear_L2": 0.25439455882971396,
+        "curved": 0.05317570327765155,
+        "reduce_evr": 0.9400024609514874
+      },
+      "cv_ev_std": {
+        "linear_L1": 0.05506090106147229,
+        "linear_L2": 0.14083150335748487,
+        "curved": 0.03529528231047388,
+        "reduce_evr": 0.009124871545592947
+      },
+      "insample_ev": {
+        "curved": 0.2884496476010179,
+        "linear_L1": 0.40650069363797847,
+        "linear_L2": 0.5274786028167724
+      },
+      "curved_ev_full_insample": 0.2884496476010179,
+      "ordering_curved": {
+        "metric": "circular",
+        "circular_corr_abs": 0.6430391527589374,
+        "cyclic_adjacency_accuracy": 0.2857142857142857,
+        "n_tokens": 7
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.9285714285714286,
+        "pca2d_angle_cyclic_adjacency_accuracy": 0.5714285714285714
+      },
+      "_tok_true": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0
+      ],
+      "_tok_coord": [
+        0.25538030118009314,
+        0.4343143374086968,
+        0.10069682586422427,
+        0.3166615512684096,
+        0.3808504629617487,
+        -0.4603766364050275,
+        -0.7485030750472862
+      ],
+      "reml": {
+        "reml_ev_insample": 0.5246506742812267,
+        "n_iter": 60,
+        "topology": "circle"
+      },
+      "_model": "/models/Qwen3-32B"
+    },
+    "month": {
+      "layer": 40,
+      "n_samples": 60,
+      "n_tokens": 12,
+      "cyclic": true,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.6702694462690684,
+      "layer_diag": {
+        "24": {
+          "best_abs_spearman_top8pc": 0.6040011114198388
+        },
+        "32": {
+          "best_abs_spearman_top8pc": 0.5489858293970548
+        },
+        "40": {
+          "best_abs_spearman_top8pc": 0.6323978883023061
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": 0.07638216078255682,
+        "linear_L2": 0.3163396450614166,
+        "curved": 0.04927514502587531,
+        "reduce_evr": 0.7368303083750476
+      },
+      "cv_ev_std": {
+        "linear_L1": 0.05523035210599167,
+        "linear_L2": 0.038653097084117,
+        "curved": 0.05042615072238183,
+        "reduce_evr": 0.01031080725897007
+      },
+      "insample_ev": {
+        "curved": 0.19197059836160957,
+        "linear_L1": 0.12532431302314084,
+        "linear_L2": 0.24046385548574079
+      },
+      "curved_ev_full_insample": 0.19197059836160957,
+      "ordering_curved": {
+        "metric": "circular",
+        "circular_corr_abs": 0.4811280826305727,
+        "cyclic_adjacency_accuracy": 0.4166666666666667,
+        "n_tokens": 12
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.8461538461538461,
+        "pca2d_angle_cyclic_adjacency_accuracy": 0.8333333333333334
+      },
+      "_tok_true": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0
+      ],
+      "_tok_coord": [
+        -0.2470515041813961,
+        0.20223272552376698,
+        0.307364819771279,
+        0.469781937709929,
+        3.0567167947565483,
+        2.5092778059085363,
+        -0.44482388480622503,
+        -1.1737102216639586,
+        0.09851651990652162,
+        -0.42400077942409564,
+        -0.24610118322359528,
+        0.023720540110987728
+      ],
+      "reml": {
+        "reml_ev_insample": 0.24324524042495765,
+        "n_iter": 60,
+        "topology": "circle"
+      },
+      "_model": "/models/Qwen3-32B"
+    },
+    "year": {
+      "layer": 40,
+      "n_samples": 75,
+      "n_tokens": 15,
+      "cyclic": false,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.6842735832547404,
+      "layer_diag": {
+        "24": {
+          "best_abs_spearman_top8pc": 0.8792603129445234
+        },
+        "32": {
+          "best_abs_spearman_top8pc": 0.8718065433854908
+        },
+        "40": {
+          "best_abs_spearman_top8pc": 0.9446372688477952
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": 0.21213803904210296,
+        "linear_L2": 0.44751118896888914,
+        "curved": 0.15050415352759416,
+        "reduce_evr": 0.7232838184421647
+      },
+      "cv_ev_std": {
+        "linear_L1": 0.02811794217190218,
+        "linear_L2": 0.03481975124996433,
+        "curved": 0.03869427274296596,
+        "reduce_evr": 0.027185737536862712
+      },
+      "insample_ev": {
+        "curved": 0.11840415870667997,
+        "linear_L1": 0.17911634541863652,
+        "linear_L2": 0.3333386856759185
+      },
+      "curved_ev_full_insample": 0.11840415870667997,
+      "ordering_curved": {
+        "metric": "monotone",
+        "spearman_abs": 0.2571428571428571,
+        "kendall_tau_abs": 0.1919191919191919,
+        "n_tokens": 15
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.95
+      },
+      "_tok_true": [
+        1950.0,
+        1955.0,
+        1960.0,
+        1965.0,
+        1970.0,
+        1975.0,
+        1980.0,
+        1985.0,
+        1990.0,
+        1995.0,
+        2000.0,
+        2005.0,
+        2010.0,
+        2015.0,
+        2020.0
+      ],
+      "_tok_coord": [
+        1.0,
+        0.400001371614845,
+        0.9999999997803393,
+        0.00413343725659454,
+        0.9999999999949537,
+        0.599732591544037,
+        1.0,
+        1.0,
+        1.0,
+        0.8000902917614059,
+        7.801524623414973e-08,
+        0.6000007103122958,
+        0.40000000000087893,
+        0.40000042633121985,
+        0.7999999993268876
+      ],
+      "reml": {
+        "reml_ev_insample": 0.3351959578391187,
+        "n_iter": 60,
+        "topology": "line"
+      },
+      "_model": "/models/Qwen3-32B"
+    },
+    "color": {
+      "layer": 24,
+      "n_samples": 65,
+      "n_tokens": 8,
+      "cyclic": true,
+      "reduce_dim": 16,
+      "reduce_evr_full": 0.9312141407779165,
+      "layer_diag": {
+        "24": {
+          "best_abs_spearman_top8pc": 0.31223776223776223
+        },
+        "32": {
+          "best_abs_spearman_top8pc": 0.25520104895104895
+        },
+        "40": {
+          "best_abs_spearman_top8pc": 0.20922202797202796
+        }
+      },
+      "cv_ev_mean": {
+        "linear_L1": NaN,
+        "linear_L2": NaN,
+        "curved": NaN,
+        "reduce_evr": 0.9354814260034462
+      },
+      "cv_ev_std": {
+        "linear_L1": NaN,
+        "linear_L2": NaN,
+        "curved": NaN,
+        "reduce_evr": 0.01010634060031404
+      },
+      "insample_ev": {
+        "curved": 0.2892018748692755,
+        "linear_L1": 0.536474219631756,
+        "linear_L2": 0.6273826542825498
+      },
+      "curved_ev_full_insample": 0.2892018748692755,
+      "ordering_curved": {
+        "metric": "circular",
+        "circular_corr_abs": 0.0,
+        "cyclic_adjacency_accuracy": 1.0,
+        "n_tokens": 8
+      },
+      "ordering_linear": {
+        "best_single_PC_spearman_abs": 0.0,
+        "pca2d_angle_cyclic_adjacency_accuracy": 1.0
+      },
+      "_tok_true": [
+        0.0
+      ],
+      "_tok_coord": [
+        2.185701591949534
+      ],
+      "reml": {
+        "reml_ev_insample": 0.6268257841797997,
+        "n_iter": 60,
+        "topology": "circle"
+      },
+      "_model": "/models/Qwen3-32B"
+    }
+  }
+}
