@@ -1,0 +1,345 @@
+{
+  "data": {
+    "n": 480,
+    "p": 96,
+    "ncirc": 3,
+    "amp": 2.0,
+    "circle_subspace_ev": 0.8842,
+    "n_train": 336,
+    "n_test": 144
+  },
+  "arms": {
+    "A_joint": {
+      "reml_joint": {
+        "status": "TIMEOUT_BLOCKED",
+        "K": 3,
+        "note": "REML sae_manifold_fit did not return within timeout (hangs in .venv even at K=1; production fitter unavailable here)",
+        "wall_s": 120.0,
+        "timeout_s": 120
+      },
+      "torch_joint": {
+        "status": "CONVERGED",
+        "n_atoms": 3,
+        "ev": 0.7557,
+        "ev_train": 0.9027,
+        "gate_share": [
+          0.35,
+          0.323,
+          0.327
+        ],
+        "dead_atoms": 0,
+        "wall_s": 13.4,
+        "out_path": "/private/tmp/claude-501/-Users-user/8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/block_nursery_work/syn_A_torch_out.npz",
+        "per_circle_corr": [
+          0.962,
+          0.791,
+          0.722
+        ],
+        "n_circles_recovered": 1
+      },
+      "torch_joint_overcomplete": {
+        "status": "CONVERGED",
+        "n_atoms": 6,
+        "ev": 0.8859,
+        "ev_train": 0.9406,
+        "gate_share": [
+          0.153,
+          0.249,
+          0.123,
+          0.164,
+          0.139,
+          0.172
+        ],
+        "dead_atoms": 0,
+        "wall_s": 14.3,
+        "out_path": "/private/tmp/claude-501/-Users-user/8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/block_nursery_work/syn_A_torch_oc_out.npz",
+        "per_circle_corr": [
+          0.986,
+          0.997,
+          0.863
+        ],
+        "n_circles_recovered": 3
+      }
+    },
+    "pure_linear": {
+      "pca_L3_test": 0.6149,
+      "pca_L6_test": 0.883,
+      "pca_L9_test": 0.9364
+    },
+    "B_nursery_oracle": {
+      "composed_ambient_ev_test": 0.8325,
+      "composed_ambient_ev_train": 0.8472,
+      "n_blocks": 3,
+      "total_fit_dim": 6,
+      "per_block": [
+        {
+          "block": 0,
+          "block_dim": 2,
+          "block_var_test": 6.8177,
+          "block_linear_ev_1pc_test": 0.4916,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.1,
+          "chart_ev_block_coords_test": 0.9452,
+          "chart_ev_block_coords_train": 0.9706,
+          "best_planted_circle_corr": 0.749,
+          "matched_planted_circle": 0
+        },
+        {
+          "block": 1,
+          "block_dim": 2,
+          "block_var_test": 4.088,
+          "block_linear_ev_1pc_test": 0.5416,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.1,
+          "chart_ev_block_coords_test": 0.9362,
+          "chart_ev_block_coords_train": 0.9469,
+          "best_planted_circle_corr": 0.812,
+          "matched_planted_circle": 1
+        },
+        {
+          "block": 2,
+          "block_dim": 2,
+          "block_var_test": 2.0046,
+          "block_linear_ev_1pc_test": 0.5317,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 6.9,
+          "chart_ev_block_coords_test": 0.9445,
+          "chart_ev_block_coords_train": 0.9408,
+          "best_planted_circle_corr": 0.955,
+          "matched_planted_circle": 2
+        }
+      ],
+      "n_circles_recovered": 2,
+      "mdl": {
+        "delta2": 0.37361,
+        "rows": [
+          {
+            "name": "block0-linear-2d",
+            "kind": "block",
+            "coded_dim_m": 2,
+            "code_bits_per_firing": 3.3397,
+            "code_coeff_bits_per_firing": 3.3397,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 192,
+            "l_param_bits": 1.6699,
+            "dict_bits": 320.61,
+            "code_bits_total": 480.92,
+            "total_bits": 801.53,
+            "bits_per_token": 5.5662,
+            "residual_achieved": 0.0,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          },
+          {
+            "name": "block0-circle-chart",
+            "kind": "chart",
+            "coded_dim_m": 1,
+            "code_bits_per_firing": 2.0948,
+            "code_coeff_bits_per_firing": 2.0948,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 384,
+            "l_param_bits": 2.0948,
+            "dict_bits": 804.42,
+            "code_bits_total": 301.66,
+            "total_bits": 1106.08,
+            "bits_per_token": 7.6811,
+            "residual_achieved": 0.37361,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          },
+          {
+            "name": "block1-linear-2d",
+            "kind": "block",
+            "coded_dim_m": 2,
+            "code_bits_per_firing": 2.694,
+            "code_coeff_bits_per_firing": 2.694,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 192,
+            "l_param_bits": 1.347,
+            "dict_bits": 258.62,
+            "code_bits_total": 387.93,
+            "total_bits": 646.55,
+            "bits_per_token": 4.49,
+            "residual_achieved": 0.0,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          },
+          {
+            "name": "block1-circle-chart",
+            "kind": "chart",
+            "coded_dim_m": 1,
+            "code_bits_per_firing": 1.7455,
+            "code_coeff_bits_per_firing": 1.7455,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 384,
+            "l_param_bits": 1.7455,
+            "dict_bits": 670.28,
+            "code_bits_total": 251.36,
+            "total_bits": 921.64,
+            "bits_per_token": 6.4003,
+            "residual_achieved": 0.26081,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          },
+          {
+            "name": "block2-linear-2d",
+            "kind": "block",
+            "coded_dim_m": 2,
+            "code_bits_per_firing": 1.8808,
+            "code_coeff_bits_per_firing": 1.8808,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 192,
+            "l_param_bits": 0.9404,
+            "dict_bits": 180.55,
+            "code_bits_total": 270.83,
+            "total_bits": 451.39,
+            "bits_per_token": 3.1346,
+            "residual_achieved": 0.0,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          },
+          {
+            "name": "block2-circle-chart",
+            "kind": "chart",
+            "coded_dim_m": 1,
+            "code_bits_per_firing": 1.3006,
+            "code_coeff_bits_per_firing": 1.3006,
+            "selection_bits_per_firing": 0.0,
+            "n_params": 384,
+            "l_param_bits": 1.3006,
+            "dict_bits": 499.42,
+            "code_bits_total": 187.28,
+            "total_bits": 686.7,
+            "bits_per_token": 4.7688,
+            "residual_achieved": 0.11126,
+            "distortion_floor": 0.37361,
+            "distortion_infeasible": false
+          }
+        ]
+      }
+    },
+    "B_nursery_discovered": {
+      "composed_ambient_ev_test": 0.8342,
+      "composed_ambient_ev_train": 0.8736,
+      "n_blocks": 5,
+      "total_fit_dim": 8,
+      "per_block": [
+        {
+          "block": 0,
+          "block_dim": 2,
+          "block_var_test": 6.8784,
+          "block_linear_ev_1pc_test": 0.4874,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.0,
+          "chart_ev_block_coords_test": 0.926,
+          "chart_ev_block_coords_train": 0.9625,
+          "best_planted_circle_corr": 0.771,
+          "matched_planted_circle": 0
+        },
+        {
+          "block": 1,
+          "block_dim": 2,
+          "block_var_test": 3.9713,
+          "block_linear_ev_1pc_test": 0.5416,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.0,
+          "chart_ev_block_coords_test": 0.9247,
+          "chart_ev_block_coords_train": 0.9666,
+          "best_planted_circle_corr": 0.955,
+          "matched_planted_circle": 1
+        },
+        {
+          "block": 2,
+          "block_dim": 2,
+          "block_var_test": 2.0522,
+          "block_linear_ev_1pc_test": 0.5412,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.7,
+          "chart_ev_block_coords_test": 0.8904,
+          "chart_ev_block_coords_train": 0.9214,
+          "best_planted_circle_corr": 0.808,
+          "matched_planted_circle": 2
+        },
+        {
+          "block": 3,
+          "block_dim": 1,
+          "block_var_test": 0.5772,
+          "block_linear_ev_1pc_test": 1.0,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.5,
+          "chart_ev_block_coords_test": 0.3984,
+          "chart_ev_block_coords_train": 0.4762
+        },
+        {
+          "block": 4,
+          "block_dim": 1,
+          "block_var_test": 0.1607,
+          "block_linear_ev_1pc_test": 1.0,
+          "block_linear_ev_2pc_test": 1.0,
+          "chart_status": "CONVERGED",
+          "chart_wall_s": 7.4,
+          "chart_ev_block_coords_test": 0.5279,
+          "chart_ev_block_coords_train": 0.481
+        }
+      ],
+      "n_circles_recovered": 2,
+      "discovery_diag": {
+        "n_pcs": 8,
+        "pca_var_captured": 0.9352,
+        "atom_groups": [
+          [
+            0,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ]
+        ],
+        "block_dims": [
+          2,
+          2,
+          2,
+          1,
+          1
+        ],
+        "affinity_thresh": 0.35
+      }
+    }
+  },
+  "verdict": {
+    "metric": "HELD-OUT EV (test rows, 30%)",
+    "joint_torch_ambient_ev_test": 0.7557,
+    "joint_torch_circles_recovered": "1/3",
+    "joint_reml_status": "TIMEOUT_BLOCKED",
+    "nursery_oracle_ev_test": 0.8325,
+    "nursery_oracle_circles_recovered": "2/3",
+    "nursery_discovered_ev_test": 0.8342,
+    "nursery_discovered_circles_recovered": "2/3",
+    "pure_linear_baselines_test": {
+      "pca_L3_test": 0.6149,
+      "pca_L6_test": 0.883,
+      "pca_L9_test": 0.9364
+    },
+    "circle_subspace_ceiling": 0.8842,
+    "nursery_fit_dim_per_block": 2,
+    "joint_fit_dim": 96
+  }
+}
