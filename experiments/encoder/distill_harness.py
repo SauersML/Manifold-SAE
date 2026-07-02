@@ -162,8 +162,67 @@ def _pad_coords_teacher(coords: Sequence[np.ndarray], atom_dims: Sequence[int]) 
 # Certificate-fallback gate, per-row (mirrors gamfit.distill.encode_with_fallback
 # but EXPOSES the per-row accept/reject mask so we can bucket by decile).      #
 # --------------------------------------------------------------------------- #
-def gate_per_row(model: Any, encoder: Any, X: np.ndarray) -> dict[str, np.ndarray]:
-    """Per-row certificate gate against the COLD exact teacher solve.
+def gate_per_row(
+    model: Any, encoder: Any, X: np.ndarray, *, mode: str = "cold_probe"
+) -> dict[str, np.ndarray]:
+    """Per-row fallback gate. ``mode`` selects the honesty mechanism:
+
+    * ``"cold_probe"`` (default, always available): accept a row iff the
+      amortized guess matches the COLD exact teacher solve within the encoder's
+      calibrated tolerance (:func:`_cold_probe_gate`).
+    * ``"certificate"``: accept a row iff the Rust Kantorovich certificate
+      ``h ≤ ½`` holds at the amortized start (:func:`_certificate_gate`), the
+      in-kernel gate `EncodeAtlas` computes cheaply. Available once G-gpu wires
+      the atlas to the Python FFI; until then it raises with the expected seam.
+
+    Both are honest: the cold probe measures the encoder against a fixed exact
+    reference (the #1166 self-referential-gate trap avoided); the certificate is
+    the deployment gate the exact multi-start solve backstops. Reporting both is
+    the A/B the lead requested.
+    """
+    if mode == "cold_probe":
+        return _cold_probe_gate(model, encoder, X)
+    if mode == "certificate":
+        return _certificate_gate(model, encoder, X)
+    raise ValueError(f"unknown gate mode {mode!r}")
+
+
+def _certificate_gate(model: Any, encoder: Any, X: np.ndarray) -> dict[str, np.ndarray]:
+    """In-kernel Kantorovich certificate gate (pending G-gpu's EncodeAtlas FFI).
+
+    When the Rust `EncodeAtlas::certified_encode_batch` is exposed to Python, this
+    routes each amortized start through it and accepts iff the per-row certificate
+    ``h ≤ ½`` holds (`EncodeResult.certified`), flagging the rest to the exact
+    multi-start solve. The expected FFI surface (per crates/gam-sae/src/encode.rs):
+    a call taking the frozen dictionary + the amortized `t_init`/`a_init` and
+    returning `{assignments, coords, certified (bool per row), uncertified_count}`.
+    Until it lands, the cold-probe gate is the honest stand-in.
+    """
+    fn = getattr(model, "certified_encode_batch", None) or getattr(
+        model, "_certified_encode_batch", None
+    )
+    if fn is None:
+        raise NotImplementedError(
+            "certificate gate needs the Rust EncodeAtlas FFI (G-gpu, pending). "
+            "Use mode='cold_probe' until model.certified_encode_batch exists."
+        )
+    t_init, logits_init = encoder.predict_initializers(X)
+    res = fn(np.ascontiguousarray(np.asarray(X, dtype=np.float64)),
+             t_init=t_init, a_init=logits_init)
+    accepted = np.asarray(res["certified"], dtype=bool)
+    fast_assign = encoder.encode_fast(X)
+    return {
+        "accepted": accepted,
+        "coord_err": np.zeros(accepted.shape[0]),   # certificate is the gate, not an err
+        "assign_err": np.zeros(accepted.shape[0]),
+        "fast_assign": fast_assign,
+        "exact_assign": np.asarray(res["assignments"], dtype=np.float64),
+        "exact_fitted": np.asarray(res.get("fitted", np.zeros_like(X)), dtype=np.float64),
+    }
+
+
+def _cold_probe_gate(model: Any, encoder: Any, X: np.ndarray) -> dict[str, np.ndarray]:
+    """Per-row gate against the COLD exact teacher solve.
 
     Returns per-row ``accepted`` mask, ``coord_err``/``assign_err`` (Lâˆž), the
     amortized ``fast_assign`` and the cold exact ``exact_assign``/``fitted``.
@@ -294,6 +353,7 @@ def distill_and_gate(
     random_state: int = 0,
     throughput_target_rows: int = 200_000,
     throughput_gate_rows_per_s: float = 1.0e5,
+    gate_mode: str = "cold_probe",
     notes: Sequence[str] | None = None,
 ) -> tuple[Any, EncoderReport]:
     """Distil an amortized encoder from certified exact solves and gate it.
@@ -315,7 +375,7 @@ def distill_and_gate(
         random_state=int(random_state),
     )
 
-    gate = gate_per_row(model, encoder, x_eval)
+    gate = gate_per_row(model, encoder, x_eval, mode=gate_mode)
     accepted = gate["accepted"]
     fb_rows = int(np.count_nonzero(~accepted))
     n_eval = int(x_eval.shape[0])
@@ -366,7 +426,7 @@ def distill_and_gate(
         throughput_batch_rows=int(thr["batch_rows"]),
         throughput_gate_rows_per_s=float(throughput_gate_rows_per_s),
         throughput_passes_gate=bool(thr["rows_per_s"] >= throughput_gate_rows_per_s),
-        notes=list(notes or []),
+        notes=list(notes or []) + [f"gate_mode={gate_mode}"],
     )
     return encoder, report
 
