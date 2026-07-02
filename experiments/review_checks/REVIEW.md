@@ -290,3 +290,59 @@ CAVEATS to enforce on any eventual N-nursery headline:
     PCs) as blocks; fully-unsupervised discover_blocks is only a side cross-check
     there. Set identity is legit metadata (not the cyclic answer), but say so.
   [MED] All EVs in-sample (above).
+
+### BSF_RESPONSE.md synthesis — commit 605e716 (VERDICT: honest structure, TWO UNBACKED numbers)
+The doc is unusually honest (cites this review as §4) and its stated rule is "empty
+cells marked PENDING, never filled with placeholders." Most cited numbers DO trace to
+artifacts — BUT two "landed" head-to-head numbers trace to NO artifact and must be
+pulled to PENDING or corrected:
+
+  [HIGH] G-bsf "synthetic subspace recovery R²=0.76 (vanilla)" (§3 row 1) is UNBACKED.
+    bsf_baseline/metrics.json contains only keys ['real','cyclic'] — the SYNTHETIC
+    phase never ran/saved. "0.76" appears nowhere in bsf_baseline/. (The G-bsf REAL
+    numbers ARE backed and correct: TopK b=1 EV 0.4489 ✓, BSF b=2..8 0.425→0.325 ✓;
+    cyclic adjacency 1.00 ✓, 7/8 blocks active ✓, winning stable rank 1.98 ✓,
+    full_ev 0.976 correctly flagged in-sample.)
+
+  [HIGH] P-null REAL-weekday results (§3 row 5 + §4.2): "circular correlation 0.93,
+    p=0.010", "discrete adjacency 0.43, p=0.43", "C1 gap-closed p=0.48" trace to NO
+    artifact. null_out/ contains ONLY null_synthetic_weekday.json, which is (a) the
+    SYNTHETIC planted-circle set (name="weekday" but n=35 planted), NOT the real
+    harvest, and (b) STALE — emitted by a PRE-5fd1465 matched_null.py (its
+    matched_spectrum has old keys p_parity_vs_null / p_curved_beats_lin1_vs_null; the
+    committed code's `p_gap_closed_vs_null` does NOT appear, yet the doc cites a
+    "gap-closed" p — a statistic only the NEW code emits, from a run whose output is
+    not on disk). The stale artifact's actual values (circ 0.965/p 0.0037, adjacency
+    0.714/p 0.039, curved_beats_lin1 p 0.41) do NOT match the doc's (0.93/0.010,
+    0.43/0.43, 0.48). So the "real weekday nulls" in the doc are unverifiable — either
+    an unsaved run or fabricated. Per the doc's own standard → PENDING until a
+    committed null_out/null_weekday.json (real, current-code) exists.
+
+Everything else in the doc I can vouch for: MDL f*=2p / crossover table cites
+mdl_ladder/results.json; the caveats §4.1/3/4/5/6/7 are accurate and match my review.
+
+### BT1-block FIX — commit 097b1c1de (VERDICT: RESOLVES the compile+tests HIGH issues)
+- block_tests.rs now EXISTS + committed (328 lines); the two decoder.view() fixes +
+  gate-packing tidy landed (block.rs +7/-5). FFI (geometry_ffi.rs) + Python surface
+  (gamfit/_sparse_dictionary.py, pure-numpy OOS transform) added (task #11).
+- Gauge test `gauge_invariant_selection_and_loss_under_block_rotation` (l.101) is
+  CORRECT and bites the right property: it rotates block g_rot's basis by a random
+  O(b) `random_orthogonal(b)`, RE-ENCODES (block_projections_row→gates→route→row_loss
+  recomputed on the rotated decoder — the tied code follows automatically, exactly the
+  property lead asked for), and asserts selection + per-block gate + loss invariant.
+  Would fail if block_gates keyed on a coordinate instead of the ℓ₂ norm.
+- Also tests: γ-invariant routing (l.181), presence/amplitude decoupling (l.154),
+  planted-block subspace recovery via principal angle (l.192), fitted frames
+  orthonormal (l.247), utilisation∈[0,1] + stable-rank reports (l.300+).
+- MINOR: the gauge test has no explicit NEGATIVE control (a norm-changing map that
+  SHOULD change loss). The degenerate "constant loss" breakage is covered indirectly
+  by the recovery test, and my own numeric check included the neg-control (it bit).
+  Nice-to-have, not a blocker.
+PENDING: confirm `cargo test -p gam-sae block` green on this commit (running,
+b0eonwlv5) and that gam-pyffi still builds (FFI touched ffi_prelude — watch the
+include!/prelude gotchas).
+
+### M-mdl selection-bits FIX — commit 1d9f843
+crossover_firings now accounts for the selection-bits delta (addresses my MED caveat).
+Re-check when I re-pull: verify dcode/f* now include Δ selection bits and the built
+ladders (all g_dict=1 → Δsel=0) are unchanged.
