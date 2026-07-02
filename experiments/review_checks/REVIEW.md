@@ -342,7 +342,51 @@ PENDING: confirm `cargo test -p gam-sae block` green on this commit (running,
 b0eonwlv5) and that gam-pyffi still builds (FFI touched ffi_prelude — watch the
 include!/prelude gotchas).
 
-### M-mdl selection-bits FIX — commit 1d9f843
+### O-manifold co-collapse fix — 3ddf58c03 (+ fit_drivers.rs wiring, 465ad67a0) (VERDICT: logic SOUND, NO repro test)
+Reviewed the reseed-cooldown for silent-wrongness (the risk: a cooldown that
+permanently suppresses reseeds would MASK co-collapse and falsely inflate EV).
+- 3ddf58c03 adds only the constant SAE_COCOLLAPSE_RESEED_COOLDOWN_ITERS=3; the
+  gate is wired in fit_drivers.rs:2338-2342.
+- Gate: `if last_reseed && iteration - last_reseed < COOLDOWN → return Ok(())`.
+  Once `iteration - last_reseed >= 3` the gate PASSES and a still-degenerate dict is
+  reseeded exactly as before — so a PERSISTENT co-collapse is NOT masked, only
+  reseed-thrash is debounced. Correct.
+- keep-best incumbent updated BEFORE the gate (l.2310-2317) → a good transient basin
+  during cooldown is never lost; budget-exhaustion restores the incumbent (never
+  returns a catastrophic reseed). Correct.
+- Derived from per-fit `collapse_events` (cleared at fit entry), no persistent state,
+  and the arm only runs at iteration>0 with EV ≤ signal-free null floor → K=1/healthy
+  fits are byte-unchanged (W7/W8 safe). Correct — addresses the "don't break K=1"
+  requirement.
+CAVEAT: this is a plausible debounce MECHANISM, not a DEMONSTRATED fix. No repro
+test that co-collapses on pre-fix code and passes post-fix exists yet (task #8
+in-flight). So "we fixed the K≥2 co-collapse" is UNPROVEN empirically — do not
+publish it as a result until a biting repro test lands. Also REML is OOM-blocked in
+.venv, so this can only be exercised on the torch path or a small planted case.
+
+### BT1 COMPILE STATUS at gam HEAD (I ran `cargo test -p gam-sae --lib block`)
+[HIGH — punch list] gam-sae does NOT COMPILE. 3 hard errors (edition-2024
+pattern binding) in block.rs, all the same shape:
+  `.filter(|(_, &gate)| gate != 0.0)` →
+  "error: cannot explicitly dereference within an implicitly-borrowing pattern"
+  at crates/gam-sae/src/sparse_dict/block.rs:617, :739, :820
+Fix is trivial (compiler suggests `|&(_, &gate)|`, or `|(_, gate)| **gate != 0.0`).
+CONSEQUENCE: block_tests.rs (gauge + negative control) NEVER RAN — they cannot,
+until this compiles. My numeric verification of the gauge MATH stands (design
+correct), but the in-repo tests are unexecuted. BT1 cell must stay PENDING / NOT
+green. (gam-solve compiled fine earlier — fisher_weight build exit 0.)
+
+### M-mdl selection-bits FIX — commit 1d9f843 (VERDICT: CORRECT, caveat CLOSED)
+dcode = coeff-delta + selection-delta (sel_b−sel_c); `selection_asymmetric` flag;
+stale `f_star_matched_precision` field removed; `f_star_matched_simple` documented
+(G,k)-shared-only. When (G,k) shared, dsel=0 and f* reduces to the old form (built
+ladders unchanged). If chart is in a bigger dict, dsel<0 → f* pushed out / →inf.
+Correct. My MED caveat is CLOSED.
+
+### BT1 gauge negative control — commit a830fab3a (VERDICT: makes the test bite)
+Scales a genuinely-SELECTED block's basis by 2× (breaks D_gD_gᵀ=I_b) and asserts
+selection-OR-loss MUST change. This is the negative control I flagged as missing;
+the gauge test now genuinely bites (O(b)→invariant, non-orthogonal→changes).
 crossover_firings now accounts for the selection-bits delta (addresses my MED caveat).
 Re-check when I re-pull: verify dcode/f* now include Δ selection bits and the built
 ladders (all g_dict=1 → Δsel=0) are unchanged.
