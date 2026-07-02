@@ -161,6 +161,24 @@ its verdict to match my adjudication (8930bd6 "align verdict with R-review adjud
   plane on EV" is NOT supported (weekday), partial (month).
 - NUANCE honestly reported: outlier templates break transfer (36–50% of folds below 0.9
   consistency; month template 9 at 0.04). "Strong tendency, not a law."
+LEAD'S 4 SCRUTINY POINTS (re-adjudication) — all addressed:
+(1) SELECTION EFFECT: the "clean-transfer folds (coord>0.8)" table conditions on the CHART's
+    consistency, but it's applied SYMMETRICALLY (same folds for chart AND linear), TRANSPARENTLY
+    LABELED, and NOT the headline — the ALL-FOLDS numbers are the honest headline (REPORT line
+    21 "chart 0.26 < linear-2 0.43 … that is the honest [picture]"). Coordinate-consistency ≠
+    EV so the conditioning isn't directly circular. Adequately honest.
+(2) MEAN vs MEDIAN: BOTH shown (median 0.95/0.81, mean 0.78/0.71), and the REPORT explicitly
+    says "the mean is dragged well below the median by these outliers." Good.
+(3) TWO EXPERIMENTS DISTINGUISHED: the doc row (BSF_RESPONSE.md:123) is "chart-coordinate
+    invariance across PROMPTS" — cleanly the cross-PROMPT/template experiment; the cross-LAYER
+    one (chart_transfer_layers.py/out_qwen*) is NOT in the head-to-head → no conflation.
+(4) SPOT-RUN (one LOTO fold, held=template 0, .venv): CONVERGED, consistency 0.18 (a low
+    OUTLIER fold), chart_ev 0.786 vs lin2 0.84 — a plausible low-consistency fold consistent
+    with the reported high fold-variance (0.04..~1.0) that drags the mean below the median.
+    Harness reproduces; numbers sane. (My first spot-run OTHER_ERROR'd only because I used
+    system python3 without torch — my-env, not a lane defect.)
+The doc's "QUALIFIED positive" framing is CORRECT — I endorse it.
+
 NET: publishable as "the chart COORDINATE is largely a feature property (median consistency
 0.95/0.81), beating a single linear direction by a wide margin; it does NOT beat the 2-PC
 linear plane on raw EV, but the plane has no coordinate to make the invariance claim." The
