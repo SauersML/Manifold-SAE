@@ -218,6 +218,40 @@ claims. Stated plainly:
 
 ---
 
+## 5. Related work — where ManifoldSAE sits in the 2026 stream
+
+**Positioning.** SAEs discover scalar fragments; BSFs consolidate fragments into low-dimensional
+supports; ManifoldSAE identifies, parameterizes, and controls the curved geometry living inside
+those supports — with a metric that makes interventions calibrated.
+
+**The model hierarchy.** SAE = scalar atom; BSF / SASA = linear *block* atom; ManifoldSAE = typed
+*curved chart* atom carrying a metric. A block is the flat special case of a chart (the generator
+`γ(t) = tD` — a straight line), so BSF sits one rung below on the same ladder.
+
+The 2026 literature converges on the same diagnosis — a single direction is the wrong primitive
+for a multidimensional concept — and splits on the fix:
+
+| line of work | representative | stance vs ours |
+|---|---|---|
+| **Dilution / shattering diagnosis** | "Do SAEs Capture Concept Manifolds?" (arXiv 2604.28119; global/tiled/diluted regimes); Goodfire, "Can SAEs Capture Neural Geometry?" | motivates the problem — scalar SAEs shatter a manifold into many diluted directions; we agree and give the constructive fix |
+| **Subspace consolidation** (closest neighbours) | BSF (vision); SASA (arXiv 2606.06333, LLMs) | consolidate fragments into a *flat* block/subspace. SASA proves scalar SAEs induce feature-splitting for multidim features and names "recover internal coordinates" as *future work* — that named future work is our rung |
+| **Region / local-geometry** | MFA / local-geometry (arXiv 2602.02464) | a different primitive (a region chosen by locality, not co-presence); the BSF paper's own MFA critique applies. We select by co-presence *and* parameterize the geometry |
+| **Mixture / other** | SMIXAE (arXiv 2605.09224) | mixture-of-experts style; complementary |
+| **Direction-paradigm engineering** | JumpReLU / BatchTopK / AbsTopK | orthogonal — better *scalar* dictionaries; they improve the rung below and compose with blocks/charts |
+| **Geometry-aware steering** | Manifold Steering (arXiv 2605.05115) | corroborates our dose result — steering follows the geometry; our chart supplies the metric that makes the dose calibrated (§3, R²=0.95) |
+
+**What is ours, anchored on evidenced differentiators:** the measured description-length crossover
+`f* ≈ 2p` (charts beat blocks once a feature fires more than ~2p times — §2); dose calibration on a
+real model (R²=0.95, ~10× better than a metric-free linear latent — §3); a gauge-invariant
+*certified* block/encode core (BT1, 17/0 tests — §3); typed topology (circle vs line — a line's
+chart crossover is `f*=∞`, so the type self-controls); and per-atom REML evidence for model
+selection instead of hyperparameter sweeps.
+
+*(Literature IDs and characterizations come from the team's external literature pass; they
+position the contribution and are not independent verifications of each cited work.)*
+
+---
+
 ### Provenance
 
 Artifacts: `bsf_baseline/` (G-bsf), `mdl_ladder/` (M-mdl), `dose_real_out/` (dose calibration,
