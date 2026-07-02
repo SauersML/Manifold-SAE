@@ -1,0 +1,221 @@
+{
+  "sets": [
+    "weekday",
+    "month"
+  ],
+  "shared_layer": 8,
+  "shared_ambient": {
+    "N": 95,
+    "P": 16
+  },
+  "n_train": 66,
+  "n_test": 29,
+  "n_tokens": {
+    "weekday": 7,
+    "month": 12
+  },
+  "arm_A_joint": {
+    "reml": {
+      "status": "CONVERGED",
+      "ev": 0.47248984575827413,
+      "reconstruction_r2": 0.47248984575827513,
+      "chosen_k": 2,
+      "n_atoms": 2,
+      "wall_s": 61.3
+    },
+    "torch_joint": {
+      "status": "CONVERGED",
+      "n_atoms": 2,
+      "ev": 0.6288,
+      "ev_train": 0.7967,
+      "gate_share": [
+        0.418,
+        0.582
+      ],
+      "dead_atoms": 0,
+      "wall_s": 4.2,
+      "out_path": "/private/tmp/claude-501/-Users-user/8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/block_nursery_work/real_A_torch_out.npz",
+      "per_set_recovery": {
+        "weekday": {
+          "best_atom_cyclic_adjacency": 0.429,
+          "circular_corr": 0.516
+        },
+        "month": {
+          "best_atom_cyclic_adjacency": 0.25,
+          "circular_corr": 0.386
+        }
+      }
+    },
+    "pure_linear": {
+      "pca_L2_test": 0.4933,
+      "pca_L4_test": 0.6964
+    }
+  },
+  "arm_B_nursery": {
+    "composed_ambient_ev_test": 0.5763,
+    "composed_ambient_ev_train": 0.6657,
+    "n_blocks": 2,
+    "total_fit_dim": 4,
+    "per_block": [
+      {
+        "block": 0,
+        "block_dim": 2,
+        "block_var_test": 1.0526,
+        "block_linear_ev_1pc_test": 0.6095,
+        "block_linear_ev_2pc_test": 1.0,
+        "chart_status": "CONVERGED",
+        "chart_wall_s": 8.6,
+        "chart_ev_block_coords_test": 0.952,
+        "chart_ev_block_coords_train": 0.9757,
+        "set": "weekday",
+        "recovered_circular_corr": 0.243,
+        "cyclic_adjacency_accuracy": 1.0
+      },
+      {
+        "block": 1,
+        "block_dim": 2,
+        "block_var_test": 0.6381,
+        "block_linear_ev_1pc_test": 0.7799,
+        "block_linear_ev_2pc_test": 1.0,
+        "chart_status": "CONVERGED",
+        "chart_wall_s": 6.2,
+        "chart_ev_block_coords_test": 0.9513,
+        "chart_ev_block_coords_train": 0.9674,
+        "set": "month",
+        "recovered_circular_corr": 0.305,
+        "cyclic_adjacency_accuracy": 0.417
+      }
+    ],
+    "mdl": {
+      "delta2": 0.05052,
+      "rows": [
+        {
+          "name": "block0-linear-2d",
+          "kind": "block",
+          "coded_dim_m": 2,
+          "code_bits_per_firing": 3.5131,
+          "code_coeff_bits_per_firing": 3.5131,
+          "selection_bits_per_firing": 0.0,
+          "n_params": 32,
+          "l_param_bits": 1.7565,
+          "dict_bits": 56.21,
+          "code_bits_total": 101.88,
+          "total_bits": 158.09,
+          "bits_per_token": 5.4513,
+          "residual_achieved": 0.0,
+          "distortion_floor": 0.05052,
+          "distortion_infeasible": false
+        },
+        {
+          "name": "block0-circle-chart",
+          "kind": "chart",
+          "coded_dim_m": 1,
+          "code_bits_per_firing": 2.1904,
+          "code_coeff_bits_per_firing": 2.1904,
+          "selection_bits_per_firing": 0.0,
+          "n_params": 64,
+          "l_param_bits": 2.1904,
+          "dict_bits": 140.19,
+          "code_bits_total": 63.52,
+          "total_bits": 203.71,
+          "bits_per_token": 7.0244,
+          "residual_achieved": 0.05052,
+          "distortion_floor": 0.05052,
+          "distortion_infeasible": false
+        },
+        {
+          "name": "block1-linear-2d",
+          "kind": "block",
+          "coded_dim_m": 2,
+          "code_bits_per_firing": 2.8708,
+          "code_coeff_bits_per_firing": 2.8708,
+          "selection_bits_per_firing": 0.0,
+          "n_params": 32,
+          "l_param_bits": 1.4354,
+          "dict_bits": 45.93,
+          "code_bits_total": 83.25,
+          "total_bits": 129.19,
+          "bits_per_token": 4.4547,
+          "residual_achieved": 0.0,
+          "distortion_floor": 0.05052,
+          "distortion_infeasible": false
+        },
+        {
+          "name": "block1-circle-chart",
+          "kind": "chart",
+          "coded_dim_m": 1,
+          "code_bits_per_firing": 1.851,
+          "code_coeff_bits_per_firing": 1.851,
+          "selection_bits_per_firing": 0.0,
+          "n_params": 64,
+          "l_param_bits": 1.851,
+          "dict_bits": 118.47,
+          "code_bits_total": 53.68,
+          "total_bits": 172.14,
+          "bits_per_token": 5.936,
+          "residual_achieved": 0.03108,
+          "distortion_floor": 0.05052,
+          "distortion_infeasible": false
+        }
+      ]
+    },
+    "discovery_diag": {
+      "n_pcs": 6,
+      "pca_var_captured": 0.8587,
+      "atom_groups": [
+        [
+          0,
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ],
+      "block_dims": [
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "affinity_thresh": 0.35
+    }
+  },
+  "verdict": {
+    "metric": "HELD-OUT EV (test rows, 30% per set)",
+    "joint_torch_ev_test": 0.6288,
+    "joint_reml_status": "CONVERGED",
+    "joint_per_set_recovery": {
+      "weekday": {
+        "best_atom_cyclic_adjacency": 0.429,
+        "circular_corr": 0.516
+      },
+      "month": {
+        "best_atom_cyclic_adjacency": 0.25,
+        "circular_corr": 0.386
+      }
+    },
+    "nursery_composed_ev_test": 0.5763,
+    "nursery_per_set_adjacency": {
+      "weekday": 1.0,
+      "month": 0.417
+    },
+    "pure_linear_test": {
+      "pca_L2_test": 0.4933,
+      "pca_L4_test": 0.6964
+    },
+    "nursery_fit_dim_per_block": 2,
+    "joint_fit_dim": 16,
+    "joint_delivers_multiatom_model": true,
+    "nursery_delivers_multiatom_model": true
+  }
+}
