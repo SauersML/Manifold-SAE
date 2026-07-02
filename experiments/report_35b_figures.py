@@ -159,6 +159,15 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
             # A1: TopK held-out EV interpolated at the hybrid's L0.
             topk_at = float(np.interp(h_l0, l0, ev))
             gap = h_ev - topk_at
+            # EV-baseline provenance (lead's pin): the held-out TSS baseline MUST be the
+            # TRAIN column mean applied to held-out rows, never the held-out column mean
+            # (which leaks the first moment and inflates every absolute EV identically).
+            t1_base = str(_get(t1, "ev_baseline", "tss_baseline", default="unstated")).lower()
+            comp_base = str(_get(compose, "ev_baseline", default=None)
+                            or _get(op, "ev_baseline", default="unstated")).lower()
+            def _ok(b):
+                return "train" in b  # "train_mean" / "train-mean" / "train mean origin"
+            baseline_ok = _ok(t1_base) and _ok(comp_base)
             verdict = {
                 "status": "ACCEPT" if gap >= -0.02 else "MISS",
                 "hybrid_ev": round(h_ev, 4),
@@ -166,6 +175,10 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
                 "gap": round(gap, 4),
                 "hybrid_l0": h_l0,
                 "threshold": "within 0.02 below or above",
+                "ev_baseline_t1": t1_base,
+                "ev_baseline_compose": comp_base,
+                "ev_baseline_ok": bool(baseline_ok),
+                "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows",
             }
             ax.annotate(f"gap {gap:+.3f} @ L0={h_l0:g}", (h_l0, h_ev),
                         textcoords="offset points", xytext=(8, 10),
@@ -418,7 +431,7 @@ def fig78_dose(dose: dict | None, out7: Path, out8: Path) -> dict:
                         else ("MISS" if ordering is not None else "PENDING"))
     res["model"] = _get(dose, "model", default="Qwen3.6-35B")  # 8B fallback labels itself
     # G_wrap — wraparound: first/last probe adjacent on the chart (a line can't do this).
-    wrap = _get(dose, "wraparound", "wraparound_pass", default=None)
+    wrap = _get(dose, "wraparound", "wraparound_pass", "wraparound_in_order", default=None)
     if wrap is None and probe_ang is not None and probe_true is not None:
         pa = np.asarray(probe_ang, dtype=float)
         order = np.argsort(np.asarray(probe_true, dtype=float))
@@ -805,6 +818,20 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
         overall = "IN PROGRESS — metrics still PENDING."
     A(f"**Overall:** {overall}")
     A("")
+    A("## EV definition & split hygiene (the two silent ways to fake, closed)")
+    A("")
+    A("Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN column "
+      "mean applied to held-out rows** (equivalently, the origin after subtracting the "
+      "train Tier-0 mean) — **never the held-out column mean**, which leaks the first "
+      "moment and inflates every absolute EV number identically. Held-out EV is measured "
+      "on the disjoint whole-shard held-out split (rollout-safe), Tier-0 fit on train only.")
+    A("")
+    A(f"- baseline attestation — T1: `{cell(a1.get('ev_baseline_t1'))}`, "
+      f"COMPOSE: `{cell(a1.get('ev_baseline_compose'))}` → "
+      f"{'OK (train-mean)' if a1.get('ev_baseline_ok') else 'UNVERIFIED — confirm both use train-mean, not heldout-colmean'}")
+    A(f"- split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) "
+      f"train-only; held-out EV on a 50k held-out subsample.")
+    A("")
     A("## Headline figures")
     A("")
     figmap = [
@@ -879,7 +906,8 @@ def selftest() -> dict:
     st.mkdir(parents=True, exist_ok=True)
     # planted T1 frontier (a saturating TopK curve)
     l0s = [8, 16, 32, 64, 128]
-    t1 = {"frontier": [{"K": k * 250, "l0": k, "heldout_ev": 0.55 + 0.35 * (1 - math.exp(-k / 30))}
+    t1 = {"ev_baseline": "train_mean",
+          "frontier": [{"K": k * 250, "l0": k, "heldout_ev": 0.55 + 0.35 * (1 - math.exp(-k / 30))}
                        for k in l0s],
           "linear_tier": [{"l0": k, "heldout_ev": 0.50 + 0.32 * (1 - math.exp(-k / 30))}
                           for k in l0s]}
@@ -908,7 +936,7 @@ def selftest() -> dict:
                       "delta_ev": float(rng.uniform(0.01, 0.05)),
                       "stable_rank": 1.0, "utilization": float(rng.uniform(0.2, 0.8))})
     compose = {
-        "min_effect_ev": 0.005,
+        "min_effect_ev": 0.005, "ev_baseline": "train_mean",
         "operating_point": {"total_actives": 40, "heldout_ev": 0.905,
                             "linear_only_heldout_ev": 0.88, "heldout_subsample_n": 50000},
         "atoms": atoms,

@@ -62,6 +62,13 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
 
 **Overall:** GATE PASSED and all six frozen A-metrics ACCEPT — headline holds.
 
+## EV definition & split hygiene (the two silent ways to fake, closed)
+
+Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN column mean applied to held-out rows** (equivalently, the origin after subtracting the train Tier-0 mean) — **never the held-out column mean**, which leaks the first moment and inflates every absolute EV number identically. Held-out EV is measured on the disjoint whole-shard held-out split (rollout-safe), Tier-0 fit on train only.
+
+- baseline attestation — T1: `train_mean`, COMPOSE: `train_mean` → OK (train-mean)
+- split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) train-only; held-out EV on a 50k held-out subsample.
+
 ## Headline figures
 
 - **Fig 1 — Pareto frontier: held-out EV vs L0 (HEADLINE)** — `figures_35b/_selftest/fig1_frontier.png`
@@ -93,7 +100,11 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
   "topk_ev_at_matched_l0": 0.7993,
   "gap": 0.1057,
   "hybrid_l0": 40.0,
-  "threshold": "within 0.02 below or above"
+  "threshold": "within 0.02 below or above",
+  "ev_baseline_t1": "train_mean",
+  "ev_baseline_compose": "train_mean",
+  "ev_baseline_ok": true,
+  "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows"
  },
  "fig2": {
   "status": "ACCEPT",

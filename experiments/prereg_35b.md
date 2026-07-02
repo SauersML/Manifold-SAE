@@ -120,7 +120,16 @@ utilization, curved-tier EV lift, probe ordering, and the **hallucination-null c
 ## Data hygiene (non-negotiable, pre-registered) — R3
 - **Split by chunk / rollout, NEVER by row.** SuperGPQA rollouts are contiguous; a row
   split leaks adjacent tokens and inflates held-out EV for *every* method equally — the
-  one way to fake tonight. Manifest states the chunk-level split + held-out chunk ids.
+  *first* way to fake tonight. Manifest states the chunk-level split + held-out chunk ids.
+- **EV baseline = TRAIN column mean applied to held-out rows, NEVER the held-out column
+  mean.** The held-out EV denominator (TSS) is taken about the train mean (equivalently
+  the origin after subtracting the train Tier-0 mean). Using the held-out column mean
+  leaks the first moment and inflates every absolute EV number identically — the *second*
+  silent way to fake tonight. Held-out EV = 1 − SSE_recon/TSS on the disjoint whole-shard
+  held-out split. When ingesting T1's frontier and COMPOSE's composed EV (they proved
+  bit-exact parity with each other), I verify BOTH declare `ev_baseline: train_mean`, so
+  the headline "matches TopK at 0.X" is an honest *absolute* number, not just an honest
+  ranking. Both artifacts must carry an `ev_baseline` field; unstated → flagged UNVERIFIED.
 - **Tier-0** (mean, top-1..3 rogue dims, global scale) on **TRAIN chunks only**, stored;
   held-out transformed with the frozen Tier-0.
 - **Held-out EV / geometry** on a **50k held-out subsample** from held-out chunks (seed

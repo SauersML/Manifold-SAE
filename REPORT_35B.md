@@ -46,6 +46,13 @@ Artifacts scanned: `/Users/user/Manifold-SAE/results/run_35b`  |  figures: `/Use
 
 **Overall:** IN PROGRESS — metrics still PENDING.
 
+## EV definition & split hygiene (the two silent ways to fake, closed)
+
+Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN column mean applied to held-out rows** (equivalently, the origin after subtracting the train Tier-0 mean) — **never the held-out column mean**, which leaks the first moment and inflates every absolute EV number identically. Held-out EV is measured on the disjoint whole-shard held-out split (rollout-safe), Tier-0 fit on train only.
+
+- baseline attestation — T1: `PENDING`, COMPOSE: `PENDING` → UNVERIFIED — confirm both use train-mean, not heldout-colmean
+- split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) train-only; held-out EV on a 50k held-out subsample.
+
 ## Headline figures
 
 - **Fig 1 — Pareto frontier: held-out EV vs L0 (HEADLINE)** — PENDING
