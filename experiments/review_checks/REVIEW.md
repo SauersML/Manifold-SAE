@@ -291,6 +291,32 @@ CAVEATS to enforce on any eventual N-nursery headline:
     there. Set identity is legit metadata (not the cyclic answer), but say so.
   [MED] All EVs in-sample (above).
 
+### N-nursery HELD-OUT fix + REAL results — commits adfe50d (VERDICT: held-out caveat CLOSED; results need HONEST framing)
+adfe50d makes EV held-out throughout (70/30 split; blocks+charts+joint fit on train,
+every EV on test; seed selection by TRAIN ev = no test peeking; energy-anticorrelation
+discovery is label-free, train-only; theta still eval-only). My in-sample-EV caveat is
+CLOSED. New discovery (energy anti-corr within a plane vs ~0 across planes) is sound +
+leak-free.
+REAL arms have now RUN (real_results.json; synthetic arms still empty). Numbers
+(shared L8, N=95, P=16, HELD-OUT test EV) and their HONEST reading — enforce this if
+any reach a headline:
+- Held-out EV ranking: pure linear PCA-4 = 0.696  >  joint torch = 0.629  >  nursery
+  composed = 0.576. So NEITHER curved arm beats linear on EV, and the nursery does NOT
+  beat the joint fit on EV. The "nursery matches-or-beats joint EV" half of the
+  hypothesis FAILS here (nursery 0.576 < joint 0.629 < linear 0.696).
+- The nursery's real advantage is FACTOR RECOVERY: weekday cyclic adjacency 1.0
+  (nursery) vs 0.429 (joint); month 0.417 vs 0.25. Nursery recovers the weekday circle
+  cleanly where the joint fit does not — at a modest EV cost. That is the defensible
+  claim, NOT an EV win.
+- REML sae_manifold_fit CONVERGED here (small P=16 case) — so this real case does NOT
+  exhibit the full-width co-collapse the hypothesis is about; it cannot be cited as
+  "REML co-collapses, nursery fixes it."
+- Small-N noise: weekday adjacency 1.0 but circular_corr only 0.243 on ~28 test rows;
+  treat the real recovery numbers as suggestive, not decisive.
+Each per-block chart explains ~0.95 of its own 2-plane's test variance; composed
+ambient EV (0.576) is limited by the blocks covering only 4 of 16 dims, not chart
+quality.
+
 ### BSF_RESPONSE.md synthesis — commit 605e716 (VERDICT: honest structure, TWO UNBACKED numbers)
 The doc is unusually honest (cites this review as §4) and its stated rule is "empty
 cells marked PENDING, never filled with placeholders." Most cited numbers DO trace to
