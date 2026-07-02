@@ -77,12 +77,12 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 
 | lane / component | claim under test | result | verdict | status |
 |---|---|---|---|---|
-| **G-bsf** — faithful BSF reimpl (`bsf_baseline/`) | block code recovers planted subspaces; beats TopK at matched budget | synthetic subspace recovery mean **R²=0.82** (vanilla, 5 seeds, val EV 0.89); on OLMo self-qualia L40 (a *linear* axis) TopK b=1 EV **0.4489** is best, BSF EV falls 0.425→0.325 as b grows (higher stable rank, lower EV) | **SAFE NOW** — SOUND / faithful (R-review verified real numbers numerically) | landed — real/cyclic numbers backed; `metrics.json` synthetic phase on disk, **pending G-bsf commit** |
+| **G-bsf** — faithful BSF reimpl (`bsf_baseline/`) | block code recovers planted subspaces; beats TopK at matched budget | synthetic subspace recovery mean **R²=0.82** (vanilla, 5 seeds, val EV 0.89); on OLMo self-qualia L40 (a *linear* axis) TopK b=1 EV **0.4489** is best, BSF EV falls 0.425→0.325 as b grows (higher stable rank, lower EV) | **SAFE NOW** — SOUND / faithful (R-review verified real numbers numerically) | landed — real/cyclic + synthetic numbers backed; `metrics.json` now committed (`337aadc`) |
 | **G-bsf** — cyclic block finding | one block captures a whole cycle (weekday/month) | winning block stable rank ≈2, **in-block cyclic adjacency 1.00**, 7/8 blocks active | **QUALIFIED** — structural claim holds | landed — **cyclic `full_ev`=0.976 is IN-SAMPLE, do not publish as generalization** |
 | **M-mdl** — MDL ladder (`mdl_ladder/`) | chart beats block in bits above `f*` | `f*=2p`; chart wins on frontier + synthetic; f*≈96–122 on noisy real | **SAFE NOW** — scorer SOUND (R-review hand-verified) | landed (in-sample EVs) |
 | **Dose calibration** (`dose_real_out/`) | chart `predicted_nats` predicts real output KL | R²=0.951, slope 0.908, median meas/pred **0.881** (n=288); **0.999 inside validity radius** (n=49); linear baseline **~10× miscalibrated** (median ratio 10.0) | **SAFE NOW** — strongest real-model result | landed — weekday circle only (month co-collapse on pre-fix build) |
 | **P-null** — matched-null battery (`null_out/`, `matched_null.py`) | real cyclic claims survive matched nulls | **month cyclic order robust** (n=12, adj 0.83); **weekday cyclic order MARGINAL** (adj 0.71 at n=7, p≈0.04, and fragile — the single-seed battery re-fit scores lower/at chance); **C1 EV-parity safe**; continuous circular correlation significant | **SAFE NOW** for month order + C1 EV-parity; **QUALIFIED** for weekday (marginal p≈.04) — R-review verified (commit 5fd1465) | landed per R-review REVIEW.md; **raw `null_out/` JSONs pending P-null commit**; month/color full battery PENDING |
-| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | design VALID (R-review commit 5fd1465); result arms actively running & **uncommitted** (arms JSON in flux at last poll) | **PENDING** — no validated headline yet | PENDING (see §4.4 for the two mandatory caveats before any headline) |
+| **N-nursery** — chart-per-block vs joint-K (`block_nursery/`) | nursery beats co-collapsing joint K≥2 fit | design VALID (R-review 5fd1465); real held-out arms now committed (`real_results.json`, `337aadc`: joint control incl. REML + torch, and the nursery arm) — **awaiting R-review validation of the results** | **PENDING** — results committed, not yet validated | PENDING (see §4.4 for the two mandatory caveats before any headline) |
 | **BT1** — Rust block-sparse Tier-1 (gam `097b1c1de`) | gauge-invariant block-sparse core | gauge invariance verified numerically by review (gate/loss invariant to O(b) rotation to 1e-15; negative control bites). FFI + `block_tests.rs` added. **But R-review (e01c2fd) confirms `gam-sae` still does NOT compile** — 3 edition-2024 pattern errors in `block.rs`; tests cannot run. | **DESIGN SOUND, NOT GREEN** | **PENDING** — does not compile (`cargo test -p gam-sae` fails to build); no BT1 number is publishable |
 
 **Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
@@ -144,12 +144,13 @@ claims. Stated plainly:
    argument (`f*` depends on parameter counts and the spectrum, not on generalization), but the
    absolute bits inherit their source probe's in/out-sample status.
 
-7. **Several result artifacts are on disk but not yet committed.** `bsf_baseline/metrics.json`
-   (synthetic phase), `null_out/*.json`, and `block_nursery/*.json` are untracked in this shared
-   working tree (not gitignored — the lanes have not `git add`-ed them). Numbers cited from them
-   are per R-review's committed verification (`REVIEW.md`); the owning lanes must commit the raw
-   artifacts before these become directly citeable. This is why the P-null and G-bsf-synthetic
-   cells carry a "pending commit" note despite the runs having executed.
+7. **Some result artifacts remain uncommitted.** `bsf_baseline/metrics.json` and
+   `block_nursery/real_results.json` are now committed (`337aadc`), but `null_out/*.json`
+   (P-null) and `block_nursery/synthetic_results.json` are still untracked in this shared working
+   tree (not gitignored — the lanes have not `git add`-ed them). Numbers cited from an uncommitted
+   file are attributed to R-review's committed verification (`REVIEW.md`); the owning lanes must
+   commit the raw artifacts before they are directly citeable. This is why the P-null real-weekday
+   cell carries a "pending commit" note despite the run having executed.
 
 8. **Dose calibration shows the weekday circle only.** The 12-token month loop triggers the
    pre-fix multi-modal auto-grow/co-collapse in that build; re-run against the guard-patched
