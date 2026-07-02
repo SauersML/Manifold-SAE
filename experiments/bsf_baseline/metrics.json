@@ -24,7 +24,9 @@
         "val_ev": 0.448915803203209,
         "mean_stable_rank": 1.0,
         "mean_utilization": 1.0,
-        "n_active_blocks": 64
+        "n_active_blocks": 64,
+        "bits_per_token": 36.643,
+        "selection_bits_per_firing": 32.04
       },
       {
         "model": "BSF-grassmann",
@@ -38,7 +40,9 @@
         "val_ev": 0.42527453132088855,
         "mean_stable_rank": 1.464460007257745,
         "mean_utilization": 0.8022235873678494,
-        "n_active_blocks": 32
+        "n_active_blocks": 32,
+        "bits_per_token": 19.5,
+        "selection_bits_per_firing": 15.13
       },
       {
         "model": "BSF-vanilla",
@@ -52,7 +56,9 @@
         "val_ev": 0.42746501854328256,
         "mean_stable_rank": 1.4813458337461478,
         "mean_utilization": 0.8240657502231747,
-        "n_active_blocks": 32
+        "n_active_blocks": 32,
+        "bits_per_token": 19.522,
+        "selection_bits_per_firing": 15.13
       },
       {
         "model": "BSF-grassmann",
@@ -66,7 +72,9 @@
         "val_ev": 0.39927736598560803,
         "mean_stable_rank": 2.456501622544323,
         "mean_utilization": 0.7197301215076461,
-        "n_active_blocks": 16
+        "n_active_blocks": 16,
+        "bits_per_token": 11.015,
+        "selection_bits_per_firing": 6.91
       },
       {
         "model": "BSF-vanilla",
@@ -80,7 +88,9 @@
         "val_ev": 0.3872205668229839,
         "mean_stable_rank": 2.337630776442033,
         "mean_utilization": 0.7070216350837214,
-        "n_active_blocks": 16
+        "n_active_blocks": 16,
+        "bits_per_token": 10.896,
+        "selection_bits_per_firing": 6.91
       },
       {
         "model": "BSF-grassmann",
@@ -94,7 +104,9 @@
         "val_ev": 0.3248823279081696,
         "mean_stable_rank": 3.4160858447264033,
         "mean_utilization": 0.5760310235529815,
-        "n_active_blocks": 8
+        "n_active_blocks": 8,
+        "bits_per_token": 6.365,
+        "selection_bits_per_firing": 3.0
       },
       {
         "model": "BSF-vanilla",
@@ -108,9 +120,18 @@
         "val_ev": 0.3488399901865272,
         "mean_stable_rank": 3.301206311605166,
         "mean_utilization": 0.5884842647510652,
-        "n_active_blocks": 8
+        "n_active_blocks": 8,
+        "bits_per_token": 6.606,
+        "selection_bits_per_firing": 3.0
       }
-    ]
+    ],
+    "mdl": {
+      "floor_delta2": 86.415,
+      "floor_source": "worst-rung residual (matched fidelity)",
+      "V_total_var": 128.0,
+      "n_eval_tokens": 114,
+      "note": "matched budget \u2192 \u03a6=0, block-vs-chart f* is M-mdl's lane"
+    }
   },
   "synthetic": {
     "setup": {
@@ -251,7 +272,8 @@
       "winning_block_coord_stable_rank": 2.3622427709687392,
       "cyclic_adjacency_accuracy": 1.0,
       "winning_block_active_freq": 0.6,
-      "full_ev": 0.9556099246048203,
+      "full_ev_insample": 0.9556099246048203,
+      "held_out_ev_loto": 0.8217424660630464,
       "block_subspace_evs": [
         0.741,
         0.364,
@@ -272,7 +294,8 @@
       "winning_block_coord_stable_rank": 2.412203539830378,
       "cyclic_adjacency_accuracy": 1.0,
       "winning_block_active_freq": 0.5,
-      "full_ev": 0.9792510664131605,
+      "full_ev_insample": 0.9792510664131605,
+      "held_out_ev_loto": 0.9533862305439674,
       "block_subspace_evs": [
         0.803,
         0.469,

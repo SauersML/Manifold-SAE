@@ -272,6 +272,54 @@ def phase_real(F: int = 64, L0: int = 8, layer: int = 40, reduce_dim: int = 128)
 
 
 # ==========================================================================
+# MDL bits/token scoring — head-to-head currency (M-mdl's scorer, JSON interface)
+# ==========================================================================
+def add_mdl_scores(metrics: dict) -> dict:
+    """Price every real-sweep rung in bits/token via M-mdl's ``score_json``.
+
+    At our matched budget the decoder param count (F·d) and the L0 coded dims
+    (k·b) are identical across block widths, so bits/token is driven by the
+    per-token SELECTION cost log₂C(G,k): wide blocks address the same L0 with far
+    fewer bits. All rungs are scored at a common matched-distortion floor (the
+    worst rung's residual, so every rung is feasible) — the paper's "blocks beat
+    directions in description length" comparison. The block↔chart crossover f*
+    is degenerate here (Φ = P_chart − P_block = 0 at matched budget, and there is
+    no chart in this baseline); f* lives in M-mdl's block-vs-chart lane.
+    """
+    real = metrics.get("real")
+    if not real or not real.get("rows"):
+        return metrics
+    sys.path.insert(0, str(REPO / "experiments/mdl_ladder"))
+    from mdl import score_json  # pure-numpy, no model load — reaper-safe
+
+    d = int(real["budget"]["d_reduced"])
+    V = float(d)  # standardized working space: Σ per-dim var ≈ d
+    n_total = int(real["meta"]["n"])
+    n_eval = n_total - int(0.85 * n_total)  # held-out rows (the eval set)
+    floor_ev = min(r["val_ev"] for r in real["rows"])  # worst rung → common feasible floor
+    delta2 = (1.0 - floor_ev) * V
+    feats = [{
+        "name": f"{r['model']}-b{r['b']}", "kind": "direction" if r["b"] == 1 else "block",
+        "total_var": V, "n_tokens": n_eval, "n_firings": n_eval,
+        "n_params": r["dec_params"], "g_dict": r["G"], "k_active": r["k_blocks"],
+        "ev": r["val_ev"], "coded_dim": r["k_blocks"] * r["b"],
+    } for r in real["rows"]]
+    out = score_json({"delta2": delta2, "l_param_bits": None, "featurizers": feats})
+    by_name = {row["name"]: row for row in out["rows"]}
+    for r in real["rows"]:
+        row = by_name[f"{r['model']}-b{r['b']}"]
+        r["bits_per_token"] = round(float(row["bits_per_token"]), 3)
+        r["selection_bits_per_firing"] = round(float(row["selection_bits_per_firing"]), 2)
+    real["mdl"] = {
+        "floor_delta2": round(delta2, 3), "floor_source": "worst-rung residual (matched fidelity)",
+        "V_total_var": V, "n_eval_tokens": n_eval,
+        "note": "matched budget → Φ=0, block-vs-chart f* is M-mdl's lane",
+    }
+    metrics["real"] = real
+    return metrics
+
+
+# ==========================================================================
 # Phase 3 — cyclic-feature block finding (weekday / month)
 # ==========================================================================
 def _demean_per_template(X: np.ndarray, tidx: np.ndarray) -> np.ndarray:
@@ -292,7 +340,24 @@ def _load_probe_set(name: str, layer: int, reduce_dim: int):
     n_labels = int(z["n_labels"])
     Xd = _demean_per_template(X, tidx)
     red, _, _, _ = pca_reduce(Xd, Xd, min(reduce_dim, Xd.shape[0] - len(np.unique(tidx)) - 1))
-    return red, rank, n_labels, L
+    return red, rank, n_labels, L, tidx, Xd
+
+
+def _cyclic_heldout_ev(Xd: np.ndarray, tidx: np.ndarray, reduce_dim: int, G: int, b: int) -> float:
+    """Leave-one-template-out held-out reconstruction EV for the BSF cyclic fit.
+
+    Per fold: train-only PCA-reduce, fit BSF on the other templates, score EV on
+    the held-out template's tokens. Honest generalization of the reconstruction
+    (the in-sample ``full_ev`` overstates it on these tiny sets)."""
+    evs = []
+    for t in np.unique(tidx):
+        te = tidx == t
+        tr_red, te_red, _, _ = pca_reduce(Xd[~te], Xd[te], reduce_dim)
+        model = BSF(BSFConfig(d_model=tr_red.shape[1], n_blocks=G, block_size=b,
+                              k_blocks=1, mode="grassmann", aux_k_blocks=2, seed=0))
+        train_bsf(model, torch.tensor(tr_red), TrainConfig(steps=2000, batch_size=10 ** 9, lr=6e-3))
+        evs.append(ev(model, torch.tensor(te_red)))
+    return float(np.mean(evs))
 
 
 def phase_cyclic(reduce_dim: int = 6) -> bool:
@@ -302,7 +367,7 @@ def phase_cyclic(reduce_dim: int = 6) -> bool:
     for name in ("weekday", "month"):
         if name in out:
             continue
-        Xred, rank, n_labels, L = _load_probe_set(name, layer=8, reduce_dim=reduce_dim)
+        Xred, rank, n_labels, L, tidx, Xd = _load_probe_set(name, layer=8, reduce_dim=reduce_dim)
         d = Xred.shape[1]
         X = torch.tensor(Xred)
         # A few competing blocks (b=4 ≥ the circle's 2 extrinsic dims), k=1 active.
@@ -339,6 +404,9 @@ def phase_cyclic(reduce_dim: int = 6) -> bool:
         mask = model(X, update_util=False).mask.detach().cpu().numpy()
         active_freq = mask.mean(0)
 
+        # honest generalization: leave-one-template-out held-out reconstruction EV
+        held_out_ev = _cyclic_heldout_ev(Xd, tidx, d, G, b)
+
         out[name] = {
             "layer": int(L), "n_labels": n_labels, "d_reduced": int(d),
             "G": G, "block_size": b, "k_blocks": 1,
@@ -348,14 +416,15 @@ def phase_cyclic(reduce_dim: int = 6) -> bool:
             "winning_block_coord_stable_rank": float(coord_sr),
             "cyclic_adjacency_accuracy": float(adj),
             "winning_block_active_freq": float(active_freq[win]),
-            "full_ev": ev(model, X),
+            "full_ev_insample": ev(model, X),
+            "held_out_ev_loto": held_out_ev,
             "block_subspace_evs": [round(e, 3) for e in subspace_ev],
         }
         metrics["cyclic"] = out
         save_metrics(metrics)  # checkpoint this set immediately
         print(f"  {name}: curve-detector block #{win} subspace_EV={subspace_ev[win]:.2f}, "
-              f"coord_stable_rank={coord_sr:.2f}, adjacency_acc(all {n_labels} tokens)={adj:.2f} "
-              f"[saved]", flush=True)
+              f"coord_stable_rank={coord_sr:.2f}, adjacency_acc(all {n_labels} tokens)={adj:.2f}, "
+              f"held_out_EV(LOTO)={held_out_ev:.2f} [saved]", flush=True)
     return all(n in out for n in ("weekday", "month"))
 
 
@@ -412,12 +481,23 @@ def write_report(metrics: dict):
                  f"F·d constant) and **matched sparsity** (L0 = k·b = {bud['L0']} nonzeros) "
                  f"across block sizes. b=1 is the TopK-SAE baseline.")
         L.append("")
-        L.append("| block b | model | G | k | L0 | val EV | mean stable rank | mean util |")
-        L.append("|---:|---|---:|---:|---:|---:|---:|---:|")
-        for row in r["rows"]:
-            L.append(f"| {row['b']} | {row['model']} | {row['G']} | {row['k_blocks']} | "
-                     f"{row['L0_nonzeros']} | {row['val_ev']:.4f} | "
-                     f"{row['mean_stable_rank']:.2f} | {row['mean_utilization']:.2f} |")
+        has_mdl = any("bits_per_token" in row for row in r["rows"])
+        if has_mdl:
+            L.append("| block b | model | G | k | L0 | val EV | mean stable rank | mean util | selection bits/fire | **bits/token** |")
+            L.append("|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+            for row in r["rows"]:
+                L.append(f"| {row['b']} | {row['model']} | {row['G']} | {row['k_blocks']} | "
+                         f"{row['L0_nonzeros']} | {row['val_ev']:.4f} | "
+                         f"{row['mean_stable_rank']:.2f} | {row['mean_utilization']:.2f} | "
+                         f"{row.get('selection_bits_per_firing', float('nan')):.1f} | "
+                         f"**{row.get('bits_per_token', float('nan')):.2f}** |")
+        else:
+            L.append("| block b | model | G | k | L0 | val EV | mean stable rank | mean util |")
+            L.append("|---:|---|---:|---:|---:|---:|---:|---:|")
+            for row in r["rows"]:
+                L.append(f"| {row['b']} | {row['model']} | {row['G']} | {row['k_blocks']} | "
+                         f"{row['L0_nonzeros']} | {row['val_ev']:.4f} | "
+                         f"{row['mean_stable_rank']:.2f} | {row['mean_utilization']:.2f} |")
         L.append("")
         topk = next((x for x in r["rows"] if x["b"] == 1), None)
         blocked = [x for x in r["rows"] if x["b"] > 1]
@@ -429,6 +509,20 @@ def write_report(metrics: dict):
                      f"(Δ = {best['val_ev']-topk['val_ev']:+.4f}) — a wider block packs the "
                      f"same L0 into fewer, higher-stable-rank subspaces (stable rank climbs "
                      f"1.0 → 3.4 as b: 1 → 8), the paper's ≈3 landing at b≈4–8._")
+            L.append("")
+        if has_mdl and topk is not None:
+            mdl = r.get("mdl", {})
+            best_bt = min(r["rows"], key=lambda x: x.get("bits_per_token", 1e9))
+            L.append(f"_**MDL bits/token** (M-mdl's `score_json`, matched-distortion floor "
+                     f"δ²={mdl.get('floor_delta2')}, all rungs feasible): the paper's "
+                     f"**blocks-beat-directions** result reproduces — bits/token falls "
+                     f"monotonically from TopK-SAE **{topk.get('bits_per_token')}** (b=1) to "
+                     f"**{best_bt.get('bits_per_token')}** (b={best_bt['b']}) as the per-token "
+                     f"selection cost log₂C(G,k) collapses ({topk.get('selection_bits_per_firing'):.0f}"
+                     f"→{best_bt.get('selection_bits_per_firing'):.0f} bits/fire). Selection/"
+                     f"addressing dominates the description length; wide blocks address the same "
+                     f"L0 far more cheaply. (Crossover f* is degenerate at matched budget, Φ=0, "
+                     f"and needs a chart — that is M-mdl's block-vs-chart lane.)_")
             L.append("")
 
     if "cyclic" in metrics:
@@ -445,26 +539,31 @@ def write_report(metrics: dict):
                  "2-D, so the block's coordinate stable rank should be ≈2, and cyclic adjacency "
                  "accuracy → 1.0.")
         L.append("")
-        L.append("| set | tokens | curve-detector block | subspace EV (whole cycle) | in-block coord stable rank | cyclic adjacency acc (all tokens) |")
-        L.append("|---|---:|---:|---:|---:|---:|")
+        L.append("| set | tokens | curve-detector block | subspace EV (whole cycle) | in-block coord stable rank | cyclic adjacency acc (all tokens) | held-out EV (LOTO) |")
+        L.append("|---|---:|---:|---:|---:|---:|---:|")
         for name, cc in c.items():
+            ho = cc.get("held_out_ev_loto")
+            ho_s = f"{ho:.2f}" if ho is not None else "—"
             L.append(f"| {name} | {cc['n_labels']} | #{cc['winning_block']} | "
                      f"{cc['winning_block_subspace_ev']:.2f} | "
                      f"{cc['winning_block_coord_stable_rank']:.2f} | "
-                     f"**{cc['cyclic_adjacency_accuracy']:.2f}** |")
+                     f"**{cc['cyclic_adjacency_accuracy']:.2f}** | {ho_s} |")
         L.append("")
         L.append("_One block's subspace captures ~80% of each cyclic feature's variance and "
                  "its chart orders all tokens perfectly around the circle (adjacency 1.0) at "
                  "coordinate stable rank ≈2 — the extrinsic dimension of a circle. A single "
-                 "signed block is a curve detector, exactly the paper's result._")
+                 "signed block is a curve detector, exactly the paper's result. The held-out "
+                 "EV is leave-one-template-out (honest generalization; the in-sample fit "
+                 "overstates it on these 35/60-sample sets)._")
         L.append("")
 
     L.append("## Files")
     L.append("")
     L.append("- `bsf.py` — models (vanilla / Grassmannian BSF, TopK-SAE baseline), block-TopK, "
              "AuxK, Stiefel retraction, metrics, gam shard-format loader.")
-    L.append("- `train.py` — this driver (synthetic / real / cyclic phases + report).")
+    L.append("- `train.py` — this driver (synthetic / real / cyclic phases + MDL scoring + report).")
     L.append("- `metrics.json` — all numbers above, machine-readable.")
+    L.append("- MDL bits/token via M-mdl's `experiments/mdl_ladder/mdl.py` `score_json`.")
     L.append("")
     (OUT / "REPORT.md").write_text("\n".join(L) + "\n")
     print(f"[report] wrote {OUT/'REPORT.md'}", flush=True)
@@ -512,11 +611,14 @@ def main() -> int:
         complete = _run_phase(args.run_phase)
         return 0 if complete else 1
 
-    # Driver: retry each requested phase as a subprocess, then write the report.
+    # Driver: retry each requested phase as a subprocess, then score MDL bits/token
+    # (pure-numpy, no retrain) and write the report.
     t0 = time.time()
     phases = list(PHASES) if args.phase == "all" else [args.phase]
     _drive(phases)
-    write_report(load_metrics())
+    metrics = add_mdl_scores(load_metrics())
+    save_metrics(metrics)
+    write_report(metrics)
     print(f"[done] {time.time()-t0:.0f}s  ->  {MFILE}", flush=True)
     return 0
 
