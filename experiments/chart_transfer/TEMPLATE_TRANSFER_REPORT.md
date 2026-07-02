@@ -14,7 +14,17 @@ extended to **14 diverse template families** per set (varied syntactic frame, te
 target position) via the `curved_feature_probes` model-loading path (Qwen2.5-0.5B,
 per-template demeaned residuals). Leave-one-template-out CV (14 folds) + a fixed split.
 
-## Verdict: **SUPPORTED (with nuance)** — the chart *coordinate* is largely a feature property
+## Verdict: **MIXED / scoping** — coordinate-invariance holds, EV-transfer is NULL
+
+R-review's adjudication: **NULL on the EV-transfer metric** — the 1-coordinate chart does
+**not** beat the transferred linear plane on held-out-template reconstruction EV (weekday
+chart 0.26 < linear-2 0.43; month raw EV is near-floor for everything). That is the honest
+headline and it goes in the doc as a scoping result. The *positive* half is narrower and
+real: the chart **coordinate** (the angle, not the reconstruction) is largely a feature
+property — median LOTO coordinate consistency 0.95 (weekday) / 0.81 (month), and the chart
+coordinate beats a *single* linear direction everywhere. Both halves below.
+
+### The chart *coordinate* is largely a feature property (the positive half)
 
 | metric (14 templates, LOTO) | weekday (7 tok) | month (12 tok) |
 |---|---:|---:|
