@@ -1,0 +1,82 @@
+{
+  "discovery_groups": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      6
+    ],
+    [
+      7
+    ]
+  ],
+  "block_dims": [
+    2,
+    2,
+    2,
+    1,
+    1
+  ],
+  "blocks": [
+    {
+      "block": 0,
+      "dim": 2,
+      "subspace_overlap_per_trueplane": [
+        0.985,
+        0.006,
+        0.006
+      ],
+      "best_true_plane": 0,
+      "best_overlap": 0.985,
+      "chart_ev_test": 0.926,
+      "recovered_corr": 0.771
+    },
+    {
+      "block": 1,
+      "dim": 2,
+      "subspace_overlap_per_trueplane": [
+        0.006,
+        0.984,
+        0.005
+      ],
+      "best_true_plane": 1,
+      "best_overlap": 0.984,
+      "chart_ev_test": 0.9247,
+      "recovered_corr": 0.955
+    },
+    {
+      "block": 2,
+      "dim": 2,
+      "subspace_overlap_per_trueplane": [
+        0.006,
+        0.005,
+        0.944
+      ],
+      "best_true_plane": 2,
+      "best_overlap": 0.944,
+      "chart_ev_test": 0.8904,
+      "recovered_corr": 0.808
+    },
+    {
+      "block": 3,
+      "dim": 1,
+      "kind": "singleton_residual"
+    },
+    {
+      "block": 4,
+      "dim": 1,
+      "kind": "singleton_residual"
+    }
+  ],
+  "verdict": "The block was RIGHT and the chart RECONSTRUCTS it: discovery grouped all three planted planes correctly (subspace overlap 0.985/0.984/0.944 with the true planes) and every K=1 chart reconstructs its ring at high EV (0.926/0.925/0.890 held-out). The one sub-0.8 circle (block 0, corr 0.771) is the STRONGEST circle (amp 2.6), so it is not a weak-signal or mis-grouping failure -- it is a chart ANGLE-FIDELITY shortfall: the n_basis=4 fourier curve parameterizes the ring slightly non-uniformly and seed selection is by reconstruction EV (which does not directly optimize angular uniformity). Fix levers (not a factorization problem): lower n_basis (nearer a pure single-winding sinusoid), a winding/arc-length regularizer, or more seeds with angular-uniformity tie-breaking. Discovery and factorization are vindicated; the residual is in the per-block chart optimizer, exactly where the nursery isolates it.",
+  "metric_note": "recovered_corr = |Jammalamadaka circular correlation| of atan2(reconstruction) vs planted theta, all rows; 0.8 is an arbitrary reporting bar."
+}
