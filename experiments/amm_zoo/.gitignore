@@ -1,0 +1,6 @@
+results_smoke.json
+results_quick.json
+*.png
+REPORT.md
+amm_data/
+__pycache__/
