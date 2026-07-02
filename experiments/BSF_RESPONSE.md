@@ -15,7 +15,7 @@ shared evaluation, and reports the head-to-head numbers **as the lanes land** �
 are marked `PENDING`, never filled with placeholders. Paper claims are paraphrased (we do not
 have verbatim text to quote); where a number is ours it cites its artifact.
 
-_Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 synthetic GREEN-lit** (R-review) → SAFE NOW (QUALIFIED): 3/3 blocks discovered, 3/3 rings reconstructed (0.89–0.93 held-out EV), 2/3 pass the strict angle bar (corr>0.8); composed EV 0.834 = oracle 0.833 > joint 0.756, no joint solve, REML width-blocked; the failing ring's angle reads 0.749 in the oracle arm too (intrinsic, not discovery). NOT an EV win (linear PCA-6 0.883); REML-cure transfer unestablished (#2027 RED); discovery≈oracle only at n=480. Centerpiece unified ladder in §2; BT1 GREEN; G-bsf synthetic+cyclic held-out backed; **P-null committed** (`null_out/`): month circle survives EVERY null (C1 p=0.012, C2 p=0.0004), weekday mixed (order marginal p=0.042, EV-parity fails p=0.16); K≥2 co-collapse repro RED; related-work map added §5._
+_Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 synthetic GREEN-lit** (R-review) → SAFE NOW (QUALIFIED): 3/3 blocks discovered, 3/3 rings reconstructed (0.89–0.93 held-out EV), 2/3 pass the strict angle bar (corr>0.8); composed EV 0.834 = oracle 0.833 > joint 0.756, no joint solve, REML width-blocked; the failing ring's angle reads 0.749 in the oracle arm too (intrinsic, not discovery). NOT an EV win (linear PCA-6 0.883); REML-cure transfer unestablished (#2027 RED); discovery≈oracle only at n=480. Centerpiece unified ladder in §2; BT1 GREEN; G-bsf synthetic+cyclic held-out backed; **P-null committed** (month circle survives every null; weekday demoted — marginal/mixed); **shadow_cone + chart_transfer verdicted** (presence-decoupling needs an explicit presence signal; chart *coordinate* transfers 0.95/0.81 but EV-transfer is null); **co-collapse fix now PARTIAL** (EV-collapse repaired `50b8c52b7`, factor separation still red); centerpiece anchored on the month flagship; all 5 arXiv IDs in §5 verified._
 
 ---
 
@@ -29,7 +29,7 @@ _Status: live document, updated as lanes commit. Last sync: **N-nursery p=96 syn
 | **Intervention dose / calibration** | (Not addressed) — featurizer is descriptive, no forward-effect prediction. | `steer` reports `predicted_nats`: how far the output distribution moves, via a downstream output-Fisher metric on the chart, *before* the edit. | `dose_real_out/` (real llama-3.1-8b) | **landed** — strongest real-model result (§3) |
 | **Model selection** | Block width / count chosen by hyperparameter sweeps. | Per-atom REML evidence / effective-DOF selects the intrinsic dimension and curved-atom count directly. | `frontier_out/` (`k_curved` recovered = 3 = planted) | **landed** (accounting; live REML OOM-blocked, §4) |
 | **Typed topology** | Blocks are untyped subspaces; a subspace has no notion of "circle" vs "line". | Atoms carry a topology *type* (circle / arc / line); the type is falsifiable — a line feature must not want curvature. | `synthetic_validation.json` (year=line control), MDL year row `f*=∞` | **landed** |
-| **Presence / amplitude decoupling** | Signed block codes give a full subspace, but presence and amplitude are entangled in the code norm. | Block **gate** `‖z_g‖₂` (presence) is decoupled from the **signed** code `z_g` (amplitude); gauge-invariant selection. | `block.rs` (`block_gates`, `code_row`); G-bsf signed codes | **landed** (BT1 design; compile pending) |
+| **Presence / amplitude decoupling** | Signed block codes give a full subspace, but presence and amplitude are entangled in the code *norm* (an intensity coordinate). | Block **gate** (presence) is decoupled from the **signed** code (amplitude) — but this needs an **explicit presence signal**: on synthetic weak-vs-absent, block-norm AUC 0.47 ≈ chance and a recon-only gate 0.47 both fail; a presence-supervised gate reaches 0.999. | `block.rs` (gauge-invariant, BT1 17/0 tests); `shadow_cone/` (`db9d1e5`) | **landed** — decoupling supported *with* presence supervision (§3) |
 | **Uncertainty** | Point estimates. | REML posterior + Fisher metric yield a certified **validity radius** within which the dose prediction is trusted. | `dose_real_out/` (ratio 0.999 inside radius, n=49) | **landed** |
 
 ---
@@ -69,18 +69,19 @@ collapses — the paper's "blocks beat directions" MDL result, with the mechanis
 | block b=4 | 11.0 | 6.9 | 0.399 |
 | block b=8 | **6.4** | 3.0 | 0.325 |
 
-**Rung 5, one rung further** (M-mdl `score_json`, cyclic weekday/month — where curvature
-exists, and where G-bsf's own block-finding lands: a single b≈4 block captures the cycle at
-held-out EV 0.82/0.95, cyclic adjacency 1.0, coord stable rank 2.4 = the circle's extrinsic
-dim). The circle-chart codes that cycle from **one intrinsic coordinate** (the angle) where the
-block codes ~2 extrinsic dims — continuing the descent by collapsing the *code dimension*:
+**Rung 5, one rung further** (M-mdl `score_json`, on the **month** cycle — our matched-null
+flagship, §4.2 — where G-bsf's own block-finding lands: a single b≈4 block captures the cycle at
+held-out EV 0.95, coord stable rank 2.4 = the circle's extrinsic dim). The circle-chart codes that
+cycle from **one intrinsic coordinate** (the angle, single-coordinate cyclic order 10/12,
+matched-null p=0.0004) where the block codes ~2 extrinsic dims — continuing the descent by
+collapsing the *code dimension*:
 
 | feature | block (held-out EV) | circle-chart | Φ (extra harmonics) | crossover `f*` |
 |---|---|---|---:|---:|
-| weekday | b=4 (≈2 eff. dims, rank 2.4), EV 0.82, adj 1.0 | d_i=1 (angle) | 12 | ≈22 (matched `2p`=12) |
-| month | b=4 (≈2 eff. dims, rank 2.4), EV 0.95, adj 1.0 | d_i=1 (angle) | 12 | ≈16 (matched `2p`=12) |
+| **month** (flagship) | b=4 (≈2 eff. dims, rank 2.4), EV 0.95 | d_i=1 (angle), order 10/12 | 12 | **≈16** (matched `2p`=12) |
+| weekday (marginal, §4.2) | b=4 (≈2 eff. dims), EV 0.82 | d_i=1, order 5/7 (p≈.04) | 12 | ≈22 (matched `2p`=12) |
 
-A weekday/month feature fires far more than ~12–22 times in any corpus (`f ≫ f*`), so the
+A month/weekday feature fires far more than ~12–22 times in any corpus (`f ≫ f*`), so the
 curved chart has the shortest description. **Directions collapse the selection cost, blocks
 collapse it further, and the chart collapses the code dimension (2→1 coordinate per firing) —
 three rungs, each removing a different term of the description length.** (Rungs 1–4 are OLMo,
@@ -118,6 +119,8 @@ Publication status legend: **SAFE NOW** (verified, publishable) · **QUALIFIED**
 | **N-nursery** — chart-per-discovered-block vs joint-K (`block_nursery/`) | recover curved factors without a joint K≥2 solve | **p=96 product-of-3-circles synthetic (R-review-validated):** **3/3 blocks discovered, 3/3 rings reconstructed (0.89–0.93 held-out EV), 2/3 pass the strict angle bar (corr>0.8)**; composed held-out EV 0.834 = oracle upper bound 0.833 > joint torch 0.756, no joint solve, REML width-blocked (TIMEOUT p=96). The 3rd ring's angle reads only **0.749 in the ORACLE arm too** → intrinsic angle fidelity of that ring, not a discovery failure. Clean number: one curved coord captures **0.94** of a circle's variance vs **0.52** for one linear coord. NOT an EV win — linear PCA-6 0.883 (0/3 rings recovered) | **SAFE NOW (QUALIFIED)** — factor recovery + factorized (no-joint-solve) delivery, **never** an EV win; REML transfer unestablished | landed + R-review-validated (§4.4); `missed_circle_diagnosis.json` (`4480383`) |
 | **BT1** — Rust block-sparse Tier-1 (gam `4a06940cd`) | gauge-invariant block-sparse core | after the edition-2024 pattern-error fix (`4a06940cd`) `gam-sae` compiles; R-review ran `cargo test -p gam-sae --lib block` → **17 passed / 0 failed**, incl. `gauge_invariant_selection_and_loss_under_block_rotation` (with negative control), `planted_block_subspaces_recovered`, `fitted_block_frames_are_orthonormal`, utilization/stable-rank. FFI clean (no `#[allow]`, full-path prelude) | **SAFE NOW** — gauge-invariant block-sparse core verified (numeric + 17 in-repo tests green) | landed & green — hedge: block-fitter EV is in-sample; **no downstream headline EV yet** (SAFE claim = gauge-invariance + recovery, not an EV number) |
 
+| **shadow_cone** — presence/amplitude decoupling (`shadow_cone/`) | can a block's presence be decoupled from its intensity? | synthetic weak-vs-absent presence (held-out AUC): **block norm 0.47** (≈chance — the "shadow") and a **reconstruction-only gate 0.47** both fail; only a **presence-supervised gate reaches 0.999**. Real-data η²: norm → template/context **0.67/0.82** (intensity is context-driven), angle → identity **0.89/0.87** (the coordinate carries the concept) | **SAFE NOW (QUALIFIED)** — decoupling is architecturally supported but **requires an explicit presence signal; reconstruction alone does not buy it** | landed & committed (`db9d1e5`, R-review SOUND) |
+| **chart_transfer** — chart-coordinate invariance across prompts (`chart_transfer/`) | does the chart's coordinate transfer as a feature property? | **coordinate consistency SUPPORTED** (14 template families, leave-one-template-out, median **0.95/0.81**; on month the chart transfers where linear collapses, 0.22 vs 0.001). **EV-transfer NULL** — reconstruction EV does not out-transfer the linear plane; linear-2 still wins weekday EV | **QUALIFIED (mixed)** — the *coordinate* is invariant; the *reconstruction* does not out-transfer linear | landed & committed (`8930bd6`; R-review re-adjudicated `d568f53`) |
 **Supporting gam-core lanes (SAFE NOW, verified by R-review):** O-manifold's fleet-batch landing (`e09e6956c`, byte-identical hunks, deleted tests are pure relocations, the `reachable_dictionary_rank` correctness fix is sound) and O-solve's mixture-link gate widening (LogLog/Cauchit 5-jet Fisher weight genuinely implemented + tested to 1e-12..1e-5) underpin the "additive generative model" and REML-core axes.
 
 ---
@@ -188,15 +191,14 @@ claims. Stated plainly:
    but is EV-losing (linear 0.696 > joint 0.629 > nursery 0.576) and small-N noisy (circular_corr
    0.243 on ~28 rows) — suggestive, not decisive.
 
-   **Related — the K≥2 co-collapse "fix" is RED end-to-end.** O-manifold's root-cause fix chain
-   landed (deflation/anchor/ownership `465ad67a0`, reseed cooldown `3ddf58c03`, repro `f7991e5c8`)
-   and its components are individually verified, **but the collapse detector does not fire on the
-   stuck-at-null mode** — the reseed trigger never engages (reseeds=0, EV≈−0.0000), so Parts A/B/C
-   never run and its own regression test is RED (R-review `10a6f56`/`649ff7d`: 2 fail / 1 pass;
-   only the deflation unit guard passes; P=16 is not the P=96 hang regime). Trigger fix in progress
-   (O-manifold, task #8 reopened). So "we fixed the K≥2 co-collapse" **must not be published**; any
-   "additive generative model / joint K≥2 curved fit works" line must stay hedged to *K=1 +
-   block-sparse Tier-1 only — the joint K≥2 curved fit still co-collapses (repro red)*.
+   **Related — the K≥2 co-collapse fix is PARTIAL: EV-collapse repaired, factor separation not.**
+   O-manifold's fix chain now **repairs the EV-collapse** (`50b8c52b7`, the EV regression test is
+   GREEN — the joint K≥2 fit no longer collapses to EV≈0), **but the atoms still do not separate
+   onto distinct factors** — the structure test is RED. So publish nothing stronger than *"the K≥2
+   EV-collapse is repaired; the joint fit still does not recover disjoint factors."* The
+   additive-generative-model / joint-K≥2 factorization win remains unestablished, and the nursery's
+   factor-recovery-without-a-joint-solve advantage (§4.4) stands as the route that does separate
+   factors.
 
 5. **G-bsf cyclic `full_ev` is in-sample**, and its real-data EV comparison is on the OLMo
    self-qualia axis, which is *linear* — so BSF not beating TopK there is expected, not a
@@ -217,6 +219,14 @@ claims. Stated plainly:
    pre-fix multi-modal auto-grow/co-collapse in that build; re-run against the guard-patched
    build before claiming month/hue dose calibration.
 
+9. **Chart transfer is a coordinate result, not a reconstruction result (scoping null).** Across
+   14 template families (leave-one-template-out), the chart's angular *coordinate* transfers
+   consistently (median 0.95/0.81) — and on month it transfers where a linear coordinate collapses
+   (0.22 vs 0.001) — but the chart's *reconstruction EV* does **not** out-transfer the 2-PC linear
+   plane (linear-2 still wins weekday EV). Publish "the chart coordinate is an invariant feature
+   property," not "the chart reconstructs better on held-out templates." (`chart_transfer/`,
+   R-review `d568f53`.)
+
 ---
 
 ## 5. Related work — where ManifoldSAE sits in the 2026 stream
@@ -234,12 +244,12 @@ for a multidimensional concept — and splits on the fix:
 
 | line of work | representative | stance vs ours |
 |---|---|---|
-| **Dilution / shattering diagnosis** | "Do SAEs Capture Concept Manifolds?" (arXiv 2604.28119; global/tiled/diluted regimes); Goodfire, "Can SAEs Capture Neural Geometry?" | motivates the problem — scalar SAEs shatter a manifold into many diluted directions; we agree and give the constructive fix |
-| **Subspace consolidation** (closest neighbours) | BSF (vision); SASA (arXiv 2606.06333, LLMs) | consolidate fragments into a *flat* block/subspace. SASA proves scalar SAEs induce feature-splitting for multidim features and names "recover internal coordinates" as *future work* — that named future work is our rung |
-| **Region / local-geometry** | MFA / local-geometry (arXiv 2602.02464) | a different primitive (a region chosen by locality, not co-presence); the BSF paper's own MFA critique applies. We select by co-presence *and* parameterize the geometry |
-| **Mixture / other** | SMIXAE (arXiv 2605.09224) | mixture-of-experts style; complementary |
+| **Dilution / shattering diagnosis** | "Do Sparse Autoencoders Capture Concept Manifolds?" (arXiv 2604.28119); Goodfire, "Can SAEs Capture Neural Geometry?" | motivates the problem — scalar SAEs shatter a manifold into many diluted directions; we agree and give the constructive fix |
+| **Subspace consolidation** (closest neighbours) | BSF (vision); SASA — "Subspace-Aware Sparse Autoencoders for Effective Mechanistic Interpretability" (arXiv 2606.06333, LLMs) | consolidate fragments into a *flat* block/subspace. SASA targets the same feature-splitting we diagnose; recovering the *coordinate inside* the consolidated support is our rung |
+| **Region / local-geometry** | "From Directions to Regions: Decomposing Activations in Language Models via Local Geometry" (MFA; arXiv 2602.02464) | a different primitive (a Gaussian region chosen by locality, not co-presence); the BSF paper's own MFA critique applies. We select by co-presence *and* parameterize the geometry |
+| **Mixture / other** | "SMIXAE: Towards Unsupervised Manifold Discovery in Language Models" (arXiv 2605.09224) | sparse mixture-of-autoencoders for multidimensional features; complementary |
 | **Direction-paradigm engineering** | JumpReLU / BatchTopK / AbsTopK | orthogonal — better *scalar* dictionaries; they improve the rung below and compose with blocks/charts |
-| **Geometry-aware steering** | Manifold Steering (arXiv 2605.05115) | corroborates our dose result — steering follows the geometry; our chart supplies the metric that makes the dose calibrated (§3, R²=0.95) |
+| **Geometry-aware steering** | "Manifold Steering Reveals the Shared Geometry of Neural Network Representation and Behavior" (arXiv 2605.05115) | corroborates our dose result — steering along the representation manifold follows the behavioural manifold, while linear steering cuts off-manifold; our chart supplies the metric that makes the dose calibrated (§3, R²=0.95) |
 
 **What is ours, anchored on evidenced differentiators:** the measured description-length crossover
 `f* ≈ 2p` (charts beat blocks once a feature fires more than ~2p times — §2); dose calibration on a
@@ -248,8 +258,9 @@ real model (R²=0.95, ~10× better than a metric-free linear latent — §3); a 
 chart crossover is `f*=∞`, so the type self-controls); and per-atom REML evidence for model
 selection instead of hyperparameter sweeps.
 
-*(Literature IDs and characterizations come from the team's external literature pass; they
-position the contribution and are not independent verifications of each cited work.)*
+*(The five arXiv IDs and titles above were verified against arxiv.org, July 2026; the Goodfire
+"Can SAEs Capture Neural Geometry?" and Block-Sparse Featurizers references are to the works this
+document responds to. The one-line stances are our positioning, not summaries of each paper.)*
 
 ---
 
