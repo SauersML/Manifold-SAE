@@ -56,10 +56,15 @@ def main() -> None:
             entry["token_cap"] = man.get("token_cap")
             corpus.append(entry)
 
+    partial = any(e.get("provisional") or not e.get("has_t0") for e in corpus)
     out = {
         "harvest_root": args.out_root,
+        "partial": partial,
         "reader": "gam/examples/residual_shard_io.py :: ShardReader(dir).batches(n)",
-        "note": "bf16 memmap shards; each manifest carries per-dim T0 (mean/std/rms/rogue_dims/scale).",
+        "note": ("bf16 memmap shards; each manifest carries per-dim T0 "
+                 "(mean/std/rms/rogue_dims/scale). partial=true means the big "
+                 "harvest is still running — shards are append-only, re-open "
+                 "load_shards() to pick up new rows; T0 finalizes at completion."),
         "corpus_sets": corpus,
         "probe_sets": probes,
     }
