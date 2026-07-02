@@ -52,6 +52,7 @@ import math
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from pathlib import Path
@@ -88,8 +89,7 @@ _CONVERGENCE_MARKERS = (
 
 CACHE = Path(os.environ.get(
     "PROBE_CACHE",
-    "/private/tmp/claude-501/-Users-user/"
-    "8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/whitened_probe_X.npy",
+    os.path.join(tempfile.gettempdir(), "whitened_probe_X.npy"),
 ))
 
 

@@ -50,6 +50,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -63,8 +64,7 @@ HERE = Path(__file__).resolve().parent
 OUT_DIR = Path(os.environ.get("BLOCK_NURSERY_OUT", HERE / "block_nursery"))
 SCRATCH = Path(os.environ.get(
     "BLOCK_NURSERY_SCRATCH",
-    "/private/tmp/claude-501/-Users-user/"
-    "8553f8a7-a419-454a-a5c1-9d6acf52ece3/scratchpad/block_nursery_work"))
+    os.path.join(tempfile.gettempdir(), "block_nursery_work")))
 
 # Torch curved-fit recipe -- identical to curved_feature_probes.py's WORKING K=1
 # recipe (single-winding circle: low n_basis, wide encoder, moderate lr).
@@ -75,6 +75,9 @@ _INIT_SCALE = 0.2
 _STEPS = int(os.environ.get("BLOCK_NURSERY_STEPS", "600"))
 _N_SEEDS = int(os.environ.get("BLOCK_NURSERY_SEEDS", "2"))
 _FIT_TIMEOUT = int(os.environ.get("BLOCK_NURSERY_FIT_TIMEOUT", "300"))
+# Wall-clock bound on the joint REML control arm (Arm A). REML co-collapses / hangs
+# at wide p, so this is a hard cap recorded as TIMEOUT_BLOCKED rather than a wait.
+_REML_TIMEOUT = int(os.environ.get("BLOCK_NURSERY_REML_TIMEOUT", "120"))
 
 
 # --------------------------------------------------------------------------- #
@@ -562,7 +565,7 @@ def driver_synthetic():
     # ---- Arm A control: joint curved fit (the co-collapsing multi-atom path) ----
     print(f"\n[Arm A] REML joint sae_manifold_fit K={K} (expected: hang/OOM in .venv)...",
           flush=True)
-    reml = reml_joint_isolated(X[tr], K, tag="syn_A", timeout=120)
+    reml = reml_joint_isolated(X[tr], K, tag="syn_A", timeout=_REML_TIMEOUT)
     print(f"  REML joint: {reml.get('status')} ({reml.get('wall_s')}s)", flush=True)
     print(f"[Arm A] torch joint ManifoldSAE K={K}, target_k={K} (additive co-collapse proxy)...",
           flush=True)
@@ -747,7 +750,7 @@ def driver_real():
 
     # ---- Arm A: joint curved fit on the SHARED ambient (co-collapse regime) ----
     print(f"\n[Arm A] REML joint K={K} on shared ambient (expected hang/OOM)...", flush=True)
-    reml = reml_joint_isolated(Xshared[tr], K, tag="real_A", timeout=120)
+    reml = reml_joint_isolated(Xshared[tr], K, tag="real_A", timeout=_REML_TIMEOUT)
     print(f"  REML joint: {reml.get('status')} ({reml.get('wall_s')}s)", flush=True)
     print(f"[Arm A] torch joint ManifoldSAE K={K}, target_k={K} on shared ambient...", flush=True)
     tj = fit_curved_isolated(Xshared, n_atoms=K, tag="real_A_torch",
@@ -829,11 +832,30 @@ def driver_real():
     return result
 
 
+def reml_control_only():
+    """Run ONLY the synthetic p=96 joint REML control arm (Arm A) with the bounded
+    BLOCK_NURSERY_REML_TIMEOUT — the targeted control run for the K>=2 co-collapse
+    hypothesis, without the rest of the nursery battery. Records the outcome
+    (CONVERGED / TIMEOUT_BLOCKED / OOM_KILLED) to reml_control_only.json and prints
+    it, so a bounded probe of "does REML co-collapse/hang at p=96" costs only the
+    timeout, never the full synthetic driver."""
+    X, planes, theta, meta = make_synthetic()  # planted product-of-circles, p=96
+    tr, _te = train_test_split(X.shape[0], frac=0.7, seed=0)
+    k = len(planes)
+    print(f"[reml-control] synthetic p={meta['p']} K={k}, timeout={_REML_TIMEOUT}s ...", flush=True)
+    reml = reml_joint_isolated(X[tr], k, tag="syn_reml_control", timeout=_REML_TIMEOUT)
+    print(f"[reml-control] {json.dumps(reml)}", flush=True)
+    _save("reml_control_only.json", {"data": meta, "reml_control": reml})
+    return reml
+
+
 def main():
     if len(sys.argv) >= 3 and sys.argv[1] == "--worker":
         return _fit_worker(sys.argv[2])
     if len(sys.argv) >= 3 and sys.argv[1] == "--reml-worker":
         return _reml_worker(sys.argv[2])
+    if "--reml-control-only" in sys.argv:
+        return reml_control_only()
     if "--real" in sys.argv:
         return driver_real()
     if "--synthetic" in sys.argv:
