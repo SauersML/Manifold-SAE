@@ -570,7 +570,7 @@ def fidelity_currency(fc: dict | None) -> dict:
 # ---------------------------------------------------------------------------------
 # Axis 4 GATE — G0 hallucinated-structure control (real vs Gaussian-null vs shuffle).
 # ---------------------------------------------------------------------------------
-def g0_null_gate(nc: dict | None, out: Path) -> dict:
+def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dict:
     if not nc:
         return {"status": "PENDING", "reason": "CONTROL null_control.json not landed"}
     arms = {"gaussian_matched": "Gaussian null", "shuffled": "shuffled null"}
@@ -591,6 +591,18 @@ def g0_null_gate(nc: dict | None, out: Path) -> dict:
     if higher:
         passes = False
     detail["harmonic_spurious_higher_modes"] = bool(higher)
+    # Acceptance-rule consistency: the null's salience_floor MUST equal COMPOSE's, else
+    # null and real A2 counts aren't apples-to-apples (a silent Goodhart hole). Flag, but
+    # don't hard-fail the geometry license on a bookkeeping mismatch — surface it loudly.
+    if compose is not None:
+        nc_floor = _get(nc, "salience_floor", default=None)
+        comp_floor = _get(compose, "salience_floor", "min_effect_ev", "min_effect", default=None)
+        if nc_floor is not None and comp_floor is not None:
+            match = abs(float(nc_floor) - float(comp_floor)) < 1e-9
+            detail["salience_floor_match"] = {"null": float(nc_floor),
+                                              "compose": float(comp_floor), "equal": match}
+            if not match:
+                detail["WARNING"] = "null and real acceptance floors DIFFER — counts not comparable"
 
     # Figure 9 — the null gate made visible: accepted curved atoms per arm.
     labels, counts, colors = [], [], []
@@ -1005,7 +1017,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
         "dose": fig78_dose(dose, FIGDIR / "fig7_probe_ordering.png",
                            FIGDIR / "fig8_dose_calibration.png"),
         "fidelity": fidelity_currency(fc),
-        "g0": g0_null_gate(nc, FIGDIR / "fig9_null_control.png"),
+        "g0": g0_null_gate(nc, FIGDIR / "fig9_null_control.png", compose),
         "i1": i1_shatter(compose),
         "g_band": g_band(compose),
         "g_util": g_util(compose),
