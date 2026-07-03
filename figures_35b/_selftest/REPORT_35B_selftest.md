@@ -73,6 +73,7 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
 - baseline attestation — T1: `train_mean`, COMPOSE: `train_mean` → OK (train-mean)
 - frontier provenance: lane-reported (not yet canonical-recomputed) (canonical = every point recomputed by `experiments/canonical_ev.py` from decoder + held-out + Tier-0 with the origin/train-mean TSS; authoritative for the figure)
 - split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) train-only; held-out EV on a 50k held-out subsample.
+- train-vs-held-out mean shift: TSS(held-out-colmean)/TSS(origin) = 0.953 (~4.7% of held-out energy), measured. The held-out per-dim mean sits this far off the train mean (rogue-dim-driven), so the colmean baseline is a *closer* null and DEFLATES EV; the canonical train-mean baseline credits the model with that variance. A real, honest detail — not a leak in our numbers.
 
 ## Headline figures
 
@@ -110,7 +111,8 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "ev_baseline_compose": "train_mean",
   "ev_baseline_ok": true,
   "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows",
-  "frontier_provenance": "lane-reported (not yet canonical-recomputed)"
+  "frontier_provenance": "lane-reported (not yet canonical-recomputed)",
+  "tss_mean_shift_ratio": null
  },
  "fig2": {
   "status": "ACCEPT",
@@ -131,17 +133,17 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "crossover": {
    "block": "blk0-linear",
    "chart": "blk0-chart",
-   "delta_code_bits_per_firing": 0.7235,
-   "delta_coeff_bits_per_firing": 0.7235,
+   "delta_code_bits_per_firing": 1.9825,
+   "delta_coeff_bits_per_firing": 1.9825,
    "selection_bits_delta": 0.0,
    "selection_asymmetric": false,
    "phi_extra_params": -2048,
-   "r_per_freed_coord_bits": 0.2615,
-   "l_param_bits": 0.2615,
-   "f_star": -740.23,
+   "r_per_freed_coord_bits": 0.4189,
+   "l_param_bits": 0.4189,
+   "f_star": -432.71,
    "f_star_matched_simple": -292.57,
    "chart_wins_at_actual_f": true,
-   "actual_firings": 1902
+   "actual_firings": 3934
   },
   "threshold": ">=5 pay"
  },

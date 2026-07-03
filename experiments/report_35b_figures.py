@@ -196,7 +196,7 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
 # ---------------------------------------------------------------------------------
 # Figure 2 — (Theta, dEV) scatter colored by atom topology; A2 = upper-right count.
 # ---------------------------------------------------------------------------------
-def fig2_theta_dev(compose: dict | None, out: Path) -> dict:
+def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> dict:
     if not compose:
         return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
     atoms = _get(compose, "atoms", default=[])
@@ -210,6 +210,18 @@ def fig2_theta_dev(compose: dict | None, out: Path) -> dict:
     dev_source = str(_get(compose, "atoms", default=[{}])[0].get("delta_ev_source", "unstated"))
     held_out_dev = "loao" in dev_source or "held" in dev_source or dev_source == "unstated"
     fig, ax = _newfig()
+    # Overlay the hallucination-null arms (Θ,ΔEV) so real-vs-null separation is visible:
+    # real curved atoms sit upper-right; matched-noise/shuffle points cluster at Θ≈0.
+    if nc:
+        for arm, name in (("gaussian_matched", "Gaussian null"), ("shuffled", "shuffled null")):
+            pts = _get(_get(nc, arm, default={}), "scatter_points", default=None)
+            if pts:
+                p = np.asarray([[float(_get(q, "theta", "turning", default=np.nan)),
+                                 float(_get(q, "delta_ev", "dev", default=np.nan))] for q in pts])
+                p = p[~np.isnan(p).any(axis=1)] if p.size else p
+                if p.size:
+                    ax.scatter(p[:, 0], p[:, 1], s=22, color=CAT["red"], alpha=0.35,
+                               marker="x", linewidth=1.0, label=name, zorder=1)
     seen = set()
     n_curved_paying = 0
     for a in atoms:
@@ -984,7 +996,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     tier0_present = (REPO / "data" / "l17" / "tier0.json").exists()
     results = {
         "fig1": fig1_frontier(t1, compose, FIGDIR / "fig1_frontier.png"),
-        "fig2": fig2_theta_dev(compose, FIGDIR / "fig2_theta_dev.png"),
+        "fig2": fig2_theta_dev(compose, FIGDIR / "fig2_theta_dev.png", nc),
         "fig3": fig3_gallery(compose, FIGDIR / "fig3_gallery.png"),
         "fig4": fig4_mdl(mdl, FIGDIR / "fig4_mdl.png"),
         "fig5": fig5_stable_rank(compose, FIGDIR / "fig5_stable_rank.png"),
@@ -1073,9 +1085,13 @@ def selftest() -> dict:
     fc = {"distortion_floor_r2": 0.92,
           "hybrid": {"loss_recovered": 0.91, "kl_patched": 0.08, "at_actives": 40},
           "topk": {"loss_recovered": 0.90, "kl_patched": 0.085, "at_actives": 40}}
+    _npts = lambda n: [{"theta": float(abs(rng.normal(0, 0.15))),
+                        "delta_ev": float(abs(rng.normal(0, 0.002)))} for _ in range(n)]
     nc = {"real_reference": {"n_curved_accepted": 7, "mean_theta": 1.9},
-          "gaussian_matched": {"n_curved_accepted": 0, "mean_theta": 0.08},
-          "shuffled": {"n_curved_accepted": 1, "mean_theta": 0.12},
+          "gaussian_matched": {"n_curved_accepted": 0, "mean_theta": 0.08,
+                               "scatter_points": _npts(40)},
+          "shuffled": {"n_curved_accepted": 1, "mean_theta": 0.12,
+                       "scatter_points": _npts(40)},
           "harmonic_null": {"higher_modes_on_first_harmonic_plus_noise": False}}
     stab = {"principal_angle_overlap": 0.93, "hungarian_latent_match": 0.42}
     cross = {"n_curved_recurring": 4}
