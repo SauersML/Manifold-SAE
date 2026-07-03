@@ -310,11 +310,16 @@ def harvest_last_position_fisher(lm, hook_module, ids, rank, oversample, hiter,
     act_flat, logits_from_act = _capture_activations(lm.module, hook_module, ids)
     T, p = int(act_flat.shape[0]), int(act_flat.shape[1])
     work_dtype = act_flat.dtype if act_flat.dtype in (torch.float32, torch.float64) else torch.float32
+    # A bf16 model (large MoE) captures bf16 activations; we run the Fisher eigensolve in
+    # float32 for stability but must feed the model its NATIVE dtype, else the spliced f32
+    # activation hits bf16 weights (mat1/mat2 dtype mismatch). Cast x to the model dtype for
+    # the forward, read logits back up to work_dtype. For an f32 model this is a no-op.
+    model_dtype = next(hook_module.parameters()).dtype
     row = T - 1
     x_row = act_flat[row].to(work_dtype).detach()
 
     def f_row(x):
-        return logits_from_act(x, row).to(work_dtype)
+        return logits_from_act(x.to(model_dtype), row).to(work_dtype)
 
     with torch.no_grad():
         probs = torch.softmax(f_row(x_row), dim=-1)
