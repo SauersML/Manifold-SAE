@@ -5,6 +5,15 @@
 **Meta-rules** (how to read this): (1) **Goodhart** — this is a portfolio, no cell is the objective; our own parable is the affine-PCA shortcut that once greened the OLMo gate by *being* its baseline. (2) **Effect size > significance** — at millions of tokens everything real is detectable, so evidence and salience (min-effect floors on Θ/ΔEV/dose) are separate dials. (3) **Hierarchy descriptive < predictive < causal** — dose calibration is the causal crown, not another EV number.
 
 Artifacts scanned: `/Users/user/Manifold-SAE/results/run_35b`  |  figures: `/Users/user/Manifold-SAE/figures_35b`
+Artifact schema gate: **MISS**
+
+```json
+[
+ "compose_per_atom.json missing",
+ "compose_per_atom_seed2.json missing",
+ "null_control.json missing"
+]
+```
 
 ## GATE — Hallucinated-structure control (G0)
 
@@ -25,15 +34,17 @@ Artifacts scanned: `/Users/user/Manifold-SAE/results/run_35b`  |  figures: `/Use
 | | **Axis 3 — IDENTITY** | | | |
 | I1 | shatter count (linear atoms / curve) | median ≥2 | PENDING | PENDING |
 | I2 | absorption / SCR / TPP | STRETCH | PENDING | SAEBench harness |
-| I3 | chart-interp nameable ordering | ordering>0.9 | PENDING | PENDING |
+| I3 | chart-interp nameable ordering | ordering>0.9 | MISS | 0.570192374345247 |
 | | **Axis 4 — GEOMETRY** (licensed by G0) | | | |
 | G0 | hallucinated-structure GATE | ≤1 curved on nulls | PENDING | PENDING |
 | A2 | (Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect | ≥5 | PENDING | PENDING |
-| A4 | coordinate fidelity (circular corr/ordering) | >0.9 | PENDING | PENDING |
-| G_wrap | wraparound (Sun adjacent to Mon) | pass | PENDING | PENDING |
+| A4 | coordinate fidelity (circular corr/ordering) | >0.9 | MISS | 0.570192374345247 |
+| G_wrap | wraparound (Sun adjacent to Mon) | pass | MISS | False |
 | G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | PENDING | PENDING |
 | G_util | stable rank ≈ d (ARD prunes idle) | ≤ d+0.5 | PENDING | PENDING |
 | | **Axis 5 — CAUSAL** (the crown) | | | |
+| C0 | dose artifact model / scope | 35B/36B required | PENDING | REAL model qwen3-8b (layer 18); measured output KL = patched forward pass, exact next-token distribution / supporting_smoke |
+> Dose crown pending: dose artifact is not from the 35B/36B model family. Any slope/R² from this artifact is supporting smoke evidence, not the 35B claim.
 | A5 | dose slope (measured-KL on predicted-nats) | ∈[0.5,2] | PENDING | PENDING |
 | A6 | dose R² | >0.7 | PENDING | PENDING |
 | C_steer | on-target effect @ matched coherence | STRETCH | PENDING | steering_bench |
@@ -44,7 +55,7 @@ Artifacts scanned: `/Users/user/Manifold-SAE/results/run_35b`  |  figures: `/Use
 | | **Discriminator** | | | |
 | A3 | live-decoder collapse events | 0 | PENDING | PENDING |
 
-**Overall:** IN PROGRESS — metrics still PENDING.
+**Overall:** ARTIFACT SCHEMA MISS — compose/control/stability JSON is not publishable.
 
 ## EV definition & split hygiene (the two silent ways to fake, closed)
 
@@ -58,13 +69,15 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
 ## Headline figures
 
 - **Fig 1 — Pareto frontier: held-out EV vs L0 (HEADLINE)** — PENDING
-- **Fig 8 — Dose calibration: predicted nats vs measured KL (HEADLINE, ours alone)** — PENDING
+- **Fig 8 — Dose calibration: predicted nats vs measured KL (HEADLINE, ours alone)** — `figures_35b/fig8_dose_calibration.png`
+  ![8 — Dose calibration: predicted nats vs measured KL (HEADLINE, ours alone)](figures_35b/fig8_dose_calibration.png)
 - **Fig 2 — (Θ, ΔEV) scatter by atom type** — PENDING
 - **Fig 3 — Curved-atom gallery** — PENDING
 - **Fig 4 — MDL bits/token @ δ** — PENDING
 - **Fig 5 — Stable-rank + utilization** — PENDING
 - **Fig 6 — Curved-tier held-out EV lift** — PENDING
-- **Fig 7 — Probe cyclic ordering** — PENDING
+- **Fig 7 — Probe cyclic ordering** — `figures_35b/fig7_probe_ordering.png`
+  ![7 — Probe cyclic ordering](figures_35b/fig7_probe_ordering.png)
 - **Fig 9 — Hallucination-null control (G0 made visible)** — PENDING
 
 ## Raw verdict payloads
@@ -100,8 +113,24 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "reason": "COMPOSE birth log not landed"
  },
  "dose": {
-  "status": "PENDING",
-  "reason": "DOSE artifact not landed"
+  "model": "REAL model qwen3-8b (layer 18); measured output KL = patched forward pass, exact next-token distribution",
+  "dose_scope": "supporting_smoke",
+  "crown_reason": "dose artifact is not from the 35B/36B model family",
+  "fig7": "/Users/user/Manifold-SAE/figures_35b/fig7_probe_ordering.png",
+  "ordering_corr": 0.570192374345247,
+  "A4_status": "MISS",
+  "wraparound_pass": false,
+  "Gwrap_status": "MISS",
+  "I3_nameable": null,
+  "I3_status": "MISS",
+  "fig8": "/Users/user/Manifold-SAE/figures_35b/fig8_dose_calibration.png",
+  "slope": null,
+  "r2": null,
+  "A5_status": "PENDING",
+  "A6_status": "PENDING",
+  "supporting_A5_status": "PENDING",
+  "supporting_A6_status": "PENDING",
+  "status": "OK"
  },
  "fidelity": {
   "F2_status": "PENDING",
@@ -138,6 +167,14 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "tier0_train_only": true,
   "matched_currency": "actives",
   "split_policy": "whole-file (rollout/chunk-safe); no row-level split"
+ },
+ "artifact_schema": {
+  "status": "MISS",
+  "errors": [
+   "compose_per_atom.json missing",
+   "compose_per_atom_seed2.json missing",
+   "null_control.json missing"
+  ]
  }
 }
 ```

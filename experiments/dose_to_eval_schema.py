@@ -14,6 +14,8 @@ import json
 import os
 import sys
 
+import numpy as np
+
 
 def load_run(path):
     if os.path.isdir(path):
@@ -73,6 +75,16 @@ def main() -> int:
     man = run["stats"]["manifold"]
     rows = [r for r in run["rows"] if r["method"] == "manifold"]
 
+    # A degenerate run can leave the manifold aggregate empty (n==0): every dose either
+    # left the chart's validity radius or produced a below-noise KL, so no calibration
+    # point survived the fit. Emit slope/r2=None (→ A5/A6 PENDING, never faked) but still
+    # carry the raw predicted/measured cloud + the honest n_calibration_points so the miss
+    # is visible rather than silent.
+    n_cal = int(man.get("n", 0))
+    slope = man.get("log_slope") if n_cal > 0 else None
+    r2 = man.get("log_r2") if n_cal > 0 else None
+    ratio_median = man.get("ratio_median") if n_cal > 0 else None
+
     payload = dict(
         model=run["model"],
         probe_feature=feat["atom"],
@@ -84,18 +96,20 @@ def main() -> int:
         wraparound_in_order=co["wraparound_in_order"],
         predicted_nats=[r["predicted_nats"] for r in rows],
         measured_kl=[r["measured_kl"] for r in rows],
-        slope=man["log_slope"],
-        r2=man["log_r2"],
-        ratio_median=man["ratio_median"],
+        slope=slope,
+        r2=r2,
+        ratio_median=ratio_median,
+        n_calibration_points=n_cal,
         source=os.path.basename(src),
     )
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w") as fh:
         json.dump(payload, fh, indent=2)
+    sl = "None" if slope is None else f"{slope:.3f}"
+    rr = "None" if r2 is None else f"{r2:.3f}"
     print(f"[eval-schema] wrote {out_path}: model={payload['model'][:40]!r} "
           f"probe={feat['atom']} n_probe={n_probe} ordering_corr={ordering_corr:.3f} "
-          f"slope={man['log_slope']:.3f} r2={man['log_r2']:.3f} "
-          f"n_scatter={len(rows)}")
+          f"slope={sl} r2={rr} n_cal={n_cal} n_scatter={len(rows)}")
     return 0
 
 
