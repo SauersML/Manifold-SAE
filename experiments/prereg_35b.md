@@ -37,12 +37,20 @@ descriptive salience label**, never as an acceptance gate.
   gate opens; until it lands, **A2 acceptance is UNCALIBRATED → reported PENDING, never
   defaulted to Θ>1** (that default would be the very magic constant this amendment removes).
 
-**(2) A1/F2 EV tolerance "within 0.02" is a DECLARED tolerance, to be superseded by the measured
-distortion floor.** The 0.02 margin stands now as an explicit, pre-registered tolerance (its
-rationale: ~fp/estimation noise on held-out EV at N≈50k, below which a gap is not decision-
-relevant). When TORCH's distortion-floor harness lands `distortion_floor_r2`, the deciding
-comparison moves to fidelity read AT that floor (F2/F3), and 0.02 is retained only as the
-coarse EV-space sanity band. No number is loosened post-hoc; the floor only *tightens* the read.
+**(2) A1/F2/F3 margins ("within 0.02" EV, "×1.05" KL) are DECLARED a-priori tolerances, to be
+superseded by the measured distortion floor.** Rationale, fixed now: **0.02 EV margin ≈ ~1% of
+the typical L17 EV scale** (below which a held-out-EV gap is not decision-relevant at N≈50k);
+the **F3 ×1.05 KL band** is the matching multiplicative tolerance on patched-output KL. Both are
+**provisional** — when TORCH's harness lands `distortion_floor_r2`, the deciding fidelity
+comparison moves to F2/F3 read AT that floor and these coarse EV/KL-space bands are retained only
+as sanity rails. No number is loosened post-hoc; the floor only *tightens* the read.
+
+**(3) G0 mean-Θ envelope (0.5 rad) is a derived constant, not a guess.** `mean Θ < 0.5` on both
+nulls: 0.5 rad ≈ ~8% of a full circle's 2π turning — a null "atom" whose mean turning exceeded
+that would be a *real* curve, contradicting the null by construction. So 0.5 is the geometric
+line above which a matched-noise/shuffle arm would falsify its own null-ness; it is documented
+here so it is not a constants-lint item. (The per-atom acceptance itself is the q99 of 1(1); 0.5
+is the coarser aggregate-mean guard on the arm as a whole.)
 
 ---
 
@@ -72,8 +80,8 @@ else PENDING, never faked).
 | ID | Metric | Threshold | Source |
 |----|--------|-----------|--------|
 | **A1** | held-out EV vs TopK @ matched **actives** | within **0.02** below/above (declared tolerance — see **Amendment 1(2)**) | T1 + COMPOSE |
-| **F2** | **loss-recovered** `(L_ablate−L_recon)/(L_ablate−L_clean)` @ floor | hybrid ≥ TopK − **0.02** | CONTROL |
-| **F3** | **KL-patched** `KL(clean ‖ recon-patched)` @ floor | hybrid ≤ TopK × **1.05** | CONTROL |
+| **F2** | **loss-recovered** `(L_ablate−L_recon)/(L_ablate−L_clean)` @ floor | hybrid ≥ TopK − **0.02** (declared tolerance — **Amendment 1(2)**) | CONTROL |
+| **F3** | **KL-patched** `KL(clean ‖ recon-patched)` @ floor | hybrid ≤ TopK × **1.05** (declared tolerance — **Amendment 1(2)**) | CONTROL |
 | — | **distortion floor** `R²*` (quantize sweep, BSF) | *reported*; ALL fidelity read AT it | CONTROL |
 
 Fidelity in EV alone is Euclidean and prices all directions equally; the model reads them
@@ -103,7 +111,7 @@ converts "identity" into a number a linear SAE scores on too — the honest cros
 ### Axis 4 — GEOMETRIC CORRECTNESS (our axis; licensed by the null gate)
 | ID | Metric | Threshold | Source |
 |----|--------|-----------|--------|
-| **G0** | **HALLUCINATED-STRUCTURE CONTROL** — full pipeline on (i) Gaussian noise matched to real mean+cov, (ii) shuffled real data | **GATE**: accepted curved atoms (**Θ > Θ_accept**, per **Amendment 1(1)**) ≤ **1** (target 0) AND mean Θ < **0.5** on BOTH nulls; harmonic matched-null shows no spurious higher modes | CONTROL |
+| **G0** | **HALLUCINATED-STRUCTURE CONTROL** — full pipeline on (i) Gaussian noise matched to real mean+cov, (ii) shuffled real data | **GATE**: accepted curved atoms (**Θ > Θ_accept**, per **Amendment 1(1)**) ≤ **1** (target 0) AND mean Θ < **0.5** (derived — **Amendment 1(3)**) on BOTH nulls; harmonic matched-null shows no spurious higher modes | CONTROL |
 | **A2** | **(Θ, ΔEV) scatter** — the discriminating figure | ≥ **5** atoms **Θ > Θ_accept** & ΔEV>min_effect, where **Θ_accept = q99(Θ \| matched-Gaussian null through the identical pipeline)** (see **Amendment 1(1)**; Θ>1 rad is now a descriptive salience label only) | COMPOSE + CONTROL null |
 | **A4** | coordinate fidelity: circular corr(fitted t, true cyclic) / ordering | > **0.9** | DOSE |
 | **G_wrap** | **wraparound**: Sun adjacent to Mon on the chart (a line's ends are maximally far) | **pass** (cyclic first/last-probe adjacency) | DOSE |
