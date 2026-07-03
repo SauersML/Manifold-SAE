@@ -337,7 +337,7 @@ def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> d
         status = "PENDING"
     else:
         status = "ACCEPT" if n_curved_paying >= 5 else "MISS"
-    return {
+    res = {
         "status": status,
         "curved_atoms_paying": n_curved_paying,
         "theta_accept": theta_accept,
@@ -349,6 +349,30 @@ def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> d
         "delta_ev_is_heldout": bool(held_out_dev),
         "figure": _save(fig, out),
     }
+    # Consistency guard: COMPOSE precomputes its own top-level n_curved_accepted with a run-time
+    # --theta-star. That MUST equal the q99 I read from null_control.json, else its count and my
+    # recompute diverge silently. Cross-check when both are calibrated; flag any mismatch (a
+    # theta-star single-source violation) rather than trusting either number blindly.
+    compose_count = _get(compose, "n_curved_accepted", default=None)
+    prereg_gate = _get(compose, "theta_star_is_prereg_gate", default=None)
+    if compose_count is not None:
+        agree = (theta_accept is not None) and (int(compose_count) == n_curved_paying)
+        res["count_crosscheck"] = {
+            "compose_n_curved_accepted": int(compose_count),
+            "eval_recompute": n_curved_paying,
+            "agree": bool(agree),
+            "compose_theta_star_is_prereg_gate": prereg_gate,
+        }
+        if theta_accept is not None and int(compose_count) != n_curved_paying:
+            res["count_crosscheck"]["WARNING"] = (
+                "COMPOSE n_curved_accepted != EVAL recompute at null q99 — likely a theta-star "
+                "single-source mismatch (COMPOSE's --theta-star != null_control.theta_accept) or a "
+                "salience-floor/LOAO difference; do NOT trust the count until reconciled")
+        if prereg_gate is False:
+            res["count_crosscheck"]["NOTE"] = (
+                "COMPOSE used the descriptive Θ>1 label, not the null q99 gate; EVAL's status "
+                "still binds to null_control.theta_accept")
+    return res
 
 
 # ---------------------------------------------------------------------------------
@@ -1246,6 +1270,10 @@ def selftest() -> dict:
         grown_vs_joint={"grown": 0.905, "joint": 0.86},
     )
     compose["ev_baseline"] = "train_mean"
+    # COMPOSE-precomputed count at CONTROL's q99 (=synthetic theta_accept 0.9), agreeing with the
+    # EVAL recompute so the fig2 count-crosscheck exercises the AGREE path.
+    compose["n_curved_accepted"] = 5
+    compose["theta_star_is_prereg_gate"] = True
     # seed-2 clone: same atoms, subspaces slightly rotated (subspace-stable, R1 ACCEPT)
     seed2_atoms = []
     for a in atoms:

@@ -129,7 +129,13 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "min_effect_ev": 0.005,
   "threshold": ">= 5 atoms with \u0398 > \u0398_accept & \u0394EV > min_effect",
   "delta_ev_source": "heldout_loao",
-  "delta_ev_is_heldout": true
+  "delta_ev_is_heldout": true,
+  "count_crosscheck": {
+   "compose_n_curved_accepted": 5,
+   "eval_recompute": 5,
+   "agree": true,
+   "compose_theta_star_is_prereg_gate": true
+  }
  },
  "fig3": {
   "status": "OK",
