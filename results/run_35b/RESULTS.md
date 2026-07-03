@@ -51,6 +51,15 @@ TSS on the disjoint held-out split (held-out colmean is the silent-fake, rejecte
   held-out/LOAO value. _accepted_curved None-safe. All threshold constants match prereg_35b.md
   (verified vs doc for CONTROL's drift diff).
 
+## Crown ingest path — verified end-to-end (both branches)
+- Degenerate 8B (n=0): slope/r2 None → A5/A6 PENDING; ordering 0.570 → A4 MISS; weekday
+  wraparound True → G_wrap ACCEPT. (real, landed)
+- Healthy synthetic (n=60, slope 1.02, r2 0.93, ordering 0.95, weekday-wrap True):
+  A4 ACCEPT / A5 ACCEPT / A6 ACCEPT / G_wrap ACCEPT. So when DOSE re-lands the fixed crown
+  (35B or 8B with Δt→raw-activation-units), my adapter+generator produce the right cells
+  with zero further changes. Adapter now covers the non-degenerate path the self-test never
+  exercised.
+
 ## Awaiting
 - T1 `l17_t1_frontier.json` (A1, P1) — t1_run in flight on acn116.
 - COMPOSE `compose_per_atom.json` + `compose_mdl.json` (A2, I1, G_band, G_util, P2, gallery)
