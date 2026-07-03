@@ -168,6 +168,13 @@ def cyclic_ordering(H_red, widx_kept, words):
     ang = np.arctan2(xy[:, 1], xy[:, 0])                    # (W',) angle on the loop plane
     ideal = 2.0 * np.pi * np.arange(len(present)) / len(present)
     corr = max(_circ_corr(ang, ideal), _circ_corr(ang, -ideal))
+    # Spacing-robust ordering score: rank each word around the loop, map ranks to equally
+    # spaced angles, and circularly-correlate with the calendar order. This is ~1.0 for a
+    # correct cyclic sequence regardless of how (non-uniformly) the model spaces the words —
+    # raw-angle corr conflates ordering with uniform spacing and understates a good loop.
+    ranks = np.argsort(np.argsort(ang)).astype(float)
+    rank_ang = 2.0 * np.pi * ranks / len(present)
+    order_corr = max(_circ_corr(rank_ang, ideal), _circ_corr(rank_ang, -ideal))
     order_by_angle = [present[i] for i in np.argsort(ang)]
     # rotate the angle-sorted order so it starts at calendar index 0's position, then
     # check it equals the calendar sequence forward or backward (a clean wraparound).
@@ -176,6 +183,7 @@ def cyclic_ordering(H_red, widx_kept, words):
     wrap_ok = (seq == fwd) or (seq == fwd[::-1])
     gaps = np.diff(np.concatenate([np.sort(ang), np.sort(ang)[:1] + 2 * np.pi]))
     return dict(circ_corr=float(corr),
+                order_corr=float(order_corr),
                 words_present=[words[w] for w in present],
                 angles_rad=ang.tolist(),
                 order_by_angle=[words[w] for w in order_by_angle],
@@ -213,9 +221,42 @@ class LogitsLM:
         return self.module(input_ids)
 
 
+def find_decoder_layers(hf_model):
+    """Return the text decoder's ``ModuleList`` of layers, robust to nested VL models.
+
+    Plain causal LMs expose ``model.model.layers``; vision-language / conditional-gen
+    models (e.g. Qwen3.5-MoE-VL) bury the text stack under ``language_model``. We search
+    common paths, then fall back to picking the longest ``nn.ModuleList`` of decoder-like
+    blocks (attribute ``self_attn``) — the text residual stream — anywhere in the tree.
+    """
+    import torch.nn as nn
+
+    for path in ("model.layers", "model.language_model.layers",
+                 "language_model.model.layers", "model.language_model.model.layers",
+                 "model.text_model.layers", "thinker.model.layers"):
+        obj = hf_model
+        ok = True
+        for attr in path.split("."):
+            if hasattr(obj, attr):
+                obj = getattr(obj, attr)
+            else:
+                ok = False
+                break
+        if ok and isinstance(obj, nn.ModuleList) and len(obj) > 0:
+            return obj
+    best = None
+    for _name, mod in hf_model.named_modules():
+        if isinstance(mod, nn.ModuleList) and len(mod) > 0 and hasattr(mod[0], "self_attn"):
+            if best is None or len(mod) > len(best):
+                best = mod
+    if best is None:
+        raise RuntimeError("could not locate a decoder-layer ModuleList in the model")
+    return best
+
+
 def resolve_hook_module(hf_model, layer_idx):
     """Return the decoder layer whose forward output is the layer-``L`` residual."""
-    layers = hf_model.model.layers
+    layers = find_decoder_layers(hf_model)
     if layer_idx < 0 or layer_idx >= len(layers):
         raise ValueError(f"layer {layer_idx} out of range 0..{len(layers) - 1}")
     return layers[layer_idx]
@@ -509,14 +550,25 @@ def main() -> int:
     model_dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16,
                    "float32": torch.float32, "float64": torch.float64}.get(_mdtype, dtype)
     dev_map = os.environ.get("DOSE_DEVICE_MAP", "")
+
+    def _load(**kw):
+        # A causal LM loads via AutoModelForCausalLM; a vision-language conditional-gen
+        # model (Qwen3.5-MoE-VL) is not in that mapping, so fall back to the image-text
+        # class, which still returns .logits for a text-only input_ids forward.
+        try:
+            return AutoModelForCausalLM.from_pretrained(model_dir, **kw).eval()
+        except (ValueError, KeyError) as exc:
+            print(f"[model] AutoModelForCausalLM failed ({type(exc).__name__}); "
+                  f"trying AutoModelForImageTextToText", flush=True)
+            from transformers import AutoModelForImageTextToText
+            return AutoModelForImageTextToText.from_pretrained(model_dir, **kw).eval()
+
     if dev_map:
-        hf = AutoModelForCausalLM.from_pretrained(
-            model_dir, torch_dtype=model_dtype, device_map=dev_map).eval()
+        hf = _load(torch_dtype=model_dtype, device_map=dev_map)
         device = hf.get_input_embeddings().weight.device
         print(f"[model] device_map={dev_map}; input embeddings on {device}", flush=True)
     else:
-        hf = AutoModelForCausalLM.from_pretrained(
-            model_dir, torch_dtype=model_dtype).to(device).eval()
+        hf = _load(torch_dtype=model_dtype).to(device)
     for p in hf.parameters():
         p.requires_grad_(False)
     lm = LogitsLM(hf)
@@ -581,7 +633,8 @@ def main() -> int:
         widx_kept = np.asarray(widx)[kept]
         order = cyclic_ordering(H_red, widx_kept, words)
         if order is not None:
-            print(f"[{feat}] cyclic-ordering circ_corr={order['circ_corr']:.3f} "
+            print(f"[{feat}] cyclic-ordering order_corr={order['order_corr']:.3f} "
+                  f"(raw circ_corr={order['circ_corr']:.3f}) "
                   f"wraparound_in_order={order['wraparound_in_order']} "
                   f"gap_uniformity={order['gap_uniformity']:.3f} "
                   f"order={order['order_by_angle']}", flush=True)
