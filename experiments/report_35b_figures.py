@@ -743,11 +743,22 @@ def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dic
         arm_pass = (n_curved <= 1) and (mean_th < 0.5)
         passes = passes and arm_pass
         detail[key] = {"n_curved_accepted": n_curved, "mean_theta": mean_th, "pass": arm_pass}
-    harmonic_ok = _get(nc, "harmonic_null", default={})
-    higher = _get(harmonic_ok, "higher_modes_on_first_harmonic_plus_noise", default=False)
-    if higher:
+    # Harmonic matched-null sub-control: distinguish "ran and clean" from "NOT RUN". A missing
+    # result must NOT be silently credited as a pass — that would license the topology axis on a
+    # control that was never run. If absent, the arm-based gate can still PASS but the harmonic
+    # sub-claim is flagged NOT_RUN (topology/higher-mode claims remain unlicensed until it lands).
+    harmonic_ok = _get(nc, "harmonic_null", default=None)
+    higher = (None if not isinstance(harmonic_ok, dict)
+              else _get(harmonic_ok, "higher_modes_on_first_harmonic_plus_noise", default=None))
+    if higher is True:
         passes = False
-    detail["harmonic_spurious_higher_modes"] = bool(higher)
+        detail["harmonic_null_status"] = "FAIL — spurious higher modes on first-harmonic+noise"
+    elif higher is False:
+        detail["harmonic_null_status"] = "PASS — no spurious higher modes"
+    else:
+        detail["harmonic_null_status"] = ("NOT_RUN — harmonic matched-null pending; arm gate may "
+                                          "PASS but higher-mode/topology claims stay unlicensed")
+    detail["harmonic_spurious_higher_modes"] = higher
     # Acceptance-rule consistency: the null's salience_floor MUST equal COMPOSE's, else
     # null and real A2 counts are not comparable.
     if compose is not None:

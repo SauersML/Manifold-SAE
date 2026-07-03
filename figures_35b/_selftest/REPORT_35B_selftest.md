@@ -23,6 +23,7 @@ Artifact schema gate: **PASS**
   "mean_theta": 0.12,
   "pass": true
  },
+ "harmonic_null_status": "PASS \u2014 no spurious higher modes",
  "harmonic_spurious_higher_modes": false,
  "salience_floor_match": {
   "null": 0.005,
@@ -222,6 +223,7 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
     "mean_theta": 0.12,
     "pass": true
    },
+   "harmonic_null_status": "PASS \u2014 no spurious higher modes",
    "harmonic_spurious_higher_modes": false,
    "salience_floor_match": {
     "null": 0.005,
