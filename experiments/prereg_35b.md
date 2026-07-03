@@ -22,13 +22,27 @@ split hygiene. No COMPOSE/T1/CONTROL-null number has been read. This amendment t
 pre-dates every cell it touches.
 
 **(1) Curved-atom acceptance becomes null-calibrated.** The hardcoded "Θ > 1 rad" is replaced by
-`Θ_accept = q99(Θ | matched-Gaussian null run through the IDENTICAL composed pipeline)` — the
-turning a zero-curvature Gaussian ellipsoid manufactures at finite N through our own machinery.
-A real atom counts as *curved* (for A2's ≥5 count and for the G0 "accepted curved" count) only
-if its Θ exceeds this measured envelope. This (a) kills the Goodhart hole where pipeline
-flexibility manufactures Θ≈1 "curves", and (b) satisfies SPEC's no-magic-constants rule — the
-constant is now a *measured null quantile*, not a guess. **Θ > 1 rad survives only as a
-descriptive salience label**, never as an acceptance gate.
+`Θ_accept = q99(Θ over ALL ATTEMPTED births on the matched-Gaussian null run through the
+IDENTICAL composed pipeline)` — the turning a zero-curvature Gaussian ellipsoid manufactures at
+finite N through our own machinery. A real atom counts as *curved* (for A2's ≥5 count and for the
+G0 "accepted curved" count) only if its Θ exceeds this measured envelope. This (a) kills the
+Goodhart hole where pipeline flexibility manufactures Θ≈1 "curves", and (b) satisfies SPEC's
+no-magic-constants rule — the constant is now a *measured null quantile*, not a guess.
+**Θ > 1 rad survives only as a descriptive salience label**, never as an acceptance gate.
+- **Population — ATTEMPTED births, not accepted atoms (CONTROL, decisive):** q99 is taken over the
+  turning of *every birth the pipeline attempts* on the Gaussian null (accepted AND rejected), not
+  over the null's *accepted* atoms. Reason: a clean null accepts ≈0 atoms, so q99-over-accepted is
+  an empty set that collapses to 0 → A2 would be trivially satisfied (every real Θ>0 "curved"). The
+  honest envelope is "what turning does our machinery *produce/attempt* on structureless data",
+  which is strictly positive. This requires COMPOSE to log per-attempted-birth (incl. rejected) Θ
+  on the null run; CONTROL computes q99 over that pool.
+- **Fallback (declared now):** if attempted-birth Θ cannot be logged, CONTROL **OMITS**
+  `theta_accept` (never emits 0 — the schema forbids a non-positive envelope, and a 0 would be a
+  silent trivial-pass). Absent → the generator holds A2/I1/G_band/G_util at **PENDING** (an honest
+  "curved acceptance uncalibrated", not a fake pass), and the G0 gate's teeth rest entirely on the
+  **shuffled** arm + **meanΘ<0.5** + the **harmonic matched-null**. Any curved-minority evidence in
+  that regime is reported as "supported by ΔEV + the shuffled/harmonic nulls, not yet by a positive
+  Θ envelope."
 - Interaction with G0: the Gaussian-null accepted-curved count is ≤ its own 1% tail *by
   construction* (that is the definition of q99), so on the Gaussian arm G0 is definitional; the
   real teeth are the **shuffled** arm (the Gaussian-calibrated Θ_accept applied to shuffled data
