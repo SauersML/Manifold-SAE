@@ -51,7 +51,14 @@ TSS on the disjoint held-out split (held-out colmean is the silent-fake, rejecte
   held-out/LOAO value. _accepted_curved None-safe. All threshold constants match prereg_35b.md
   (verified vs doc for CONTROL's drift diff).
 
-## AMENDMENT 1 (2026-07-03, pre-results) — LIVE across doc+code+schema
+## AMENDMENT 1 chain (all pre-any-composed-read): 6b340f0 → cf0bd864 → 421defe
+- 6b340f0 initial; cf0bd864 CONTROL constants-lint (F2/F3 tolerance rationale, G0 meanΘ<0.5
+  derivation); 421defe theta_accept semantics = q99 over ALL ATTEMPTED births (accepted+rejected)
+  on the Gaussian null — NOT accepted-only (which collapses to 0 → trivial A2). Fallback: omit
+  theta_accept → A2/I1/G_band/G_util PENDING (schema forbids ≤0); G0 teeth = shuffled+meanΘ+harmonic.
+  CONTROL to pin cf0bd864/421defe; COMPOSE to log per-attempted-birth Θ (rejected incl.) on null run.
+
+## AMENDMENT 1 — LIVE across doc+code+schema
 - prereg_35b.md Amendment 1 committed **6b340f0** (BEFORE any composed artifact read).
   (1) curved-atom acceptance Θ>1 → Θ_accept = q99(Θ | matched-Gaussian null through identical
   pipeline); Θ>1 = descriptive label only. (2) A1 "within 0.02" = declared tolerance, superseded
