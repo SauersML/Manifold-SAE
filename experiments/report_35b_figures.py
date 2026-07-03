@@ -504,12 +504,23 @@ def fig6_curved_tier_ev(compose: dict | None, out: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------------
-# Figures 7 & 8 — DOSE crown: probe-circle ordering + dose calibration.
+# Figures 7 & 8 — DOSE: probe-circle ordering + dose calibration.
 # ---------------------------------------------------------------------------------
+def _is_35b_model_name(model: Any) -> bool:
+    name = str(model or "").lower()
+    return "35b" in name or "36b" in name
+
+
 def fig78_dose(dose: dict | None, out7: Path, out8: Path) -> dict:
     if not dose:
         return {"status": "PENDING", "reason": "DOSE artifact not landed"}
     res: dict[str, Any] = {}
+    model = _get(dose, "model", default=None)
+    is_35b = _is_35b_model_name(model)
+    res["model"] = model
+    res["dose_scope"] = "35b_crown" if is_35b else "supporting_smoke"
+    if not is_35b:
+        res["crown_reason"] = "dose artifact is not from the 35B/36B model family"
     # Fig 7 — probe-circle ordering
     probe_ang = _get(dose, "probe_angles", "chart_coord", default=None)
     probe_true = _get(dose, "probe_order", "true_index", default=None)
@@ -525,7 +536,6 @@ def fig78_dose(dose: dict | None, out7: Path, out8: Path) -> dict:
     res["ordering_corr"] = ordering
     res["A4_status"] = ("ACCEPT" if ordering is not None and float(ordering) > 0.9
                         else ("MISS" if ordering is not None else "PENDING"))
-    res["model"] = _get(dose, "model", default="Qwen3.6-35B")  # 8B fallback labels itself
     # G_wrap — wraparound: first/last probe adjacent on the chart (a line can't do this).
     wrap = _get(dose, "wraparound", "wraparound_pass", "wraparound_in_order", default=None)
     if wrap is None and probe_ang is not None and probe_true is not None:
@@ -563,15 +573,29 @@ def fig78_dose(dose: dict | None, out7: Path, out8: Path) -> dict:
                     label=f"slope={float(slope):.2f}, R²={float(r2):.2f}" if r2 is not None
                     else f"slope={float(slope):.2f}")
             ax.legend(frameon=False, fontsize=9, loc="upper left")
-        _style(ax, "Dose calibration: predicted nats vs measured KL",
+        title_model = model or "unknown model"
+        scope = "35B crown" if is_35b else "supporting smoke"
+        _style(ax, f"Dose calibration ({title_model}; {scope})",
                "predicted nats (steer along chart)", "measured output KL")
         res["fig8"] = _save(fig, out8)
     res["slope"] = slope
     res["r2"] = r2
-    res["A5_status"] = ("ACCEPT" if slope is not None and 0.5 <= float(slope) <= 2.0
-                        else ("MISS" if slope is not None else "PENDING"))
-    res["A6_status"] = ("ACCEPT" if r2 is not None and float(r2) > 0.7
-                        else ("MISS" if r2 is not None else "PENDING"))
+    if is_35b:
+        res["A5_status"] = ("ACCEPT" if slope is not None and 0.5 <= float(slope) <= 2.0
+                            else ("MISS" if slope is not None else "PENDING"))
+        res["A6_status"] = ("ACCEPT" if r2 is not None and float(r2) > 0.7
+                            else ("MISS" if r2 is not None else "PENDING"))
+    else:
+        res["A5_status"] = "PENDING"
+        res["A6_status"] = "PENDING"
+        res["supporting_A5_status"] = (
+            "ACCEPT" if slope is not None and 0.5 <= float(slope) <= 2.0
+            else ("MISS" if slope is not None else "PENDING")
+        )
+        res["supporting_A6_status"] = (
+            "ACCEPT" if r2 is not None and float(r2) > 0.7
+            else ("MISS" if r2 is not None else "PENDING")
+        )
     res["status"] = "OK" if (res.get("A4_status") != "PENDING") else "PENDING"
     return res
 
@@ -972,6 +996,12 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     row("G_util", "stable rank ≈ d (ARD prunes idle)", "≤ d+0.5", gutil.get("status"),
         cell(gutil.get("median_stable_rank")))
     A("| | **Axis 5 — CAUSAL** (the crown) | | | |")
+    row("C0", "dose artifact model / scope", "35B/36B required",
+        "ACCEPT" if dose.get("dose_scope") == "35b_crown" else "PENDING",
+        f"{cell(dose.get('model'))} / {cell(dose.get('dose_scope'))}")
+    if dose.get("crown_reason"):
+        A(f"> Dose crown pending: {dose['crown_reason']}. "
+          "Any slope/R² from this artifact is supporting smoke evidence, not the 35B claim.")
     row("A5", "dose slope (measured-KL on predicted-nats)", "∈[0.5,2]", dose.get("A5_status"),
         cell(dose.get("slope")))
     row("A6", "dose R²", ">0.7", dose.get("A6_status"), cell(dose.get("r2")))

@@ -76,3 +76,23 @@ def test_schema_gate_requires_seed2_provenance():
     gate = rpt._schema_gate(compose, nc, not_seed2)
     assert gate["status"] == "MISS"
     assert any("compose_per_atom_seed2.json" in e and "random_state" in e for e in gate["errors"])
+
+
+def test_8b_dose_is_supporting_smoke_not_35b_crown(tmp_path):
+    dose = {
+        "model": "Qwen3-8B",
+        "probe_order": list(range(7)),
+        "probe_angles": [0.0, 0.9, 1.8, 2.7, 3.6, 4.5, 5.4],
+        "ordering_corr": 0.97,
+        "predicted_nats": [0.0, 0.5, 1.0],
+        "measured_kl": [0.0, 0.55, 1.1],
+        "slope": 1.1,
+        "r2": 0.95,
+    }
+    res = rpt.fig78_dose(dose, tmp_path / "order.png", tmp_path / "dose.png")
+    assert res["dose_scope"] == "supporting_smoke"
+    assert res["A5_status"] == "PENDING"
+    assert res["A6_status"] == "PENDING"
+    assert res["supporting_A5_status"] == "ACCEPT"
+    assert res["supporting_A6_status"] == "ACCEPT"
+    assert "not from the 35B/36B" in res["crown_reason"]
