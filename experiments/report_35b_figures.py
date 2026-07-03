@@ -37,6 +37,7 @@ import argparse
 import json
 import math
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +75,14 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 DEFAULT_ARTIFACTS = REPO / "results" / "run_35b"
 FIGDIR = REPO / "figures_35b"
+GAM_EXAMPLES = REPO.parent / "gam" / "examples"
+if GAM_EXAMPLES.exists() and str(GAM_EXAMPLES) not in sys.path:
+    sys.path.insert(0, str(GAM_EXAMPLES))
+
+try:
+    import compose_artifact_schema as artifact_schema
+except ImportError:  # pragma: no cover - only when gam checkout is absent
+    artifact_schema = None
 
 
 def _style(ax, title: str, xlabel: str, ylabel: str) -> None:
@@ -119,6 +128,42 @@ def _get(d: dict, *keys, default=None):
         if k in d and d[k] is not None:
             return d[k]
     return default
+
+
+def _schema_gate(compose: dict | None, nc: dict | None, seed2: dict | None) -> dict:
+    """Strict readiness schema check for the landed JSON artifacts."""
+    if artifact_schema is None:
+        return {"status": "MISS", "errors": ["gam/examples/compose_artifact_schema.py unavailable"]}
+    errors: list[str] = []
+    if compose is None:
+        errors.append("compose_per_atom.json missing")
+    else:
+        try:
+            artifact_schema.validate_compose_per_atom_artifact(
+                compose, expected_random_state=0
+            )
+        except Exception as exc:
+            errors.append(f"compose_per_atom.json: {exc}")
+    if seed2 is None:
+        errors.append("compose_per_atom_seed2.json missing")
+    else:
+        try:
+            artifact_schema.validate_compose_per_atom_artifact(
+                seed2, expected_random_state=2
+            )
+        except Exception as exc:
+            errors.append(f"compose_per_atom_seed2.json: {exc}")
+    if nc is None:
+        errors.append("null_control.json missing")
+    else:
+        try:
+            floor = None if compose is None else _get(compose, "min_effect_ev")
+            artifact_schema.validate_null_control_artifact(
+                nc, compose_min_effect_ev=floor
+            )
+        except Exception as exc:
+            errors.append(f"null_control.json: {exc}")
+    return {"status": "PASS" if not errors else "MISS", "errors": errors}
 
 
 # ---------------------------------------------------------------------------------
@@ -217,7 +262,27 @@ def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> d
     # COMPOSE only has the FFI's in-sample birth ΔEV, we still score but flag it — birth
     # ΔEV is what the fit optimized, so an unflagged pass would be a Goodhart hazard.
     dev_source = str(_get(compose, "atoms", default=[{}])[0].get("delta_ev_source", "unstated"))
-    held_out_dev = "loao" in dev_source or "held" in dev_source or dev_source == "unstated"
+    held_out_dev = "loao" in dev_source or "held" in dev_source
+    missing = [
+        _get(a, "idx", "id", default=i)
+        for i, a in enumerate(atoms)
+        if _get(a, "theta", "turning", default=None) is None
+        or _get(a, "delta_ev", "loao_delta_ev", "dev", default=None) is None
+    ]
+    if missing:
+        return {
+            "status": "MISS",
+            "reason": f"atoms missing theta or held-out delta_ev: {missing}",
+            "delta_ev_source": dev_source,
+            "delta_ev_is_heldout": bool(held_out_dev),
+        }
+    if not held_out_dev:
+        return {
+            "status": "MISS",
+            "reason": f"delta_ev_source must be held-out LOAO; got {dev_source!r}",
+            "delta_ev_source": dev_source,
+            "delta_ev_is_heldout": False,
+        }
     fig, ax = _newfig()
     # Overlay the hallucination-null arms (Θ,ΔEV) so real-vs-null separation is visible:
     # real curved atoms sit upper-right; matched-noise/shuffle points cluster at Θ≈0.
@@ -590,8 +655,10 @@ def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dic
         a = _get(nc, key, default=None)
         if a is None:
             return {"status": "PENDING", "reason": f"null arm '{key}' missing"}
+        if a.get("mean_theta") is None:
+            return {"status": "MISS", "reason": f"null arm '{key}' missing mean_theta"}
         n_curved = int(_get(a, "n_curved_accepted", "n_curved", default=0))
-        mean_th = float(_get(a, "mean_theta", default=0.0))
+        mean_th = float(a["mean_theta"])
         arm_pass = (n_curved <= 1) and (mean_th < 0.5)
         passes = passes and arm_pass
         detail[key] = {"n_curved_accepted": n_curved, "mean_theta": mean_th, "pass": arm_pass}
@@ -601,8 +668,7 @@ def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dic
         passes = False
     detail["harmonic_spurious_higher_modes"] = bool(higher)
     # Acceptance-rule consistency: the null's salience_floor MUST equal COMPOSE's, else
-    # null and real A2 counts aren't apples-to-apples (a silent Goodhart hole). Flag, but
-    # don't hard-fail the geometry license on a bookkeeping mismatch — surface it loudly.
+    # null and real A2 counts are not comparable.
     if compose is not None:
         nc_floor = _get(nc, "salience_floor", default=None)
         comp_floor = _get(compose, "salience_floor", "min_effect_ev", "min_effect", default=None)
@@ -611,7 +677,11 @@ def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dic
             detail["salience_floor_match"] = {"null": float(nc_floor),
                                               "compose": float(comp_floor), "equal": match}
             if not match:
-                detail["WARNING"] = "null and real acceptance floors DIFFER — counts not comparable"
+                passes = False
+                detail["ERROR"] = "null and real acceptance floors differ; counts not comparable"
+        else:
+            passes = False
+            detail["ERROR"] = "null_control.salience_floor and compose.min_effect_ev are required"
 
     # Figure 9 — the null gate made visible: accepted curved atoms per arm.
     labels, counts, colors = [], [], []
@@ -825,6 +895,7 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     i1, gband, gutil = results["i1"], results["g_band"], results["g_util"]
     r1, r2, r3 = results["r1"], results["r2"], results["r3"]
     p2 = results["fig4"]
+    schema = results.get("artifact_schema", {})
     lines = []
     A = lines.append
     A("# REPORT_35B — First manifold dictionary on a 35B residual stream")
@@ -841,6 +912,12 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
       "causal** — dose calibration is the causal crown, not another EV number.")
     A("")
     A(f"Artifacts scanned: `{artifacts_dir}`  |  figures: `{FIGDIR}`")
+    A(f"Artifact schema gate: **{cell(schema.get('status'))}**")
+    if schema.get("errors"):
+        A("")
+        A("```json")
+        A(json.dumps(schema["errors"], indent=1))
+        A("```")
     A("")
     # --- GATE first: G0 licenses the whole geometry axis ---
     A("## GATE — Hallucinated-structure control (G0)")
@@ -932,7 +1009,9 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     # overall verdict
     hard = [a1.get("status"), a2.get("status"), a3.get("status"), dose.get("A4_status"),
             dose.get("A5_status"), dose.get("A6_status")]
-    if g0.get("status") == "FAIL":
+    if schema.get("status") == "MISS":
+        overall = "ARTIFACT SCHEMA MISS — compose/control/stability JSON is not publishable."
+    elif g0.get("status") == "FAIL":
         overall = "GATE FAILED (G0) — geometry-axis claims are VOID. See failure branch."
     elif all(s == "ACCEPT" for s in hard) and g0.get("status") == "PASS":
         overall = "GATE PASSED and all six frozen A-metrics ACCEPT — headline holds."
@@ -1011,6 +1090,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     cross = _load(artifacts_dir / "creditscope_l30.json")
     stab = _load(artifacts_dir / "stability.json")
     seed2 = _load(artifacts_dir / "compose_per_atom_seed2.json")  # seed-2 clone for R1
+    schema_gate = _schema_gate(compose, nc, seed2)
     # R3 binds to DATA's real split manifest (data/l17/) with a results-dir override.
     manifest = (_load(artifacts_dir / "manifest.json")
                 or _load(REPO / "data" / "l17" / "split_manifest.json"))
@@ -1033,6 +1113,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
         "r1": r1_stability(stab, compose, seed2),
         "r2": r2_cross_corpus(cross),
         "r3": r3_hygiene(manifest, tier0_present),
+        "artifact_schema": schema_gate,
     }
     write_report(results, artifacts_dir, report_path or (REPO / "REPORT_35B.md"))
     return results
@@ -1077,15 +1158,22 @@ def selftest() -> dict:
         atoms.append({"idx": 100 + i, "topology": "linear",
                       "theta": float(rng.uniform(0, 0.4)),
                       "delta_ev": float(rng.uniform(0.01, 0.05)),
+                      "delta_ev_source": "heldout_loao",
+                      "d_atom": 1,
                       "stable_rank": 1.0, "utilization": float(rng.uniform(0.2, 0.8))})
-    compose = {
-        "min_effect_ev": 0.005, "ev_baseline": "train_mean", "collapse_events_total": 0,
-        "operating_point": {"total_actives": 40, "heldout_ev": 0.905,
-                            "linear_only_heldout_ev": 0.88, "heldout_subsample_n": 50000},
-        "grown_vs_joint": {"grown": 0.905, "joint": 0.86},
-        "atoms": atoms,
-        "births": [{"ev": 0.80 + 0.01 * i, "collapse_events": 0} for i in range(8)],
-    }
+    op = {"total_actives": 40, "heldout_ev": 0.905,
+          "linear_only_heldout_ev": 0.88, "heldout_subsample_n": 50000}
+    births = [{"ev": 0.80 + 0.01 * i, "collapse_events": 0} for i in range(8)]
+    compose = artifact_schema.make_compose_per_atom_artifact(
+        gamfit_version=artifact_schema.MIN_GAMFIT_VERSION,
+        random_state=0,
+        min_effect_ev=0.005,
+        operating_point=op,
+        atoms=atoms,
+        births=births,
+        grown_vs_joint={"grown": 0.905, "joint": 0.86},
+    )
+    compose["ev_baseline"] = "train_mean"
     # seed-2 clone: same atoms, subspaces slightly rotated (subspace-stable, R1 ACCEPT)
     seed2_atoms = []
     for a in atoms:
@@ -1094,7 +1182,16 @@ def selftest() -> dict:
             b2, _ = np.linalg.qr(b + rng.normal(scale=0.05, size=b.shape))
             a = {**a, "subspace_basis": b2.tolist()}
         seed2_atoms.append(a)
-    compose_seed2 = {**compose, "atoms": seed2_atoms}
+    compose_seed2 = artifact_schema.make_compose_per_atom_artifact(
+        gamfit_version=artifact_schema.MIN_GAMFIT_VERSION,
+        random_state=2,
+        min_effect_ev=0.005,
+        operating_point=op,
+        atoms=seed2_atoms,
+        births=births,
+        grown_vs_joint={"grown": 0.904, "joint": 0.858},
+    )
+    compose_seed2["ev_baseline"] = "train_mean"
     # probe angles that respect cyclic order (so wraparound passes): evenly spaced ring
     ring = np.linspace(0, 2 * math.pi, 13)[:12] + rng.normal(0, 0.05, 12)
     dose = {"probe_order": list(range(12)), "probe_angles": list(ring),
@@ -1108,12 +1205,15 @@ def selftest() -> dict:
           "topk": {"loss_recovered": 0.90, "kl_patched": 0.085, "at_actives": 40}}
     _npts = lambda n: [{"theta": float(abs(rng.normal(0, 0.15))),
                         "delta_ev": float(abs(rng.normal(0, 0.002)))} for _ in range(n)]
-    nc = {"real_reference": {"n_curved_accepted": 7, "mean_theta": 1.9},
-          "gaussian_matched": {"n_curved_accepted": 0, "mean_theta": 0.08,
-                               "scatter_points": _npts(40)},
-          "shuffled": {"n_curved_accepted": 1, "mean_theta": 0.12,
-                       "scatter_points": _npts(40)},
-          "harmonic_null": {"higher_modes_on_first_harmonic_plus_noise": False}}
+    nc = artifact_schema.make_null_control_artifact(
+        salience_floor=0.005,
+        real_reference={"n_curved_accepted": 7, "mean_theta": 1.9},
+        gaussian_matched={"n_curved_accepted": 0, "mean_theta": 0.08,
+                          "scatter_points": _npts(40)},
+        shuffled={"n_curved_accepted": 1, "mean_theta": 0.12,
+                  "scatter_points": _npts(40)},
+        harmonic_null={"higher_modes_on_first_harmonic_plus_noise": False},
+    )
     stab = {"principal_angle_overlap": 0.93, "hungarian_latent_match": 0.42}
     cross = {"n_curved_recurring": 4}
     manifest = {"chunk_level_split": True, "tier0_train_only": True, "matched_currency": "actives"}

@@ -5,6 +5,7 @@
 **Meta-rules** (how to read this): (1) **Goodhart** — this is a portfolio, no cell is the objective; our own parable is the affine-PCA shortcut that once greened the OLMo gate by *being* its baseline. (2) **Effect size > significance** — at millions of tokens everything real is detectable, so evidence and salience (min-effect floors on Θ/ΔEV/dose) are separate dials. (3) **Hierarchy descriptive < predictive < causal** — dose calibration is the causal crown, not another EV number.
 
 Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures: `/Users/user/Manifold-SAE/figures_35b/_selftest`
+Artifact schema gate: **PASS**
 
 ## GATE — Hallucinated-structure control (G0)
 
@@ -22,7 +23,12 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
   "mean_theta": 0.12,
   "pass": true
  },
- "harmonic_spurious_higher_modes": false
+ "harmonic_spurious_higher_modes": false,
+ "salience_floor_match": {
+  "null": 0.005,
+  "compose": 0.005,
+  "equal": true
+ }
 }
 ```
 
@@ -206,7 +212,12 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
     "mean_theta": 0.12,
     "pass": true
    },
-   "harmonic_spurious_higher_modes": false
+   "harmonic_spurious_higher_modes": false,
+   "salience_floor_match": {
+    "null": 0.005,
+    "compose": 0.005,
+    "equal": true
+   }
   }
  },
  "i1": {
@@ -246,6 +257,10 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "tier0_train_only": true,
   "matched_currency": "actives",
   "split_policy": null
+ },
+ "artifact_schema": {
+  "status": "PASS",
+  "errors": []
  }
 }
 ```
