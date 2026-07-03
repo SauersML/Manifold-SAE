@@ -179,6 +179,8 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
                 "ev_baseline_compose": comp_base,
                 "ev_baseline_ok": bool(baseline_ok),
                 "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows",
+                "frontier_provenance": ("canonical recompute" if _get(t1, "authoritative", default=False)
+                                        else "lane-reported (not yet canonical-recomputed)"),
             }
             ax.annotate(f"gap {gap:+.3f} @ L0={h_l0:g}", (h_l0, h_ev),
                         textcoords="offset points", xytext=(8, 10),
@@ -917,6 +919,9 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     A(f"- baseline attestation — T1: `{cell(a1.get('ev_baseline_t1'))}`, "
       f"COMPOSE: `{cell(a1.get('ev_baseline_compose'))}` → "
       f"{'OK (train-mean)' if a1.get('ev_baseline_ok') else 'UNVERIFIED — confirm both use train-mean, not heldout-colmean'}")
+    A(f"- frontier provenance: {cell(a1.get('frontier_provenance'))} "
+      "(canonical = every point recomputed by `experiments/canonical_ev.py` from "
+      "decoder + held-out + Tier-0 with the origin/train-mean TSS; authoritative for the figure)")
     A(f"- split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) "
       f"train-only; held-out EV on a 50k held-out subsample.")
     A("")
@@ -953,7 +958,10 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
 
 def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
     FIGDIR.mkdir(parents=True, exist_ok=True)
-    t1 = _load(artifacts_dir / "l17_t1_frontier.json")
+    # Prefer the canonical recompute (own the EV definition) over any lane-reported
+    # frontier: canonical_ev.py rebuilds every point with the train-mean/origin TSS.
+    t1 = (_load(artifacts_dir / "l17_t1_frontier_canonical.json")
+          or _load(artifacts_dir / "l17_t1_frontier.json"))
     compose = _load(artifacts_dir / "compose_per_atom.json")
     mdl = _load(artifacts_dir / "compose_mdl.json")
     dose = _load(artifacts_dir / "dose_calibration.json")

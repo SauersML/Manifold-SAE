@@ -71,6 +71,7 @@ Artifacts scanned: `/Users/user/Manifold-SAE/figures_35b/_selftest`  |  figures:
 Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN column mean applied to held-out rows** (equivalently, the origin after subtracting the train Tier-0 mean) — **never the held-out column mean**, which leaks the first moment and inflates every absolute EV number identically. Held-out EV is measured on the disjoint whole-shard held-out split (rollout-safe), Tier-0 fit on train only.
 
 - baseline attestation — T1: `train_mean`, COMPOSE: `train_mean` → OK (train-mean)
+- frontier provenance: lane-reported (not yet canonical-recomputed) (canonical = every point recomputed by `experiments/canonical_ev.py` from decoder + held-out + Tier-0 with the origin/train-mean TSS; authoritative for the figure)
 - split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) train-only; held-out EV on a 50k held-out subsample.
 
 ## Headline figures
@@ -108,7 +109,8 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "ev_baseline_t1": "train_mean",
   "ev_baseline_compose": "train_mean",
   "ev_baseline_ok": true,
-  "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows"
+  "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows",
+  "frontier_provenance": "lane-reported (not yet canonical-recomputed)"
  },
  "fig2": {
   "status": "ACCEPT",
