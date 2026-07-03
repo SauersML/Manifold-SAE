@@ -39,7 +39,7 @@ Artifact schema gate: **MISS**
 | G0 | hallucinated-structure GATE | ≤1 curved on nulls | PENDING | PENDING |
 | A2 | (Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect | ≥5 | PENDING | PENDING |
 | A4 | coordinate fidelity (circular corr/ordering) | >0.9 | MISS | 0.570192374345247 |
-| G_wrap | wraparound (Sun adjacent to Mon) | pass | MISS | False |
+| G_wrap | wraparound (Sun adjacent to Mon) | pass | ACCEPT | True |
 | G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | PENDING | PENDING |
 | G_util | stable rank ≈ d (ARD prunes idle) | ≤ d+0.5 | PENDING | PENDING |
 | | **Axis 5 — CAUSAL** (the crown) | | | |
@@ -119,8 +119,8 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   "fig7": "/Users/user/Manifold-SAE/figures_35b/fig7_probe_ordering.png",
   "ordering_corr": 0.570192374345247,
   "A4_status": "MISS",
-  "wraparound_pass": false,
-  "Gwrap_status": "MISS",
+  "wraparound_pass": true,
+  "Gwrap_status": "ACCEPT",
   "I3_nameable": null,
   "I3_status": "MISS",
   "fig8": "/Users/user/Manifold-SAE/figures_35b/fig8_dose_calibration.png",

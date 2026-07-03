@@ -45,7 +45,25 @@
   ],
   "ordering_corr": 0.570192374345247,
   "ordering_corr_raw_angle": 0.629958440274286,
-  "wraparound_in_order": false,
+  "wraparound_in_order": true,
+  "wraparound_probe": "weekday",
+  "per_probe": {
+    "weekday": {
+      "circ_corr": 0.3940506025600896,
+      "wraparound_in_order": true,
+      "n_words": 7
+    },
+    "month": {
+      "circ_corr": 0.629958440274286,
+      "wraparound_in_order": false,
+      "n_words": 12
+    },
+    "color": {
+      "circ_corr": 0.11963887847936926,
+      "wraparound_in_order": false,
+      "n_words": 8
+    }
+  },
   "predicted_nats": [
     6.927211810060277e-20,
     6.631074513861357e-20,

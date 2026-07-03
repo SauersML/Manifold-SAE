@@ -52,6 +52,28 @@ def main() -> int:
     co = feat["cyclic_ordering"]
     n_probe = len(co["words_present"])
 
+    # G_wrap is the pre-registered KILLER test — "Sun adjacent to Mon", i.e. the WEEKDAY
+    # probe specifically (a line's ends are maximally far, so wraparound separates a chart
+    # from a ranking). A4 ordering may be read on whichever cyclic probe is best-populated,
+    # but the wraparound cell must come from weekday when present; fall back to the chosen
+    # feature only if there is no weekday probe. Per-probe blocks are emitted for audit.
+    def _find(name):
+        for a in per_atom:
+            if a.get("cyclic_ordering") and a["atom"] == name:
+                return a["cyclic_ordering"]
+        return None
+
+    wrap_co = _find("weekday") or co
+    wrap_probe = "weekday" if _find("weekday") is not None else feat["atom"]
+    per_probe = {
+        a["atom"]: {
+            "circ_corr": a["cyclic_ordering"]["circ_corr"],
+            "wraparound_in_order": a["cyclic_ordering"]["wraparound_in_order"],
+            "n_words": len(a["cyclic_ordering"]["words_present"]),
+        }
+        for a in per_atom if a.get("cyclic_ordering")
+    }
+
     # Spacing-robust ordering correlation is the authoritative A4 score. Newer runs store it
     # as order_corr; for older runs recompute it from the stored angles (rank each word around
     # the loop, circularly-correlate the ranks with calendar order — ~1.0 for a correct cycle
@@ -93,7 +115,9 @@ def main() -> int:
         probe_angles=co["angles_rad"],
         ordering_corr=float(ordering_corr),
         ordering_corr_raw_angle=co["circ_corr"],
-        wraparound_in_order=co["wraparound_in_order"],
+        wraparound_in_order=wrap_co["wraparound_in_order"],
+        wraparound_probe=wrap_probe,
+        per_probe=per_probe,
         predicted_nats=[r["predicted_nats"] for r in rows],
         measured_kl=[r["measured_kl"] for r in rows],
         slope=slope,
