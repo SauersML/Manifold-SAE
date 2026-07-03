@@ -124,7 +124,8 @@ def _get(d: dict, *keys, default=None):
 # ---------------------------------------------------------------------------------
 # Figure 1 — frontier: held-out EV vs active budget (hybrid vs TopK vs pure-linear).
 # ---------------------------------------------------------------------------------
-def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
+def fig1_frontier(t1: dict | None, compose: dict | None, out: Path,
+                  fc: dict | None = None) -> dict:
     if not t1:
         return {"status": "PENDING", "reason": "T1 frontier not landed"}
     rows = _get(t1, "frontier", "rows", default=[])
@@ -183,9 +184,17 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
                                         else "lane-reported (not yet canonical-recomputed)"),
                 "tss_mean_shift_ratio": _get(t1, "ratio_colmean_over_origin", default=None),
             }
-            ax.annotate(f"gap {gap:+.3f} @ L0={h_l0:g}", (h_l0, h_ev),
-                        textcoords="offset points", xytext=(8, 10),
-                        color=INK, fontsize=9)
+            # Annotate the model's-currency fidelity at the operating point too — F2
+            # loss-recovered is the DECIDING fidelity metric (EV is Euclidean-blind to
+            # the model's unequal reading of directions). Shown when CONTROL's data lands.
+            note = f"gap {gap:+.3f} @ L0={h_l0:g}"
+            if fc:
+                lr_h = _get(_get(fc, "hybrid", default={}), "loss_recovered")
+                lr_t = _get(_get(fc, "topk", default={}), "loss_recovered")
+                if lr_h is not None and lr_t is not None:
+                    note += f"\nloss-recovered: hybrid {float(lr_h):.3f} vs TopK {float(lr_t):.3f}"
+            ax.annotate(note, (h_l0, h_ev), textcoords="offset points", xytext=(12, -34),
+                        color=INK, fontsize=9, ha="left", va="top")
     _style(ax, "Held-out EV vs active budget — hybrid vs TopK vs linear",
            "active coefficients / token (L0)", "held-out explained variance")
     ax.legend(frameon=False, fontsize=9, loc="lower right")
@@ -1007,7 +1016,7 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
                 or _load(REPO / "data" / "l17" / "split_manifest.json"))
     tier0_present = (REPO / "data" / "l17" / "tier0.json").exists()
     results = {
-        "fig1": fig1_frontier(t1, compose, FIGDIR / "fig1_frontier.png"),
+        "fig1": fig1_frontier(t1, compose, FIGDIR / "fig1_frontier.png", fc),
         "fig2": fig2_theta_dev(compose, FIGDIR / "fig2_theta_dev.png", nc),
         "fig3": fig3_gallery(compose, FIGDIR / "fig3_gallery.png"),
         "fig4": fig4_mdl(mdl, FIGDIR / "fig4_mdl.png"),
