@@ -53,6 +53,7 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
 - baseline attestation — T1: `PENDING`, COMPOSE: `PENDING` → UNVERIFIED — confirm both use train-mean, not heldout-colmean
 - frontier provenance: PENDING (canonical = every point recomputed by `experiments/canonical_ev.py` from decoder + held-out + Tier-0 with the origin/train-mean TSS; authoritative for the figure)
 - split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) train-only; held-out EV on a 50k held-out subsample.
+- train-vs-held-out mean shift: TSS(held-out-colmean)/TSS(origin) = 0.953 (~4.7% of held-out energy), measured. The held-out per-dim mean sits this far off the train mean (rogue-dim-driven), so the colmean baseline is a *closer* null and DEFLATES EV; the canonical train-mean baseline credits the model with that variance. A real, honest detail — not a leak in our numbers.
 
 ## Headline figures
 

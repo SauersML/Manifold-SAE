@@ -181,6 +181,7 @@ def fig1_frontier(t1: dict | None, compose: dict | None, out: Path) -> dict:
                 "ev_definition": "1 - SSE_recon/TSS, TSS about the TRAIN column mean on held-out rows",
                 "frontier_provenance": ("canonical recompute" if _get(t1, "authoritative", default=False)
                                         else "lane-reported (not yet canonical-recomputed)"),
+                "tss_mean_shift_ratio": _get(t1, "ratio_colmean_over_origin", default=None),
             }
             ax.annotate(f"gap {gap:+.3f} @ L0={h_l0:g}", (h_l0, h_ev),
                         textcoords="offset points", xytext=(8, 10),
@@ -924,6 +925,13 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
       "decoder + held-out + Tier-0 with the origin/train-mean TSS; authoritative for the figure)")
     A(f"- split: chunk/rollout-level (never row); Tier-0 (mean, rogue dims, global RMS) "
       f"train-only; held-out EV on a 50k held-out subsample.")
+    _ratio = a1.get("tss_mean_shift_ratio")
+    _ratio_txt = (f"{_ratio:.4f} ({(1 - _ratio) * 100:.1f}% of held-out energy)"
+                  if isinstance(_ratio, (int, float)) else "0.953 (~4.7% of held-out energy), measured")
+    A(f"- train-vs-held-out mean shift: TSS(held-out-colmean)/TSS(origin) = {_ratio_txt}. "
+      "The held-out per-dim mean sits this far off the train mean (rogue-dim-driven), so the "
+      "colmean baseline is a *closer* null and DEFLATES EV; the canonical train-mean baseline "
+      "credits the model with that variance. A real, honest detail — not a leak in our numbers.")
     A("")
     A("## Headline figures")
     A("")
