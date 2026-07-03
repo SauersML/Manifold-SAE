@@ -50,12 +50,13 @@ Artifact schema gate: **PASS**
 | I3 | chart-interp nameable ordering | ordering>0.9 | ACCEPT | 0.96 |
 | | **Axis 4 — GEOMETRY** (licensed by G0) | | | |
 | G0 | hallucinated-structure GATE | ≤1 curved on nulls | PASS | 0 |
-| A2 | (Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect | ≥5 | ACCEPT | 5 |
+| A2 | (Θ,ΔEV): curved atoms Θ>Θ_accept(null q99) & ΔEV>min_effect | ≥5 | ACCEPT | 5 |
 | A4 | coordinate fidelity (circular corr/ordering) | >0.9 | ACCEPT | 0.96 |
 | G_wrap | wraparound (Sun adjacent to Mon) | pass | ACCEPT | True |
 | G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | ACCEPT | 0.944 |
 | G_util | stable rank ≈ d (ARD prunes idle) | ≤ d+0.5 | ACCEPT | 1.153 |
 | | **Axis 5 — CAUSAL** (the crown) | | | |
+| C0 | dose artifact model / scope | 35B/36B required | ACCEPT | Qwen3.6-35B / 35b_crown |
 | A5 | dose slope (measured-KL on predicted-nats) | ∈[0.5,2] | ACCEPT | 1.08 |
 | A6 | dose R² | >0.7 | ACCEPT | 0.94 |
 | C_steer | on-target effect @ matched coherence | STRETCH | PENDING | steering_bench |
@@ -122,9 +123,11 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
  },
  "fig2": {
   "status": "ACCEPT",
-  "curved_atoms_theta_gt1_and_paying": 5,
+  "curved_atoms_paying": 5,
+  "theta_accept": 0.9,
+  "theta_accept_source": "null q99 (Amendment 1)",
   "min_effect_ev": 0.005,
-  "threshold": ">= 5",
+  "threshold": ">= 5 atoms with \u0398 > \u0398_accept & \u0394EV > min_effect",
   "delta_ev_source": "heldout_loao",
   "delta_ev_is_heldout": true
  },
@@ -175,10 +178,11 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
   }
  },
  "dose": {
+  "model": "Qwen3.6-35B",
+  "dose_scope": "35b_crown",
   "fig7": "/Users/user/Manifold-SAE/figures_35b/_selftest/fig7_probe_ordering.png",
   "ordering_corr": 0.96,
   "A4_status": "ACCEPT",
-  "model": "Qwen3.6-35B",
   "wraparound_pass": true,
   "Gwrap_status": "ACCEPT",
   "I3_nameable": "weekday",

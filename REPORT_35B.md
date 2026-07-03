@@ -37,7 +37,7 @@ Artifact schema gate: **MISS**
 | I3 | chart-interp nameable ordering | ordering>0.9 | MISS | 0.570192374345247 |
 | | **Axis 4 — GEOMETRY** (licensed by G0) | | | |
 | G0 | hallucinated-structure GATE | ≤1 curved on nulls | PENDING | PENDING |
-| A2 | (Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect | ≥5 | PENDING | PENDING |
+| A2 | (Θ,ΔEV): curved atoms Θ>Θ_accept(null q99) & ΔEV>min_effect | ≥5 | PENDING | PENDING |
 | A4 | coordinate fidelity (circular corr/ordering) | >0.9 | MISS | 0.570192374345247 |
 | G_wrap | wraparound (Sun adjacent to Mon) | pass | ACCEPT | True |
 | G_band | 95% band coverage of held-out on-atom pts | ∈[0.90,0.98] | PENDING | PENDING |

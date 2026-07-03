@@ -257,6 +257,11 @@ def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> d
     if not atoms:
         return {"status": "PENDING", "reason": "no atoms in COMPOSE artifact"}
     min_eff = float(_get(compose, "min_effect_ev", "min_effect", default=0.0))
+    # Amendment 1(1): acceptance threshold is the null-calibrated q99, not Θ>1. Θ>1 is now a
+    # descriptive salience label. The figure is still drawn descriptively when the null
+    # envelope has not landed, but the A2 ACCEPT/MISS status stays PENDING until it does.
+    theta_accept = _theta_accept(nc)
+    theta_thresh = theta_accept if theta_accept is not None else 1.0
 
     # ΔEV provenance: the pre-registered A2 metric is HELD-OUT marginal (LOAO) ΔEV. If
     # COMPOSE only has the FFI's in-sample birth ΔEV, we still score but flag it — birth
@@ -310,22 +315,36 @@ def fig2_theta_dev(compose: dict | None, out: Path, nc: dict | None = None) -> d
         seen.add(topo)
         ax.scatter([th], [de], s=64, color=TOPO_COLOR[topo], edgecolor=SURFACE,
                    linewidth=1.2, label=lbl, zorder=3)
-        if topo == "circle" and th > 1.0 and de > min_eff:
+        if topo == "circle" and th > theta_thresh and de > min_eff:
             n_curved_paying += 1
-    ax.axvline(1.0, color=INK2, lw=1, ls="--", alpha=0.7)
+    # descriptive Θ>1 salience label (grey) + the operative null-calibrated Θ_accept (when landed)
+    ax.axvline(1.0, color=INK2, lw=1, ls=":", alpha=0.5)
+    if theta_accept is not None:
+        ax.axvline(theta_accept, color=INK, lw=1.2, ls="--", alpha=0.8)
     if min_eff > 0:
         ax.axhline(min_eff, color=INK2, lw=1, ls="--", alpha=0.7)
-    ax.annotate(f"Θ>1 & ΔEV>min_effect\ncurved atoms paying rent: {n_curved_paying}",
+    thr_lbl = (f"Θ>Θ_accept={theta_accept:.2f} (null q99)" if theta_accept is not None
+               else "Θ_accept PENDING (null q99 not landed); Θ>1 shown descriptively")
+    ax.annotate(f"{thr_lbl} & ΔEV>min_effect\ncurved atoms paying rent: {n_curved_paying}",
                 (0.98, 0.03), xycoords="axes fraction", ha="right", va="bottom",
                 color=INK, fontsize=9)
     _style(ax, "Per-atom turning Θ vs held-out marginal ΔEV",
            "fitted turning Θ (rad)", "held-out marginal ΔEV")
     ax.legend(frameon=False, fontsize=9, loc="upper left", title="topology")
+    # Amendment 1(1): without the null-calibrated Θ_accept the count is uncalibrated → PENDING
+    # (never default the acceptance to the retired Θ>1 magic constant). Figure still renders.
+    if theta_accept is None:
+        status = "PENDING"
+    else:
+        status = "ACCEPT" if n_curved_paying >= 5 else "MISS"
     return {
-        "status": "ACCEPT" if n_curved_paying >= 5 else "MISS",
-        "curved_atoms_theta_gt1_and_paying": n_curved_paying,
+        "status": status,
+        "curved_atoms_paying": n_curved_paying,
+        "theta_accept": theta_accept,
+        "theta_accept_source": "null q99 (Amendment 1)" if theta_accept is not None
+                               else "PENDING — CONTROL null envelope not landed",
         "min_effect_ev": min_eff,
-        "threshold": ">= 5",
+        "threshold": ">= 5 atoms with Θ > Θ_accept & ΔEV > min_effect",
         "delta_ev_source": dev_source,
         "delta_ev_is_heldout": bool(held_out_dev),
         "figure": _save(fig, out),
@@ -621,8 +640,22 @@ def a3_collapse(compose: dict | None) -> dict:
             "grown_vs_joint": _get(compose, "grown_vs_joint", default=None)}
 
 
-def _accepted_curved(compose: dict) -> list[dict]:
-    """Curved atoms that pay rent: circle topology, Θ>1, ΔEV>min_effect."""
+def _theta_accept(nc: dict | None) -> float | None:
+    """Amendment 1(1): the curved-atom acceptance threshold is the q99 of the Θ distribution
+    the matched-Gaussian null manufactures through the identical pipeline (a measured null
+    quantile, not the retired magic constant Θ>1). CONTROL lands it in null_control.json.
+    Returns None when the null envelope has not landed → acceptance is UNCALIBRATED and the
+    dependent cells must report PENDING (never silently fall back to Θ>1)."""
+    if not nc:
+        return None
+    v = _get(nc, "theta_accept", "theta_accept_q99", "theta_q99_null", default=None)
+    return None if v is None else float(v)
+
+
+def _accepted_curved(compose: dict, theta_accept: float) -> list[dict]:
+    """Curved atoms that pay rent: circle topology, Θ > Θ_accept (null-calibrated q99,
+    Amendment 1(1)), ΔEV>min_effect. Caller must resolve theta_accept from the null first;
+    a None threshold means uncalibrated and the caller should have returned PENDING."""
     min_eff = float(_get(compose, "min_effect_ev", "min_effect", default=0.0))
     out = []
     for a in _get(compose, "atoms", default=[]):
@@ -632,7 +665,7 @@ def _accepted_curved(compose: dict) -> list[dict]:
         de = _get(a, "delta_ev", "dev", "loao_delta_ev")
         if th is None or de is None:
             continue
-        if float(th) > 1.0 and float(de) > min_eff:
+        if float(th) > theta_accept and float(de) > min_eff:
             out.append(a)
     return out
 
@@ -732,10 +765,13 @@ def g0_null_gate(nc: dict | None, out: Path, compose: dict | None = None) -> dic
 # ---------------------------------------------------------------------------------
 # Axis 3 — I1 shatter count (analytic from Θ; empirical if COMPOSE provides it).
 # ---------------------------------------------------------------------------------
-def i1_shatter(compose: dict | None, eps: float = 0.1) -> dict:
+def i1_shatter(compose: dict | None, theta_accept: float | None = None, eps: float = 0.1) -> dict:
     if not compose:
         return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
-    atoms = _accepted_curved(compose)
+    if theta_accept is None:
+        return {"status": "PENDING",
+                "reason": "null Θ_accept (q99) not landed — curved-atom set uncalibrated (Amendment 1)"}
+    atoms = _accepted_curved(compose, theta_accept)
     if not atoms:
         return {"status": "PENDING", "reason": "no accepted curved atoms"}
     # shatter law: n ~ Θ / (2*sqrt(2*eps)) linear atoms to match one curve at rel-err eps
@@ -782,10 +818,13 @@ def _band_coverage_one(atom: dict) -> float | None:
     return float(inside.mean())
 
 
-def g_band(compose: dict | None) -> dict:
+def g_band(compose: dict | None, theta_accept: float | None = None) -> dict:
     if not compose:
         return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
-    atoms = _accepted_curved(compose)
+    if theta_accept is None:
+        return {"status": "PENDING",
+                "reason": "null Θ_accept (q99) not landed — curved-atom set uncalibrated (Amendment 1)"}
+    atoms = _accepted_curved(compose, theta_accept)
     covs = [c for a in atoms if (c := _band_coverage_one(a)) is not None]
     if not covs:
         return {"status": "PENDING",
@@ -797,10 +836,13 @@ def g_band(compose: dict | None) -> dict:
             "threshold": "coverage in [0.90, 0.98]"}
 
 
-def g_util(compose: dict | None) -> dict:
+def g_util(compose: dict | None, theta_accept: float | None = None) -> dict:
     if not compose:
         return {"status": "PENDING", "reason": "COMPOSE per-atom not landed"}
-    atoms = _accepted_curved(compose)
+    if theta_accept is None:
+        return {"status": "PENDING",
+                "reason": "null Θ_accept (q99) not landed — curved-atom set uncalibrated (Amendment 1)"}
+    atoms = _accepted_curved(compose, theta_accept)
     srs, ds = [], []
     for a in atoms:
         sr = _get(a, "stable_rank")
@@ -985,8 +1027,8 @@ def write_report(results: dict, artifacts_dir: Path, out: Path) -> None:
     A("| | **Axis 4 — GEOMETRY** (licensed by G0) | | | |")
     row("G0", "hallucinated-structure GATE", "≤1 curved on nulls", g0.get("status"),
         cell((g0.get("detail") or {}).get("gaussian_matched", {}).get("n_curved_accepted")))
-    row("A2", "(Θ,ΔEV): curved atoms Θ>1 & ΔEV>min_effect", "≥5", a2.get("status"),
-        cell(a2.get("curved_atoms_theta_gt1_and_paying")))
+    row("A2", "(Θ,ΔEV): curved atoms Θ>Θ_accept(null q99) & ΔEV>min_effect", "≥5", a2.get("status"),
+        cell(a2.get("curved_atoms_paying")))
     row("A4", "coordinate fidelity (circular corr/ordering)", ">0.9", dose.get("A4_status"),
         cell(dose.get("ordering_corr")))
     row("G_wrap", "wraparound (Sun adjacent to Mon)", "pass", dose.get("Gwrap_status"),
@@ -1137,9 +1179,9 @@ def run(artifacts_dir: Path, report_path: Path | None = None) -> dict:
                            FIGDIR / "fig8_dose_calibration.png"),
         "fidelity": fidelity_currency(fc),
         "g0": g0_null_gate(nc, FIGDIR / "fig9_null_control.png", compose),
-        "i1": i1_shatter(compose),
-        "g_band": g_band(compose),
-        "g_util": g_util(compose),
+        "i1": i1_shatter(compose, _theta_accept(nc)),
+        "g_band": g_band(compose, _theta_accept(nc)),
+        "g_util": g_util(compose, _theta_accept(nc)),
         "r1": r1_stability(stab, compose, seed2),
         "r2": r2_cross_corpus(cross),
         "r3": r3_hygiene(manifest, tier0_present),
@@ -1243,6 +1285,7 @@ def selftest() -> dict:
         shuffled={"n_curved_accepted": 1, "mean_theta": 0.12,
                   "scatter_points": _npts(40)},
         harmonic_null={"higher_modes_on_first_harmonic_plus_noise": False},
+        theta_accept=0.9,  # Amendment 1(1): null q99 envelope (synthetic) — exercises the calibrated path
     )
     stab = {"principal_angle_overlap": 0.93, "hungarian_latent_match": 0.42}
     cross = {"n_curved_recurring": 4}
