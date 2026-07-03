@@ -51,6 +51,21 @@ TSS on the disjoint held-out split (held-out colmean is the silent-fake, rejecte
   held-out/LOAO value. _accepted_curved None-safe. All threshold constants match prereg_35b.md
   (verified vs doc for CONTROL's drift diff).
 
+## AMENDMENT 1 (2026-07-03, pre-results) — LIVE across doc+code+schema
+- prereg_35b.md Amendment 1 committed **6b340f0** (BEFORE any composed artifact read).
+  (1) curved-atom acceptance Θ>1 → Θ_accept = q99(Θ | matched-Gaussian null through identical
+  pipeline); Θ>1 = descriptive label only. (2) A1 "within 0.02" = declared tolerance, superseded
+  by TORCH distortion floor.
+- Generator enforces it (Manifold-SAE **e4b2b43**): _accepted_curved / fig2 / I1 / G_band /
+  G_util read Θ_accept from null_control.json; when absent → PENDING (never default Θ>1).
+  Self-test carries synthetic theta_accept=0.9 → calibrated ACCEPT path stays green; real
+  run_35b (no null) → A2/I1/G_band/G_util correctly PENDING.
+- gam schema (**c3013a997**): optional validated `theta_accept` (positive radians) in
+  make_null_control_artifact. Additive/optional — old MSI validator ignores the extra key, so
+  CONTROL can emit it directly and my reader picks it up regardless of MSI schema sync.
+- gh identity: switched active account PCyph→SauersML (both repos are SauersML; PCyph lacked
+  write). Left SauersML active — correct for the whole fleet's SauersML/gam+Manifold-SAE work.
+
 ## Crown ingest path — verified end-to-end (both branches)
 - Degenerate 8B (n=0): slope/r2 None → A5/A6 PENDING; ordering 0.570 → A4 MISS; weekday
   wraparound True → G_wrap ACCEPT. (real, landed)
