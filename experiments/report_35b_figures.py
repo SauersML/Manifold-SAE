@@ -705,18 +705,43 @@ def fidelity_currency(fc: dict | None) -> dict:
     topk = _get(fc, "topk", default={})
     floor = _get(fc, "distortion_floor_r2", "distortion_floor", default=None)
     res: dict[str, Any] = {"distortion_floor_r2": floor}
+
+    # TORCH (falsified the quantize-recon-at-floor idea, correctly): loss_recovered/kl_patched are
+    # ALREADY in the model's currency, so re-quantizing double-counts distortion. The gate uses the
+    # RAW numbers; "read at floor" means each arm must CLEAR the floor in Euclidean R² (per-arm
+    # clears_floor / euclidean_r2 ≥ distortion_floor_r2). Amendment 1(2): the floor SUPERSEDES the
+    # coarse 0.02/1.05 margin — an arm read below the floor is below the noise floor, so its
+    # fidelity number is untrustworthy and the cell MISSes regardless of the raw comparison.
+    def _clears(arm):
+        cf = _get(arm, "clears_floor")
+        if cf is not None:
+            return bool(cf)
+        er = _get(arm, "euclidean_r2")
+        if er is not None and floor is not None:
+            return float(er) >= float(floor)
+        return None  # unknown — older emit without euclidean_r2/clears_floor
+
+    cf_h, cf_t = _clears(hyb), _clears(topk)
+    res["hybrid_clears_floor"], res["topk_clears_floor"] = cf_h, cf_t
+    below_floor = (cf_h is False) or (cf_t is False)
+    if below_floor:
+        res["floor_note"] = ("an arm's reconstruction is BELOW the distortion floor — fidelity read "
+                             "under the noise floor; floor supersedes the 0.02/1.05 margin (Amend. 1(2))")
+
     lr_h, lr_t = _get(hyb, "loss_recovered"), _get(topk, "loss_recovered")
     if lr_h is not None and lr_t is not None:
         res["loss_recovered_hybrid"] = float(lr_h)
         res["loss_recovered_topk"] = float(lr_t)
-        res["F2_status"] = "ACCEPT" if float(lr_h) >= float(lr_t) - 0.02 else "MISS"
+        raw_ok = float(lr_h) >= float(lr_t) - 0.02
+        res["F2_status"] = "MISS" if below_floor else ("ACCEPT" if raw_ok else "MISS")
     else:
         res["F2_status"] = "PENDING"
     kl_h, kl_t = _get(hyb, "kl_patched"), _get(topk, "kl_patched")
     if kl_h is not None and kl_t is not None:
         res["kl_patched_hybrid"] = float(kl_h)
         res["kl_patched_topk"] = float(kl_t)
-        res["F3_status"] = "ACCEPT" if float(kl_h) <= float(kl_t) * 1.05 else "MISS"
+        raw_ok = float(kl_h) <= float(kl_t) * 1.05
+        res["F3_status"] = "MISS" if below_floor else ("ACCEPT" if raw_ok else "MISS")
     else:
         res["F3_status"] = "PENDING"
     return res

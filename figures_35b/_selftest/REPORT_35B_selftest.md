@@ -203,6 +203,8 @@ Held-out EV = **1 − SSE_recon / TSS**, where **TSS is taken about the TRAIN co
  },
  "fidelity": {
   "distortion_floor_r2": 0.92,
+  "hybrid_clears_floor": null,
+  "topk_clears_floor": null,
   "loss_recovered_hybrid": 0.91,
   "loss_recovered_topk": 0.9,
   "F2_status": "ACCEPT",
