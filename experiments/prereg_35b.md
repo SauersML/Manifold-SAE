@@ -13,6 +13,39 @@ TopK SAE) at matched K / L0. No external software is vendored (SPEC).
 
 ---
 
+## AMENDMENT 1 — null-calibrated Θ acceptance + declared EV tolerance (2026-07-03, PRE-RESULTS)
+
+**Reason: magic-constant / Goodhart audit (CONTROL governance, lead-approved).** Committed as
+its own timestamped commit BEFORE any *composed* artifact is consumed — the only real results
+read at amendment time are the 8B dose (supporting_smoke, no bearing on these cells) and R3
+split hygiene. No COMPOSE/T1/CONTROL-null number has been read. This amendment therefore
+pre-dates every cell it touches.
+
+**(1) Curved-atom acceptance becomes null-calibrated.** The hardcoded "Θ > 1 rad" is replaced by
+`Θ_accept = q99(Θ | matched-Gaussian null run through the IDENTICAL composed pipeline)` — the
+turning a zero-curvature Gaussian ellipsoid manufactures at finite N through our own machinery.
+A real atom counts as *curved* (for A2's ≥5 count and for the G0 "accepted curved" count) only
+if its Θ exceeds this measured envelope. This (a) kills the Goodhart hole where pipeline
+flexibility manufactures Θ≈1 "curves", and (b) satisfies SPEC's no-magic-constants rule — the
+constant is now a *measured null quantile*, not a guess. **Θ > 1 rad survives only as a
+descriptive salience label**, never as an acceptance gate.
+- Interaction with G0: the Gaussian-null accepted-curved count is ≤ its own 1% tail *by
+  construction* (that is the definition of q99), so on the Gaussian arm G0 is definitional; the
+  real teeth are the **shuffled** arm (the Gaussian-calibrated Θ_accept applied to shuffled data
+  must still yield ≤1 accepted) plus the harmonic matched-null (no spurious higher modes) and
+  mean Θ < 0.5. CONTROL delivers `theta_accept` (the q99 value) in `null_control.json` when the
+  gate opens; until it lands, **A2 acceptance is UNCALIBRATED → reported PENDING, never
+  defaulted to Θ>1** (that default would be the very magic constant this amendment removes).
+
+**(2) A1/F2 EV tolerance "within 0.02" is a DECLARED tolerance, to be superseded by the measured
+distortion floor.** The 0.02 margin stands now as an explicit, pre-registered tolerance (its
+rationale: ~fp/estimation noise on held-out EV at N≈50k, below which a gap is not decision-
+relevant). When TORCH's distortion-floor harness lands `distortion_floor_r2`, the deciding
+comparison moves to fidelity read AT that floor (F2/F3), and 0.02 is retained only as the
+coarse EV-space sanity band. No number is loosened post-hoc; the floor only *tightens* the read.
+
+---
+
 ## Meta-rules (bake into every reading of this scorecard)
 
 1. **Goodhart — no single metric is the objective.** This is a *portfolio*; thresholds
@@ -38,7 +71,7 @@ else PENDING, never faked).
 ### Axis 1 — FIDELITY (preserves what the model USES)
 | ID | Metric | Threshold | Source |
 |----|--------|-----------|--------|
-| **A1** | held-out EV vs TopK @ matched **actives** | within **0.02** below/above | T1 + COMPOSE |
+| **A1** | held-out EV vs TopK @ matched **actives** | within **0.02** below/above (declared tolerance — see **Amendment 1(2)**) | T1 + COMPOSE |
 | **F2** | **loss-recovered** `(L_ablate−L_recon)/(L_ablate−L_clean)` @ floor | hybrid ≥ TopK − **0.02** | CONTROL |
 | **F3** | **KL-patched** `KL(clean ‖ recon-patched)` @ floor | hybrid ≤ TopK × **1.05** | CONTROL |
 | — | **distortion floor** `R²*` (quantize sweep, BSF) | *reported*; ALL fidelity read AT it | CONTROL |
@@ -70,8 +103,8 @@ converts "identity" into a number a linear SAE scores on too — the honest cros
 ### Axis 4 — GEOMETRIC CORRECTNESS (our axis; licensed by the null gate)
 | ID | Metric | Threshold | Source |
 |----|--------|-----------|--------|
-| **G0** | **HALLUCINATED-STRUCTURE CONTROL** — full pipeline on (i) Gaussian noise matched to real mean+cov, (ii) shuffled real data | **GATE**: accepted curved atoms ≤ **1** (target 0) AND mean Θ < **0.5** on BOTH nulls; harmonic matched-null shows no spurious higher modes | CONTROL |
-| **A2** | **(Θ, ΔEV) scatter** — the discriminating figure | ≥ **5** atoms Θ>1 rad & ΔEV>min_effect | COMPOSE |
+| **G0** | **HALLUCINATED-STRUCTURE CONTROL** — full pipeline on (i) Gaussian noise matched to real mean+cov, (ii) shuffled real data | **GATE**: accepted curved atoms (**Θ > Θ_accept**, per **Amendment 1(1)**) ≤ **1** (target 0) AND mean Θ < **0.5** on BOTH nulls; harmonic matched-null shows no spurious higher modes | CONTROL |
+| **A2** | **(Θ, ΔEV) scatter** — the discriminating figure | ≥ **5** atoms **Θ > Θ_accept** & ΔEV>min_effect, where **Θ_accept = q99(Θ \| matched-Gaussian null through the identical pipeline)** (see **Amendment 1(1)**; Θ>1 rad is now a descriptive salience label only) | COMPOSE + CONTROL null |
 | **A4** | coordinate fidelity: circular corr(fitted t, true cyclic) / ordering | > **0.9** | DOSE |
 | **G_wrap** | **wraparound**: Sun adjacent to Mon on the chart (a line's ends are maximally far) | **pass** (cyclic first/last-probe adjacency) | DOSE |
 | **G_band** | **band coverage**: 95% band contains fraction of held-out on-atom points | coverage ∈ **[0.90, 0.98]** (target 0.95) | COMPOSE |
