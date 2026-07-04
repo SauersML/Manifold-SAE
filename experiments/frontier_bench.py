@@ -78,7 +78,7 @@ def _zipf_weights(n: int, s: float) -> np.ndarray:
 
 def make_dgp(kind: str, *, p: int, n: int, n_concepts: int, active_mean: float = 4.0,
              firing_tail: str = "zipf", zipf_s: float = 1.2, noise_std: float = 0.05,
-             harmonics: int = 1, rotate: bool = True, seed: int = 0) -> dict:
+             harmonics: int = 1, rotate: bool = True, exactly: int = 0, seed: int = 0) -> dict:
     """Plant ``n_concepts`` concepts in R^p and sample ``n`` tokens.
 
     kind="curved": each concept is a circle (1-D closed curve) in a random 2-D plane
@@ -94,14 +94,25 @@ def make_dgp(kind: str, *, p: int, n: int, n_concepts: int, active_mean: float =
     """
     rng = np.random.default_rng(seed)
     if firing_tail == "zipf":
-        pfire = _zipf_weights(n_concepts, zipf_s)
-        pfire = np.clip(pfire / pfire.sum() * active_mean, 0.0, 1.0)
+        weights = _zipf_weights(n_concepts, zipf_s)
     elif firing_tail == "uniform":
-        pfire = np.full(n_concepts, min(1.0, active_mean / n_concepts))
+        weights = np.full(n_concepts, 1.0 / n_concepts)
     else:
         raise ValueError(f"unknown firing_tail {firing_tail!r}")
 
-    fire = rng.random((n, n_concepts)) < pfire[None, :]
+    if exactly and exactly > 0:
+        # EXACTLY `exactly` distinct concepts per token, drawn by heavy-tailed weight.
+        # This matches the top-k SAE's assumption (no pure-noise 0-active rows, no
+        # overflow multi-active rows) -- the regime where the manifold fit converges.
+        # WHICH concepts fire stays heavy-tailed (the untested firing-frequency axis).
+        fire = np.zeros((n, n_concepts), dtype=bool)
+        k_pick = min(exactly, n_concepts)
+        for i in range(n):
+            pick = rng.choice(n_concepts, size=k_pick, replace=False, p=weights)
+            fire[i, pick] = True
+    else:
+        pfire = np.clip(weights * active_mean, 0.0, 1.0)
+        fire = rng.random((n, n_concepts)) < pfire[None, :]
     if kind == "curved":
         bases = rng.standard_normal((n_concepts, 2 * harmonics, p))
         intrinsic, extrinsic = 1, 2 * harmonics
@@ -451,7 +462,7 @@ def run(args) -> dict:
     dgp = make_dgp(args.dgp, p=args.p, n=args.n, n_concepts=args.concepts,
                    active_mean=args.active_mean, firing_tail=args.firing_tail,
                    zipf_s=args.zipf_s, noise_std=args.noise, harmonics=args.harmonics,
-                   rotate=not args.no_rotate, seed=args.seed)
+                   rotate=not args.no_rotate, exactly=args.exactly, seed=args.seed)
     train, test = split_scale(dgp["X"], test_frac=args.test_frac, seed=args.seed + 1)
     ambient_p = train.shape[1]
     train, test, fit_dim = pca_whiten(train, test, args.pca_dim)
@@ -528,7 +539,11 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--n", type=int, default=40000)
     ap.add_argument("--concepts", type=int, default=24)
     ap.add_argument("--active", type=int, default=4, help="routing sparsity s (L0) requested per token")
-    ap.add_argument("--active-mean", type=float, default=4.0, help="expected #concepts firing per token in the DGP")
+    ap.add_argument("--active-mean", type=float, default=4.0, help="expected #concepts firing per token (Bernoulli DGP)")
+    ap.add_argument("--exactly", type=int, default=0,
+                    help="if >0, EXACTLY this many concepts fire per token (heavy-tailed which ones); "
+                         "matches the top-k SAE assumption -- no 0-active noise rows, no overflow. Use 1 "
+                         "for the clean single-active regime where the manifold fit converges.")
     ap.add_argument("--firing-tail", choices=["zipf", "uniform"], default="zipf")
     ap.add_argument("--zipf-s", type=float, default=1.2)
     ap.add_argument("--noise", type=float, default=0.05)
