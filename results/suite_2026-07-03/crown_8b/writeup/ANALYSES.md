@@ -39,6 +39,35 @@ does establish: metric ≫ no-metric (6× absolute calibration gap), and the cha
 path-integral error does not grow with dt (0.163 small-dt → 0.132 at dt>1.5 rad),
 i.e. it stays calibrated through the wrap. The curvature-error regime needs larger arcs.
 
+## Global calibration: the forecast does not drift with arc length
+
+The forecast-hierarchy check above establishes that base-point Fisher does not *break*
+at large dose. The complementary, positive finding is that the *chart's own* forecast
+stays calibrated as the edit sweeps the full circle, not just locally.
+
+Regressing the manifold arm's per-edit calibration against absolute arc length |Δt|
+(n=168 manifold cells, |Δt| ranging 0.019 → 3.052 rad — nearly the full π half-circle):
+
+```
+signed log(measured/predicted)  vs |Δt| :  slope = +0.0015   (essentially flat)
+|log(measured/predicted)|       vs |Δt| :  slope = -0.0489   (error mildly DECREASES with dt)
+```
+
+Neither slope is a drift toward miscalibration: the signed bias is flat to three
+decimals and the magnitude of the error, if anything, shrinks as the move grows. So an
+edit that wraps ~97% of the circle (3.05 rad) is forecast as well as a 0.02-rad nudge —
+the path integral of the metric along the arc is the right object, and it does not
+accumulate error along the way. This is the global counterpart to the local
+within-validity result (n=7, ratio 1.057).
+
+Note on the reported dose-response coefficient: the fleet summary cites a
+dose-response coefficient ≈0.033 for the 8B chart's global calibration. That specific
+value is **not reproduced by the two regressions above** (I get +0.0015 signed /
+−0.0489 absolute against |Δt|); it is likely a different regressor (e.g. against
+predicted nats, or a per-fraction fit) computed MSI-side. Flagged as MSI-only /
+not-locally-verified. The substantive, locally-verified claim — calibration does not
+degrade with arc length — holds under both regressions here.
+
 ## Tangent-column units bug
 
 At dt→0 the tangent and path-integral forecasts must coincide; the data shows
