@@ -83,15 +83,36 @@ small-K EV-per-atom + bits).
 > conventions on one axis. Absolute EVs are convention-dependent until the unbiased
 > recompute confirms replication.
 
-**Synthetic massive-p frontier (in flight on MSI, curved vs same-lane linear):**
+**Synthetic frontier — the honest road, including a diagnosed dead end.**
+
+Getting a *fair* curved-vs-linear synthetic frontier took two corrections, both recorded
+here because they are the kind of thing a reviewer should see us catch ourselves:
+
+1. **Multi-active DGP broke the fit (not curvature).** A first-round DGP with independent
+   Bernoulli concept firing (`active_mean=4`, and even `active_mean≈1`) produces ~30%
+   pure-noise (0-active) and ~27% multi-active tokens. A top-1 manifold SAE cannot fit
+   that mixture: held-out EV collapsed to ~0.2–0.25 and went *negative* at larger K
+   (`synth_p48_*.json`, `verdicts_p48_multiactive.md`). Proof this was the fit and not the
+   data: on the identical data a **linear PCA rank-3 reconstruction reaches EV 0.73**
+   (rank-6 → 0.995). The fix is `--exactly 1` (draw exactly one concept per token by
+   heavy-tailed weight — matches the SAE's top-1 assumption; WHICH concept fires stays
+   heavy-tailed). This is the regime where the manifold fit converges (standalone EV 0.99).
+
+2. **Scale wall.** The manifold REML lane (`sae_manifold_fit`) is a small-p / small-K
+   tool: raw p≥256 times out (>1200 s/fit) and p=1024 OOMs. Fix = `--pca-dim` (train-PCA-
+   whiten to the informative subspace — the scale runs' PCA-128 recipe), so *ambient* p
+   can be ≥1024 (data richness) while the SAE operates on a feasible `fit_dim`, priced at
+   that dimension in the FLOP model.
+
+**Clean single-active frontier (in flight, checkpointed):**
 
 | job | what | out |
 |---|---|---|
-| `12501065` | calibration p=256 N=6k K={8,24} | `scratch/fr_calib_p256.json` |
-| `12501080` | p=48  N=8k  K={6,12,18,24}, curved+linear DGP | `synth_p48_{curved,linear}.json` |
-| `12501209` | p=256 N=4k  K={8,16,24,32}, curved+linear DGP | `synth_p256_{curved,linear}.json` |
-| `12501212` | p=1024 N=2.5k K={8,16,24,32}, curved+linear DGP | `synth_p1024_{curved,linear}.json` |
+| `12515799` | p=24 raw, exactly-1, K={4,6,8,12}, curved-DGP (convergence check) | `exact_p24_curved.json` |
+| `12515810` | p=48 raw, exactly-1, K={6,10,16,24}, curved+linear DGP | `exact_p48_{curved,linear}.json` |
+| `12515811` | **ambient p=1024**, PCA-24, exactly-1, heavy-tailed, K={6,10,16,24}, curved+linear DGP | `exact_p1024_{curved,linear}.json` |
 
-Verdicts (EV-at-matched-FLOP, bits crossover, pure-linear overhead) are computed by
-`experiments/frontier_analyze.py` and land here as each job completes. A small local
-`p=16` curved-vs-linear frontier is included as an immediately-reproducible smoke.
+Each fit checkpoints its JSON, so partial frontiers survive OOM/timeout. Finalize with
+`bash collect.sh` then read `verdicts_*.md` (EV-at-matched-FLOP, bits crossover, and the
+pure-linear overhead line). Superseded first-round artifacts (`synth_p*`) are kept as the
+honest record of the multi-active dead end.
