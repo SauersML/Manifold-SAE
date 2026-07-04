@@ -1,0 +1,8 @@
+=== 2026-07-03T20:20:50-05:00 host=acn01 gamfit frame-health capacity sweep ===
+[frame_health] gamfit 0.1.248; loading 40000 tokens acts_L17
+[frame_health] X = (40000, 2048), ||mean||=4.73e-05 (should be ~0)
+[frame_health] G=  2000 K=  4000 orth_dev(max)=3.77e-08 sr(mean/min)=1.441/1.031 healthy=1.000 dead=0.000 EV=0.7073 wall=427.8s
+[frame_health] G=  8000 K= 16000 orth_dev(max)=3.77e-08 sr(mean/min)=1.537/1.022 healthy=1.000 dead=0.000 EV=0.9057 wall=1420.1s
+[frame_health] G= 16000 K= 32000 orth_dev(max)=3.61e-08 sr(mean/min)=1.638/1.027 healthy=1.000 dead=0.000 EV=0.9895 wall=3276.8s
+[frame_health] wrote /projects/standard/hsiehph/sauer354/scratch/t1_frame_health_12484068.json
+=== DONE rc=0 2026-07-03T21:46:18-05:00 ===

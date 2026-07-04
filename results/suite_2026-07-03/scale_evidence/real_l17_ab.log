@@ -1,0 +1,9 @@
+gamfit commit 6f89ebf84c34f6a51eb7235c42beeb6fc7e25e37
+WARNING: Target directory /projects/standard/hsiehph/sauer354/scratch/pydeps_st/safetensors-0.8.0.dist-info already exists. Specify --upgrade to force replacement.
+WARNING: Target directory /projects/standard/hsiehph/sauer354/scratch/pydeps_st/safetensors already exists. Specify --upgrade to force replacement.
+rce_kw: True
+gamfit 0.1.248
+loaded acts (400868, 2048) from 200 rollouts in 10s
+Xtr (150000, 2048) Xte (50000, 2048) p=2048
+=== stagewise rank_charge=True (honest charge) ===
+[2026-07-03T21:22:29.418] error: *** JOB 12483524 ON acn66 CANCELLED AT 2026-07-03T21:22:29 DUE to SIGNAL Terminated ***

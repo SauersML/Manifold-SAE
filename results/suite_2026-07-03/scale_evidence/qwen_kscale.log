@@ -1,0 +1,18 @@
+=== manifest venv=/projects/standard/hsiehph/sauer354/gamfit-0.1.248-6f89ebf8-venv commit=6f89ebf8 ===
+gamfit 0.1.248 rce= True
+===== ARM A: DENSE p=2048 (width wall — expect timeout/OOM; short cap) =====
+[driver] K=2 n_tokens=2000 pca_dim=0 ...
+[driver] K=2 -> {"k_target": 2, "status": "TIMEOUT", "wall_s": 600, "driver_wall_s": 600.2}
+[driver] K=2 hit the wall — stopping escalation.
+
+curve -> /projects/standard/hsiehph/sauer354/scratch/qwen_kscale_12484070/dense/qwen_curve.jsonl
+===== ARM B: PCA-REDUCED p=128 (tractable real measurement — tiered lane) =====
+[driver] K=2 n_tokens=4000 pca_dim=128 ...
+[driver] K=2 -> {"k_target": 2, "n": 4000, "p": 128, "status": "OK", "k_grown": 3, "births_accepted": 2, "births_rejected": 0, "n_distinct": 2, "mu_hat_max": 0.974, "terminal_ev": 0.1401, "stopped_reason": "max_births", "wall_s": 933.3, "s_per_birth": 466.64, "n_iter": 64, "rss_mb": 3444.4, "driver_wall_s": 940.5}
+[driver] K=4 n_tokens=4000 pca_dim=128 ...
+[driver] K=4 -> {"k_target": 4, "status": "TIMEOUT", "wall_s": 1800, "driver_wall_s": 1800.3}
+[driver] K=4 hit the wall — stopping escalation.
+
+curve -> /projects/standard/hsiehph/sauer354/scratch/qwen_kscale_12484070/pca128/qwen_curve.jsonl
+=== CURVES: /projects/standard/hsiehph/sauer354/scratch/qwen_kscale_12484070/dense/qwen_curve.jsonl , /projects/standard/hsiehph/sauer354/scratch/qwen_kscale_12484070/pca128/qwen_curve.jsonl ===
+=== QWEN_KSCALE DONE Fri Jul  3 21:16:33 CDT 2026 ===

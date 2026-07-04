@@ -1,0 +1,44 @@
+[
+  {
+    "n_blocks": 2000,
+    "block_size": 2,
+    "K_capacity": 4000,
+    "max_orthonormality_dev": 3.772597756412921e-08,
+    "mean_orthonormality_dev": 5.3715515862263396e-09,
+    "stable_rank_mean": 1.4412753711342812,
+    "stable_rank_min": 1.0314815044403076,
+    "stable_rank_frac_healthy_ge_half_b": 1.0,
+    "utilization_mean": 0.0005000000018299033,
+    "frac_dead_blocks": 0.0,
+    "explained_variance": 0.7072770359327769,
+    "wall_s": 427.783828496933
+  },
+  {
+    "n_blocks": 8000,
+    "block_size": 2,
+    "K_capacity": 16000,
+    "max_orthonormality_dev": 3.7729821267262764e-08,
+    "mean_orthonormality_dev": 5.193357650117288e-09,
+    "stable_rank_mean": 1.5371591764986514,
+    "stable_rank_min": 1.0220264196395874,
+    "stable_rank_frac_healthy_ge_half_b": 1.0,
+    "utilization_mean": 0.00012500000089539753,
+    "frac_dead_blocks": 0.0,
+    "explained_variance": 0.9056558227482489,
+    "wall_s": 1420.0981438159943
+  },
+  {
+    "n_blocks": 16000,
+    "block_size": 2,
+    "K_capacity": 32000,
+    "max_orthonormality_dev": 3.6065996855683125e-08,
+    "mean_orthonormality_dev": 5.271530562298896e-09,
+    "stable_rank_mean": 1.638289147913456,
+    "stable_rank_min": 1.0274184942245483,
+    "stable_rank_frac_healthy_ge_half_b": 1.0,
+    "utilization_mean": 6.249999968713383e-05,
+    "frac_dead_blocks": 0.0,
+    "explained_variance": 0.9895376755024399,
+    "wall_s": 3276.7708377838135
+  }
+]

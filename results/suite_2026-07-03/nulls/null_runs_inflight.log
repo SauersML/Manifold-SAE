@@ -1,0 +1,5 @@
+[compose] applied Tier-0 from /projects/standard/hsiehph/sauer354/msae_l17/tier0.json (scale: scalar mean|scale|=0.07099)
+[compose] X_train (200000, 2048), X_heldout (201169, 2048)
+===SHUF===
+[compose] applied Tier-0 from /projects/standard/hsiehph/sauer354/msae_l17/tier0.json (scale: scalar mean|scale|=0.07099)
+[compose] X_train (200000, 2048), X_heldout (201169, 2048)
