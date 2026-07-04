@@ -60,16 +60,28 @@ the sweep.
 
 ## Results
 
-**Real 35B L17 (block lane, DONE)** — `real_l17_block.json`, `frontier_real_l17_block.png`.
-Measured block-sparse EV rises 0.707 → 0.906 → 0.990 across K∈{4k,16k,32k} capacity
-(2k/8k/16k blocks), 0 dead blocks, L0 = 2 blocks (4 coords) / token. At matched
-distortion the **dictionary term dominates description length** (~7,000 bits/token at
-16k blocks, `K·block·p·16 / 150k` tokens): the massive-K block dictionary buys EV with
-enormous per-token bits, which is exactly the regime where a *fewer-atom* curved code
-would win. But the curved (manifold REML) lane is a **small-K tool** — ~70 s at p=12,
->6 min for a single p=256/N=4–6k/K=8 fit on 16 cores — so it does not reach K in the
-thousands with the current solver. Honest verdict: **block and curved lanes are
-complementary** (block owns massive-K coverage; curved owns small-K EV-per-atom + bits).
+**Real 35B L17 (block lane, DONE — EVs lifted from frame-health, see caveats).**
+`real_l17_block.json`, `frontier_real_l17_block.png`. Block-sparse EV rises
+0.707 → 0.906 → 0.990 across K∈{4k,16k,32k} capacity (2k/8k/16k blocks), 0 dead blocks,
+L0 = 2 blocks (4 coords) / token. At matched distortion the **dictionary term dominates
+description length** (~7,000 bits/token at 16k blocks, `K·block·p·16 / 150k` tokens): the
+massive-K block dictionary buys EV with enormous per-token bits — exactly the regime a
+*fewer-atom* curved code would win. But the curved (manifold REML) lane is a **small-K,
+small-p tool** — ~70 s at p=12, but timing out (>15 min/fit) at p≥256 and OOM at p=1024
+— so it does not reach K in the thousands with the current solver. Honest verdict:
+**block and curved lanes are complementary** (block owns massive-K coverage; curved owns
+small-K EV-per-atom + bits).
+
+> **Caveats (do not bury; flagged by ATLAS2).** These EVs are *lifted* from the
+> frame-health run, not re-fit here, so two comparability risks ride along: (1) the
+> leading ~100k rows of `L17_train.f32.npy` are a **biased/ordered slice** (colmean ~15.2
+> vs ~0.1 random) — if frame-health trained on leading-N, the EVs sit on a biased slice;
+> an unbiased seeded-random-subsample recompute is owed (coordinate with ATLAS2), and
+> whether the EVs replicate is a *finding*, not an assumption. (2) `tier0.json`'s mean is
+> **stale** (~22% of energy is a spurious constant offset); tier0-zero EVs are inflated
+> and NOT comparable — use `tier0_recentered.json` for any recompute and never mix
+> conventions on one axis. Absolute EVs are convention-dependent until the unbiased
+> recompute confirms replication.
 
 **Synthetic massive-p frontier (in flight on MSI, curved vs same-lane linear):**
 

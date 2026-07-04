@@ -436,6 +436,21 @@ def run(args) -> dict:
     data_npz = scratch / "data.npz"
     np.savez(data_npz, train=train, test=test)
 
+    def _checkpoint(res_list, d2):
+        """Persist partial frontier after every fit so a late OOM/timeout keeps points."""
+        payload = {"harness": "frontier_bench", "status": "in_progress",
+                   "dgp": {k: (v if not isinstance(v, np.ndarray) else None) for k, v in dgp.items()
+                           if k not in ("X", "fire", "freq")},
+                   "config": {k: getattr(args, k) for k in
+                              ("dgp", "p", "n", "concepts", "active", "active_mean", "firing_tail",
+                               "zipf_s", "noise", "harmonics", "k", "lanes", "epochs", "n_iter",
+                               "param_bits", "seed", "test_frac")},
+                   "matched_distortion_delta2": d2, "results": res_list}
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        tmp = str(args.out) + ".tmp"
+        Path(tmp).write_text(json.dumps(payload, indent=2))
+        os.replace(tmp, args.out)
+
     results = []
     for lane in args.lanes:
         for K in args.k:
@@ -445,8 +460,9 @@ def run(args) -> dict:
             ok = r.get("ok")
             print(f"[{lane:16s} K={K:5d}] ok={ok} ev={r.get('heldout_ev')} "
                   f"L0={r.get('mean_l0')} infer_macs={r.get('flops',{}).get('infer_macs_per_token')} "
-                  f"{'' if ok else r.get('error','')}", flush=True)
+                  f"fit_s={r.get('fit_seconds')} {'' if ok else r.get('error','')}", flush=True)
             results.append(r)
+            _checkpoint(results, float("nan"))          # partial persist after each fit
 
     # matched-distortion delta2: the best held-out MSE reached by ANY lane (all lanes
     # must be able to reach it) -- the common floor at which we price bits.

@@ -1,0 +1,54 @@
+{
+  "config": {
+    "dgp": "curved",
+    "p": 48,
+    "n": 1500,
+    "concepts": 12,
+    "active": 4,
+    "active_mean": 4.0,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "noise": 0.05,
+    "harmonics": 1,
+    "k": [
+      8,
+      16,
+      24,
+      32
+    ],
+    "lanes": [
+      "curved",
+      "manifold_linear"
+    ],
+    "epochs": 30,
+    "n_iter": 8,
+    "param_bits": 16.0,
+    "seed": 0,
+    "test_frac": 0.2
+  },
+  "matched_distortion_delta2": 0.0118094361791217,
+  "ev_matched_flop_vs_block": {
+    "available": false,
+    "reason": "missing lane rows (curved:3 linear:0)"
+  },
+  "ev_matched_flop_vs_samelane": {
+    "available": true,
+    "lane_a": "curved",
+    "lane_b": "manifold_linear",
+    "min_delta_ev": -0.3223175025317373,
+    "at_infer_macs": 3456.0,
+    "mean_delta_ev": -0.1872440974379273,
+    "curved_never_loses": false,
+    "tol": 0.005,
+    "flop_lo": 2988.0,
+    "flop_hi": 3456.0
+  },
+  "bits_matched_ev": [],
+  "pure_linear_overhead": {
+    "ev_matched_flop": {
+      "available": false,
+      "reason": "missing lane rows (curved:3 linear:0)"
+    },
+    "note": "on a linear DGP, min_delta_ev is the EV the curved lane gives up; positive delta_bits at matched EV is the bit overhead."
+  }
+}

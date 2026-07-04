@@ -21,12 +21,28 @@ Conventions (documented, not hidden):
     needs the per-token routing dump (not in frame_health); flagged as owed.
 
 Curved-refinement feasibility at massive K: the manifold REML lane fits in ~O(minutes)
-at K~10 (measured: ~70 s at p=12, and >5 min at p=256/N=6k/K=24 on a 16-core node). It
+at K~10 (measured: ~70 s at p=12, and >15 min / timeout at p>=256 on a 16-core node). It
 does not reach K in the thousands with the current solver -- a single K=4000 curved fit
 extrapolates to days. So on real 35B at K in {4k,16k,32k} the block lane is the only
 feasible tool; curved refinement's per-atom efficiency is a *small-K* property (see the
 synthetic frontier). We report that complementarity as the honest result, not a curved
 number we cannot produce.
+
+PROVENANCE + TWO CAVEATS WE DO NOT BURY (flagged by the ATLAS2 lane):
+  These EVs are LIFTED from the scale_evidence frame-health run; this script does not
+  re-fit the block lane. Two comparability risks therefore ride along and are stamped
+  into the output payload:
+  (1) BIASED SLICE. The leading ~100k rows of $ROOT/msae_l17/L17_train.f32.npy are an
+      ordered/biased draw (post-tier0 column mean ~15.2 vs ~0.1 for a random draw over
+      all ~1.2M rows). If the frame-health run trained on leading-N rows, its EVs sit on
+      a biased slice. An unbiased, seeded random subsample across all rows (ATLAS2's fix)
+      is owed; whether the EVs replicate on that draw is a finding to report, not assume.
+  (2) MEAN CONVENTION. tier0.json's stored mean is stale vs L17_train.f32.npy (~22% of
+      energy is a spurious constant offset); EVs computed via tier0.json + baseline=zero
+      are inflated and NOT comparable to a properly-demeaned 0.9895. frame-health is
+      believed to have demeaned properly, but until an unbiased recompute (against
+      $ROOT/msae_l17/tier0_recentered.json) confirms it, treat the absolute EVs as
+      convention-dependent. Do NOT place these on the same axis as any tier0-zero EV.
 """
 from __future__ import annotations
 
@@ -62,7 +78,18 @@ def build(frame_health_path: str, *, p: int = 2048, n_tokens: int = 150000,
         rows.append(row)
     return {
         "harness": "real35b_frontier",
-        "source": "scale_evidence/t1_frame_health.json (Qwen3.6-35B-A3B L17, block lane)",
+        "source": "scale_evidence/t1_frame_health.json (Qwen3.6-35B-A3B L17, block lane) -- EVs LIFTED, not re-fit here",
+        "caveats": {
+            "biased_slice": ("leading ~100k rows of L17_train.f32.npy are ordered/biased "
+                             "(colmean ~15.2 vs ~0.1 random over ~1.2M rows); if frame-health "
+                             "trained on leading-N, EVs are on a biased slice. Unbiased seeded "
+                             "random subsample recompute owed (coordinate w/ ATLAS2)."),
+            "mean_convention": ("tier0.json mean is stale (~22% energy = spurious constant "
+                                "offset); tier0-zero EVs are inflated & NOT comparable. Use "
+                                "tier0_recentered.json for any recompute; do not mix conventions "
+                                "on one axis."),
+            "status": "absolute EVs are convention-dependent until unbiased recompute confirms replication",
+        },
         "conventions": {"p": p, "n_tokens": n_tokens, "param_bits": param_bits,
                         "matched_distortion_delta2_normalized": delta2,
                         "signal_var_per_coord": 1.0, "selection": "combinatorial only (H(S) owed)"},

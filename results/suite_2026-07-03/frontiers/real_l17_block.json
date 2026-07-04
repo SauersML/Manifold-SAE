@@ -1,6 +1,11 @@
 {
   "harness": "real35b_frontier",
-  "source": "scale_evidence/t1_frame_health.json (Qwen3.6-35B-A3B L17, block lane)",
+  "source": "scale_evidence/t1_frame_health.json (Qwen3.6-35B-A3B L17, block lane) -- EVs LIFTED, not re-fit here",
+  "caveats": {
+    "biased_slice": "leading ~100k rows of L17_train.f32.npy are ordered/biased (colmean ~15.2 vs ~0.1 random over ~1.2M rows); if frame-health trained on leading-N, EVs are on a biased slice. Unbiased seeded random subsample recompute owed (coordinate w/ ATLAS2).",
+    "mean_convention": "tier0.json mean is stale (~22% energy = spurious constant offset); tier0-zero EVs are inflated & NOT comparable. Use tier0_recentered.json for any recompute; do not mix conventions on one axis.",
+    "status": "absolute EVs are convention-dependent until unbiased recompute confirms replication"
+  },
   "conventions": {
     "p": 2048,
     "n_tokens": 150000,

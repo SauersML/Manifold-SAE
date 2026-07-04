@@ -1,0 +1,184 @@
+{
+  "harness": "frontier_bench",
+  "dgp": {
+    "kind": "curved",
+    "p": 256,
+    "n_concepts": 12,
+    "intrinsic_dim": 1,
+    "extrinsic_dim": 2,
+    "signal_var": 1.0,
+    "noise_std": 0.05,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "harmonics": 1,
+    "active_mean": 4.0,
+    "seed": 0,
+    "freq_min": 0.08066666666666666,
+    "freq_max": 1.0,
+    "support_entropy_bits": 6.844589525280178
+  },
+  "dgp_freq": [
+    1.0,
+    0.674,
+    0.418,
+    0.2713333333333333,
+    0.22066666666666668,
+    0.15933333333333333,
+    0.146,
+    0.14133333333333334,
+    0.12733333333333333,
+    0.10266666666666667,
+    0.09066666666666667,
+    0.08066666666666666
+  ],
+  "config": {
+    "dgp": "curved",
+    "p": 256,
+    "n": 1500,
+    "concepts": 12,
+    "active": 4,
+    "active_mean": 4.0,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "noise": 0.05,
+    "harmonics": 1,
+    "k": [
+      8,
+      16,
+      24,
+      32
+    ],
+    "lanes": [
+      "curved",
+      "manifold_linear"
+    ],
+    "epochs": 30,
+    "n_iter": 8,
+    "param_bits": 16.0,
+    "seed": 0,
+    "test_frac": 0.2
+  },
+  "matched_distortion_delta2": NaN,
+  "results": [
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 8,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "curved",
+      "K": 8
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 16,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "curved",
+      "K": 16
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 24,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "curved",
+      "K": 24
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 32,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "curved",
+      "K": 32
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 8,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "manifold_linear",
+      "K": 8
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 16,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "no output",
+      "lane": "manifold_linear",
+      "K": 16
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 24,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "no output",
+      "lane": "manifold_linear",
+      "K": 24
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 32,
+        "active": 4,
+        "data_npz": "/dev/shm/fr_p256_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>1200s",
+      "lane": "manifold_linear",
+      "K": 32
+    }
+  ]
+}
