@@ -86,7 +86,11 @@ def main(argv=None):
                  f"wins bits ({v.get('curved_wins_bits')})  |  r_true={d['config']['r_true']} "
                  f"M={d['config']['m']} L0={d['config']['l0']}, {d['config']['seeds']} seeds",
                  fontsize=14, fontweight="bold", y=0.997)
-    fig.tight_layout(rect=(0, 0, 1, 0.98))
+    fig.text(0.5, 0.968,
+             "numpy mirror of gam inframe_curved.rs — reproduces the Rust cargo-test invariants at the p=2048 anchor "
+             "(inframe_rust_anchor.json); exact per-point Rust floats await the in-frame FFI",
+             ha="center", fontsize=8.5, color=INK2, style="italic")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
     p = out / "inframe_frontier.png"
     fig.savefig(p, dpi=150)
     print(f"[plot] wrote {p}")

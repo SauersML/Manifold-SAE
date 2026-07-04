@@ -127,6 +127,20 @@ price). The frame border is `M·r` (r≈8–32) not `M·p`, so the curved point 
 **cheaper** at inference as p grows (r ≪ p) — it wins EV, bits, and FLOPs simultaneously.
 This is the reviewer's "SAE + evidence-priced refinement cannot lose EV" frontier, drawn.
 
+**Provenance / SPEC.md compliance.** The swept numbers here come from the numpy mirror,
+which SPEC.md allows only to **cross-check** — published points should come from the Rust
+in-frame path (`inframe_curved.rs` via `fit_inframe_curved_regions`). There is **no gamfit
+Python FFI** for the in-frame path yet (reported to the lead as a gap for ENCODE/FRAMES to
+wire). What we CAN show, and do (`inframe_rust_anchor.json`): at the exact config of the
+Rust cargo test `tests_inframe_curved_2130::planted_low_rank_curved_recovered_inframe_p2048`
+(p=2048, r_true=6, n=1200, M=8, seed 42), the mirror reproduces **every asserted invariant
+of the Rust test** — frame_rank=6 (Rust band [6,16]), deviance_gain=1002>0, region accepted,
+border_shrink=341× (Rust asserts ≥128×), reconstructed shell radius=1.002 (Rust asserts
+|r−1|<0.25), curved EV=0.999 — and the Rust test itself is run to confirm it passes on this
+build (job 12519777). So the mirror is a **Rust-anchored, invariant-validated** reference and
+the sweep is a documented interpolation of that model; the exact per-point Rust EV/bits floats
+await the FFI. The plot is labelled accordingly.
+
 ### Why the cascade, not the cold joint (falsified, gam#2132)
 
 Even in the cleanest regime (single-active planted circles), the multi-atom manifold

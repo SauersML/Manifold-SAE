@@ -1,0 +1,45 @@
+{
+  "config": {
+    "test": "gam crates/gam-sae/src/manifold/tests_inframe_curved_2130.rs::planted_low_rank_curved_recovered_inframe_p2048",
+    "n": 1200,
+    "p": 2048,
+    "r_true": 6,
+    "m": 8,
+    "shell_noise": 0.02,
+    "ambient_noise": 0.0,
+    "frame_rank_max": 16,
+    "seed": 42
+  },
+  "mirror": {
+    "frame_rank": 6,
+    "deviance_gain": 1002.411245298411,
+    "accepted": true,
+    "dense_border": 16384,
+    "inframe_border": 48,
+    "border_shrink": 341.3333333333333,
+    "curved_ev": 0.9989701236472025,
+    "shell_radius": 1.0016046588438796
+  },
+  "rust_test_asserts": {
+    "frame_rank_in": [
+      6,
+      16
+    ],
+    "deviance_gain": ">0",
+    "accepted_regions": [
+      0
+    ],
+    "border_shrink": ">= p/16 = 128",
+    "cov_shrink": ">=10000",
+    "shell_radius": "|r-1|<0.25"
+  },
+  "mirror_satisfies_rust_asserts": {
+    "frame_rank": true,
+    "deviance_gain": true,
+    "accepted": true,
+    "border_shrink": true,
+    "shell_radius": true
+  },
+  "rust_run": "job 12519777 (cargo test -p gam-sae planted_low_rank_curved_recovered_inframe_p2048) \u2014 status folded in on completion",
+  "spec_note": "Per SPEC.md the numpy mirror only CROSS-CHECKS; it reproduces every asserted invariant of the Rust in-frame test at this p=2048 anchor. Publishing Rust's own per-point EV/bits floats needs the in-frame Python FFI (not yet exposed) \u2014 reported to team lead as a gap."
+}
