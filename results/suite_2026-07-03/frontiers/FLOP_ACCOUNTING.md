@@ -26,17 +26,21 @@ to linear is billed as linear).
 ## Inference MACs / token
 
 ```
-encode = Σ_k dv_k · p                     # score every atom against the row
-       + [curved] Σ_k (dv_k³ + dv_k · p)  # per-scored-atom intrinsic-coordinate solve
-decode = mean_l0 · mean_k(dv_k) · p       # sum the active atoms' curves
+encode = Σ_k dv_k · p                     # SCORE every atom against the row (all K)
+       + [curved] s · dv̄³                 # intrinsic-coordinate solve for the SELECTED s
+decode = s · dv̄ · p                        # sum the active atoms' curves
 infer  = encode + decode
 ```
 
-The encode term dominates at large `K` (it touches all `K` atoms), so the curved lane's
-per-token inference cost is ≈ `dv̄` × the linear lane's at equal `K` — the chart's
-constant-factor tax. The whole point of the frontier is to ask whether the chart still
-wins *after* paying it: we plot EV and bits against `infer` (and against training MACs),
-so "matched compute" is read off at equal x.
+A sparse encoder scores all `K` atoms cheaply (a `dv_k·p` projection each) to choose the
+top-`s`, then solves the intrinsic coordinate (the `dv³` Gram solve) **only for the `s`
+selected atoms** — it never solves coordinates for atoms it did not route to. Charging
+the solve on all `K` would over-penalize the curved lane; we do not. The encode term
+still dominates at large `K` (it touches all `K` atoms), so the curved lane's per-token
+inference cost is ≈ `dv̄` × the linear lane's at equal `K` (≈3× for a circle chart) — the
+chart's constant-factor tax. The whole point of the frontier is to ask whether the chart
+still wins *after* paying it: we plot EV and bits against `infer` (and against training
+MACs), so "matched compute" is read off at equal x.
 
 ## Training MACs (total)
 

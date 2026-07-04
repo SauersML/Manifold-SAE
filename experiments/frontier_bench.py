@@ -185,26 +185,30 @@ def mse(x, xhat):
 # FLOP model (analytic, hardware-independent) -- see FLOP_ACCOUNTING.md
 # ===========================================================================
 # Count multiply-accumulates (MACs). Row is p-dim; dictionary has K atoms; s fire per
-# token (routing sparsity / L0). Atom k has ``dv_k`` decoder vectors of dim p (linear
-# affine {t}: 1; circle {cos,sin}: 2). Encoding scores every atom against the row
-# (K*mean_dv*p) and, for a curved atom, solves its intrinsic coordinate (a dv x dv Gram
-# solve, ~dv^3 + dv*p per scored atom). Decoding sums the s active atoms' curves.
+# token (routing sparsity / L0). Atom k has ``dv_k`` decoder vectors of dim p (block
+# direction: 1; affine {1,t}: 2; circle {1,cos,sin}: 3). A sparse encoder SCORES every
+# atom cheaply to pick the top-s (project the row onto each atom's dv-dim subspace:
+# dv_k*p per atom), then REFINES the intrinsic coordinate only for the s selected atoms
+# (a dv x dv Gram solve, ~dv^3). Decoding sums the s active atoms' curves. Charging the
+# coordinate solve on all K (instead of the selected s) would over-penalize the curved
+# lane -- a sparse encoder never solves coordinates for atoms it did not select.
 #
-#   encode/token = sum_k dv_k * p        (score all atoms)  + curved: sum_k (dv_k^3 + dv_k*p)
-#   decode/token = sum_{active} dv_k * p
-#   train        = passes * N * 3 * infer  (forward + ~2x backward)
+#   encode/token = sum_k dv_k * p                     (score ALL atoms)
+#                + [curved] s * (mean_dv^3)           (coord solve for SELECTED atoms)
+#   decode/token = s * mean_dv * p
+#   train        = passes * N * 3 * infer             (forward + ~2x backward)
 #
-# We feed REALIZED per-atom widths dv_k read from the fit (fit.decoder_blocks /
-# decoder shape), not an assumed constant -- so a chart the fit collapsed to linear is
-# priced as linear. passes = epochs (block lane) or n_iter (manifold outer REML).
+# We feed REALIZED per-atom widths dv_k read from the fit (fit.decoder_blocks / decoder
+# shape), not an assumed constant -- so a chart the fit collapsed to linear is priced as
+# linear. passes = epochs (block lane) or n_iter (manifold outer REML).
 
 def flop_model(dv_per_atom, s: float, p: int, *, curved: bool, passes: int, n: int) -> dict:
     dv = np.asarray(dv_per_atom, dtype=float)
     K = len(dv)
-    score = float((dv * p).sum())
-    coord = float(((dv ** 3) + dv * p).sum()) if curved else 0.0
-    enc = score + coord
     mean_dv = float(dv.mean()) if K else 0.0
+    score = float((dv * p).sum())                       # score all K atoms
+    coord = float(s * (mean_dv ** 3)) if curved else 0.0  # coord solve for selected s only
+    enc = score + coord
     dec = float(s * mean_dv * p)
     infer = enc + dec
     return {"encode_macs_per_token": enc, "decode_macs_per_token": dec,
