@@ -68,16 +68,33 @@ predicted nats, or a per-fraction fit) computed MSI-side. Flagged as MSI-only /
 not-locally-verified. The substantive, locally-verified claim — calibration does not
 degrade with arc length — holds under both regressions here.
 
-## Tangent-column units bug
+## Tangent column: clamp-driven curvature, NOT a units bug (corrected)
 
-At dt→0 the tangent and path-integral forecasts must coincide; the data shows
-ratio pathint/tangent ≈ 3.9–4.9 CONSTANT (fitted scaling exponent of (ratio−1) vs dt:
-b = 0.026, not the theoretical 2). Also, rescaled by its small-dose constant, the
-tangent column lies exactly ON the path-integral curve, including the wrap fold —
-because it is computed on the true chord (m = chord of the on-chart move), inheriting
-the wrap geometry. Conclusion: `predicted_nats_tangent` is a chord-quadratic with an
-inconsistent constant, NOT a flat-space forecast. The honest flat-space arm in this
-dataset is `linear_fisher`.
+**This section previously reported a "tangent-column units bug." That diagnosis was
+wrong; NORM's audit (`../../norm_audit/NORM_AUDIT.md`, arm (a)) corrects it and this
+text is rewritten to match. We keep the error visible rather than delete it.**
+
+The original reading was: at dt→0 the tangent and path-integral forecasts must coincide,
+yet the data shows ratio pathint/tangent ≈ 3.9–4.9 apparently CONSTANT (fitted
+(ratio−1)-vs-dt exponent ≈0.026, not the theoretical 2), so `predicted_nats_tangent`
+must be a chord-quadratic with an inconsistent normalization constant.
+
+What actually happened: **the "dt→0" rows were not small-dt at all.** The dose is set by
+`frac`, and the chord that `frac` implies is inverted for the fitted radius R≈2.04;
+**116 of 168 manifold rows are `clamped:true` at dt≈3.052** (the chord ran past the
+diameter, so dt is pinned to 2R). Because dt was pinned, the (ratio−1)-vs-dt exponent
+came out ≈0 — dt did not vary, so nothing could scale with it. On the *unclamped* rows
+(dt genuinely 0.019 → 2.59), `pathint/tangent = 1.000` at dt≈0.02 and rises
+monotonically with dt (≈77× at dt=1.83), exactly as a base-point quadratic must: it
+converges to the path integral at dt→0 and under-reads the true arc as dt grows. The
+~4.2× at "dt→0" is therefore the **real curvature deficit** of a base-point quadratic
+integrated over a near-half-circle arc — physics, not a normalization inconsistency.
+
+Conclusion (corrected): `predicted_nats_tangent` is the **correct** local-quadratic
+reference. It is a reference column and is never used for the fig5 nats, so no published
+calibration number changes. The honest flat-space arm remains `linear_fisher`; the point
+is that the tangent column is not broken, it is just the base-point quadratic showing its
+curvature deficit over a long clamped arc.
 
 ## Raw-data views: bugs found & fixed while building them
 

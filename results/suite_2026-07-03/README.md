@@ -73,6 +73,19 @@ measured/predicted 6.198 on biting edits) because a bare latent has no metric-co
 scale; the circle arm, which path-integrates the metric, is scale-accurate (median
 ratio **1.015**, bite rate 1.0).
 
+The cleanest proof that the metric is doing this — and not some incidental scaling —
+comes from NORM's audit (`norm_audit/NORM_AUDIT.md`, arms (c)+(d)). The *same* isotropic
+baseline (`½·c̄·‖δ‖²`, where `c̄ = trace(G)/p` is the mean Fisher eigenvalue) miscalibrates
+in **opposite directions** depending on where the feature sits in the output-Fisher
+spectrum: on **high-Fisher** sycophancy it *under*-scores by 4–6× (linear median 6.198),
+while on **low-Fisher** calendar it *over*-scores by ~6× (linear_norm median 0.157). A
+real multiplicative units bug in the shared `predicted_nats` assembly would have pushed
+both the *same* way — they go opposite ways because the isotropic scalar averages over a
+spectrum with opposite tails. Meanwhile every arm that carries the *real* metric
+calibrates regardless of feature (circle 1.015, manifold 1.081, linear_fisher 1.099).
+Direction-dependent failure of the isotropic baseline, direction-independent success of
+the metric arms: that is the metric mattering, demonstrated by construction.
+
 **Chart ⇒ targeting (ordering).** The metric alone does not tell you *which* token an
 edit moves toward — that is the chart coordinate. The weekday chart recovers calendar
 order with order-correlation **0.995** (unsupervised, wraparound TRUE). On sycophancy
@@ -129,7 +142,7 @@ Every registered miss, in one place. This is the ledger the writeup is judged ag
 | **linear+Fisher NOT breaking on tangent arcs — theory tier-3 unproven** | `crown_8b/writeup/ANALYSES.md` | The pre-registered curvature test failed to fire: base-point Fisher stays calibrated (does not degrade quadratically) up to 40% ‖h‖; it is *modestly better* than the chart's path integral at large fractions. What curvature buys over base-point Fisher is not yet demonstrated in nats — only ordering/wraparound/validity. Larger arcs (dt→π) are queued. |
 | **month certified radius only 0.005‖h‖** (MSI-only) | placeholder | The month upgrade's certified validity radius is tiny (~0.005‖h‖); held-out calibration reported 0.963/R²0.894/ratio 1.054 but over a narrow trusted band. MSI-only. |
 | **color weak ordering 0.30** (MSI-only) | placeholder | The color feature charts with weak coordinate↔grade ordering (~0.30). MSI-only. |
-| **tangent-column normalization bug** | `crown_8b/writeup/ANALYSES.md` | `predicted_nats_tangent` carries a constant ≈4.2× deficit vs the path integral at dt→0 (fitted (ratio−1)-vs-dt exponent 0.026, not the theoretical 2). It is a chord-quadratic with an inconsistent constant, *not* a flat-space forecast — do not use it to test curvature. |
+| **misdiagnosed "tangent-column units bug" — retracted** | `crown_8b/writeup/ANALYSES.md`, `norm_audit/NORM_AUDIT.md` | We originally published a normalization bug in `predicted_nats_tangent` (a "constant ≈4.2× deficit at dt→0"). **That was wrong** and is retracted: NORM's audit found the "dt→0" rows were `clamped:true` at dt≈3.05 (116/168 rows), so dt was pinned, not small; at *true* small dt the pathint/tangent ratio is 1.000 exactly. The 4.2× is real clamp-driven curvature of a base-point quadratic over a near-half-circle, not a units bug — the tangent column is correct physics. No published calibration number was affected (tangent is a reference column). Kept visible as our own corrected error. |
 | **spec collateral floor bugged** (MSI-only) | placeholder | Spec-specificity collateral ratios 0.003–0.005 vs linear 0.02, but the zero-floor is bugged and being rerun; treat as provisional. MSI-only. |
 | **fit-seed fragility** | `crown_8b/` | 2 of 3 REML seeds failed to converge (guards aborted them correctly); only seed 1093 converged. The result is real but the fit is not push-button robust yet. |
 

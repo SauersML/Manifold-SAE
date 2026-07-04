@@ -88,9 +88,16 @@ Pre-registered acceptance was slope ∈ [0.5, 2] and R² > 0.7 on held-out edits
 
 - One feature family (weekdays), one model (8B). 35B replication + month/color and a
   sycophancy chart are in flight (results land as sibling directories).
-- The recorded `predicted_nats_tangent` column has a **normalization inconsistency**
-  (constant ≈4.2× deficit vs the path integral at dt→0) — it is the base-point quadratic
-  on the true chord, *not* a flat-space forecast. Do not use it to test curvature laws.
+- **[CORRECTED]** An earlier rev of this file called `predicted_nats_tangent` a
+  "normalization inconsistency" (constant ≈4.2× deficit at dt→0). That was a
+  misdiagnosis — retracted per NORM's audit (`../norm_audit/NORM_AUDIT.md`). The
+  apparent "dt→0" rows are `clamped:true` at dt≈3.05 (116/168 rows: the chord for the
+  fitted radius R≈2.04 inverts past the diameter and pins to 2R), so dt was never small.
+  At *true* small dt the pathint/tangent ratio is 1.000 exactly, rising monotonically
+  with dt as a base-point quadratic must. The 4.2× is genuine curvature over a
+  near-half-circle arc — `predicted_nats_tangent` is correct physics, a valid
+  local-quadratic reference. It is a reference column (never used for the fig5 nats), so
+  no calibration number changes.
 - **Linear + base-point Fisher is a strong baseline**: its error does *not* grow with
   dose up to 40% ‖h‖ on this feature. At these scales the metric is the calibration
   constant and the chart's distinctive contributions are the move itself (ordering,
