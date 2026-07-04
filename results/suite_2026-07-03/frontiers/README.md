@@ -60,6 +60,26 @@ the sweep.
 
 ## Results
 
-<!-- FILLED AFTER RUNS: headline EV-at-matched-FLOP verdict, pure-linear overhead number,
-     bits crossover vs firing frequency, real-35B feasibility envelope, job IDs -->
-_Runs in flight — verdicts and job IDs land here._
+**Real 35B L17 (block lane, DONE)** — `real_l17_block.json`, `frontier_real_l17_block.png`.
+Measured block-sparse EV rises 0.707 → 0.906 → 0.990 across K∈{4k,16k,32k} capacity
+(2k/8k/16k blocks), 0 dead blocks, L0 = 2 blocks (4 coords) / token. At matched
+distortion the **dictionary term dominates description length** (~7,000 bits/token at
+16k blocks, `K·block·p·16 / 150k` tokens): the massive-K block dictionary buys EV with
+enormous per-token bits, which is exactly the regime where a *fewer-atom* curved code
+would win. But the curved (manifold REML) lane is a **small-K tool** — ~70 s at p=12,
+>6 min for a single p=256/N=4–6k/K=8 fit on 16 cores — so it does not reach K in the
+thousands with the current solver. Honest verdict: **block and curved lanes are
+complementary** (block owns massive-K coverage; curved owns small-K EV-per-atom + bits).
+
+**Synthetic massive-p frontier (in flight on MSI, curved vs same-lane linear):**
+
+| job | what | out |
+|---|---|---|
+| `12501065` | calibration p=256 N=6k K={8,24} | `scratch/fr_calib_p256.json` |
+| `12501080` | p=48  N=8k  K={6,12,18,24}, curved+linear DGP | `synth_p48_{curved,linear}.json` |
+| `12501209` | p=256 N=4k  K={8,16,24,32}, curved+linear DGP | `synth_p256_{curved,linear}.json` |
+| `12501212` | p=1024 N=2.5k K={8,16,24,32}, curved+linear DGP | `synth_p1024_{curved,linear}.json` |
+
+Verdicts (EV-at-matched-FLOP, bits crossover, pure-linear overhead) are computed by
+`experiments/frontier_analyze.py` and land here as each job completes. A small local
+`p=16` curved-vs-linear frontier is included as an immediately-reproducible smoke.
