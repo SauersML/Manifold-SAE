@@ -1,0 +1,81 @@
+NVIDIA A40, 46068 MiB
+=== launching dose on /projects/standard/hsiehph/sauer354/models/qwen3-8b layer 18 ===
+[cfg] model=/projects/standard/hsiehph/sauer354/models/qwen3-8b layer=18 rank=8 features=['weekday'] n_iter=40 n_bases=12 device=cuda:0 dtype=torch.float32
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[model] loaded in 15.0s; hidden=4096 layers=36
+[hook] layer 18 output shape (1, 3, 4096) (tensor OK)
+[weekday] harvesting 70 prompts
+[harvest] 10/70 prompts
+[harvest] 20/70 prompts
+[harvest] 30/70 prompts
+[harvest] 40/70 prompts
+[harvest] 50/70 prompts
+[harvest] 60/70 prompts
+[harvest] 70/70 prompts
+[weekday] harvested 70 rows in 705.4s p=4096; cached -> /projects/standard/hsiehph/sauer354/dose_qwen8b_out/harvest_cache_weekday_L18_n70.npz
+[12m 37s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.378e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 1/8, value=8.434124e4).
+[12m 46s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.378e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 2/8, value=8.434124e4).
+[12m 56s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.378e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 3/8, value=8.434124e4).
+[13m 05s] [BFGS Adaptive] Strong Wolfe failed at iter 0. Falling back to Backtracking.
+[13m 07s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.378e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 4/8, value=8.434124e4).
+[13m 08s] [OUTER] probe-refusal non-termination guard fired after 25 consecutive infeasible cost probes with no accepted gradient step (nan_seed=true); escalating to Fatal to abort this seed (first-order bridge, iter=0)
+[fit] K=1 attempt {'n_iter': 40, 'random_state': 891} failed: RemlConvergenceError: REML smoothing optimization failed to converge: all 1 seed candidates failed (SAE manifold); generat
+[13m 35s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.291e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 1/8, value=8.451833e4).
+[13m 52s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.291e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 2/8, value=8.451833e4).
+[14m 09s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.291e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 3/8, value=8.451833e4).
+[14m 23s] [BFGS Adaptive] Strong Wolfe failed at iter 0. Falling back to Backtracking.
+[14m 26s] [OUTER] cost-stall STUCK (infeasible BFGS probes, NOT a flat valley): residual |g|=1.291e3 far above ceiling 5.000e0; refusing to halt-and-ship and continuing (escape 4/8, value=8.451833e4).
+[14m 30s] [OUTER] probe-refusal non-termination guard fired after 25 consecutive infeasible cost probes with no accepted gradient step (nan_seed=true); escalating to Fatal to abort this seed (first-order bridge, iter=0)
+[fit] K=1 attempt {'n_iter': 60, 'random_state': 992} failed: RemlConvergenceError: REML smoothing optimization failed to converge: all 1 seed candidates failed (SAE manifold); generat
+[weekday] fit 183.3s (rdim=48) r2=0.9970 topo=['circle'] kw={'n_iter': 80, 'random_state': 1093}
+[weekday] cyclic-ordering order_corr=0.995 (raw circ_corr=0.394) wraparound_in_order=True gap_uniformity=0.733 order=['Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday']
+[GATE] first edit frac=0.005 m=3.253 ||h||=2055 R=2.041 amp=0.2263 measured_kl=0.000491594 pred=0.000492169 pred_path=9.0072 pred_tan=0.000115986 -> FAIL (<1e-3: patch does not bite!)
+[sweep] atom 0: 12 bases done
+[sweep] 504 rows
+[stats] manifold                  ={"n": 168, "log_slope": 0.9396946776738336, "log_intercept": -0.3801432917885706, "log_r2": 0.9938042076762331, "ratio_median": 1.0813392206270258, "ratio_iqr": [1.001163600132957, 1.1774464035186984], "mean_abs_log_ratio": 0.19545189955302633}
+[stats] manifold_heldout          ={"n": 84, "log_slope": 0.9448755354904989, "log_intercept": -0.3724847088771552, "log_r2": 0.9988938333508172, "ratio_median": 1.0976511355292609, "ratio_iqr": [1.0565309793244269, 1.1686549380594977], "mean_abs_log_ratio": 0.14314753433635857}
+[stats] manifold_within_validity  ={"n": 7, "log_slope": 0.9336384667707222, "log_intercept": -0.15890220691372026, "log_r2": 0.9190772863208853, "ratio_median": 1.0572687753345822, "ratio_iqr": [0.9208043954535639, 1.2034534491297797], "mean_abs_log_ratio": 0.20363473536604318}
+[stats] linear_norm               ={"n": 168, "log_slope": 0.9514049690518503, "log_intercept": -2.255317447989149, "log_r2": 0.7998037527214215, "ratio_median": 0.15747018256097262, "ratio_iqr": [0.06935507752297142, 0.21356408019124062], "mean_abs_log_ratio": 1.9523524734181288}
+[stats] linear_fisher             ={"n": 168, "log_slope": 1.057375338896365, "log_intercept": 0.7250712595912283, "log_r2": 0.9860001551056664, "ratio_median": 1.0985510817799164, "ratio_iqr": [1.0239875410580987, 1.3014399810680704], "mean_abs_log_ratio": 0.20536196559943787}
+
+# Real-model dose calibration — predicting an intervention's effect in nats
+
+**Model:** `REAL model qwen3-8b (layer 18); measured output KL = patched forward pass, exact next-token distribution`
+
+**Claim tested:** a curved manifold-SAE atom is an explicit parametric chart `g(t)` carrying a downstream output-Fisher metric, so `steer` reports `predicted_nats` — how far the model's output token distribution will move — *before* the edit. We plot that prediction against the **measured** output KL from actually patching the edit into the forward pass and re-reading the logits.
+
+**Setup:** layer-18 residual-stream activations at calendar-token sites (weekday); one K=1 `circle` chart per feature with the downstream output-Fisher metric attached (`harvest_downstream_output_fisher_factors`, the exact real-model call). Feature token is the last position, so the measured KL is the clean next-token-distribution shift. Per-template demeaning before geometry (W7 recipe).
+
+- mean chart reconstruction R² = 0.9970 over 1 atoms.
+
+- **dose mode = `on_chart_amplitude_normalized`.** ON-CHART, amplitude-normalized. The demeaned calendar signal is O(30) on a ~96-norm residual, so the fitted circle has a genuine radius; the prior run's sub-measurable ~1e-7 move was caused by steer's presence weight `amplitude` (~1e-6 for this K=1 atom) scaling the whole displacement. We divide it out consistently: patched move = steer.delta/amplitude = the real chart displacement g(t1)-g(t0); predicted_nats = steer.predicted_nats/amplitude^2 = the Fisher path integral along that SAME arc. Doses target a fraction of ||h|| by inverting the chord for the chart radius R (clamped to the diameter 2R). predicted_nats_tangent (1/2 c_tan m^2) is recorded for the same move as the local-quadratic reference.
+
+
+## Headline (ideal = slope 1.0, R² 1.0, ratio 1.0)
+
+| method | n | slope (log-log) | R² | median meas/pred | mean|log ratio| |
+|---|---:|---:|---:|---:|---:|
+| **manifold chart — HELD-OUT edits** | 84 | 0.945 | 0.999 | 1.098 | 0.143 |
+| manifold chart — all edits | 168 | 0.940 | 0.994 | 1.081 | 0.195 |
+| manifold chart — within validity radius | 7 | 0.934 | 0.919 | 1.057 | 0.204 |
+| linear latent, norm dose (no metric) — *task baseline* | 168 | 0.951 | 0.800 | 0.157 | 1.952 |
+| linear latent + base-point Fisher (fairness ref) | 168 | 1.057 | 0.986 | 1.099 | 0.205 |
+
+![dose calibration real](dose_calibration_real.png)
+
+
+Left: predicted nats (x) vs measured output KL (y), one point per (atom, base, frac, sign), with y=x. Right: calibration ratio vs move magnitude.
+
+
+Data: `dose_calibration_real.json`
+
+[out] /projects/standard/hsiehph/sauer354/dose_qwen8b_out/dose_calibration_real.json
+[out] /projects/standard/hsiehph/sauer354/dose_qwen8b_out/dose_calibration_real.png
+=== DONE rc=0 ===
+total 22841
+drwxr-s---. 2 sauer354 hsiehph     4096 Jul  3 15:10 .
+drwxr-sr-x. 2 sauer354 hsiehph     4096 Jul  3 15:13 ..
+-rw-r-----. 1 sauer354 hsiehph   276217 Jul  3 15:16 dose_calibration_real.json
+-rw-r-----. 1 sauer354 hsiehph   169127 Jul  3 15:16 dose_calibration_real.png
+-rw-r-----. 1 sauer354 hsiehph 22939160 Jul  3 15:10 harvest_cache_weekday_L18_n70.npz
+-rw-r-----. 1 sauer354 hsiehph     2616 Jul  3 15:16 report.md

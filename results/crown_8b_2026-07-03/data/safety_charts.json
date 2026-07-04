@@ -1,0 +1,150 @@
+{
+  "config": {
+    "model": "qwen3-8b",
+    "layer": 18,
+    "n_iter": 40,
+    "rdim": 32,
+    "dtype": "torch.bfloat16"
+  },
+  "features": {
+    "sycophancy": {
+      "n_rows": 70,
+      "p": 4096,
+      "rdim": 32,
+      "periodic": false,
+      "fit_free_ordering": {
+        "levels_present": [
+          "false",
+          "mistaken",
+          "doubtful",
+          "debatable",
+          "plausible",
+          "correct",
+          "brilliant"
+        ],
+        "spearman_grade_vs_pc1": 0.6428571428571429,
+        "spearman_perm_p": 0.136,
+        "spearman_null_q95": 0.75,
+        "bend_ratio_pc2_pc1": 0.8714336373672693,
+        "arc_span_rad": 5.13377174214593,
+        "max_wraparound_gap_rad": 1.6097601958770744,
+        "open_arc": false,
+        "level_positions": [
+          -16.58680707955245,
+          -17.883295964890884,
+          -20.158959056992316,
+          -24.421161102835086,
+          16.691541612446667,
+          21.409892294575364,
+          40.94878929724864
+        ]
+      },
+      "topologies": {
+        "linear": {
+          "ok": true,
+          "reconstruction_r2": 0.6039067774605669,
+          "penalized_loss_score": -68866.3395956659,
+          "fit_seconds": 36.757365703582764,
+          "kw": {
+            "n_iter": 60,
+            "random_state": 625
+          },
+          "atom_topologies": [
+            "linear",
+            "circle",
+            "circle",
+            "circle"
+          ],
+          "spearman_fitcoord_vs_grade": 0.9014959321144257
+        },
+        "circle": {
+          "ok": true,
+          "reconstruction_r2": 0.6927493810620695,
+          "penalized_loss_score": -53406.784636279895,
+          "fit_seconds": 43.767850160598755,
+          "kw": {
+            "n_iter": 40,
+            "random_state": 524
+          },
+          "atom_topologies": [
+            "circle"
+          ],
+          "spearman_fitcoord_vs_grade": 0.9103840433907795
+        }
+      },
+      "topology_verdict": {
+        "circle_minus_linear_r2": 0.08884260360150265,
+        "prefers": "circle",
+        "note": "open/graded axis: linear-competitive or partial-arc expected; a large circle advantage with a small wraparound gap would be the surprising closed-loop outcome"
+      }
+    },
+    "refusal": {
+      "n_rows": 70,
+      "p": 4096,
+      "rdim": 32,
+      "periodic": false,
+      "fit_free_ordering": {
+        "levels_present": [
+          "Certainly",
+          "Sure",
+          "Okay",
+          "Well",
+          "Hmm",
+          "Unfortunately",
+          "No"
+        ],
+        "spearman_grade_vs_pc1": 0.42857142857142855,
+        "spearman_perm_p": 0.341,
+        "spearman_null_q95": 0.75,
+        "bend_ratio_pc2_pc1": 0.8777127644670888,
+        "arc_span_rad": 4.483335484004102,
+        "max_wraparound_gap_rad": 1.935048190769562,
+        "open_arc": true,
+        "level_positions": [
+          -33.313675813615724,
+          -24.247811436486423,
+          29.011041374003625,
+          9.48992054153118,
+          35.3746689667052,
+          -15.251799074430204,
+          -1.0623445577076467
+        ]
+      },
+      "topologies": {
+        "linear": {
+          "ok": true,
+          "reconstruction_r2": 0.8340277742010598,
+          "penalized_loss_score": -69862.82050954674,
+          "fit_seconds": 47.42754411697388,
+          "kw": {
+            "n_iter": 40,
+            "random_state": 534
+          },
+          "atom_topologies": [
+            "linear"
+          ],
+          "spearman_fitcoord_vs_grade": 0.6258595048552182
+        },
+        "circle": {
+          "ok": true,
+          "reconstruction_r2": 0.8706981264880962,
+          "penalized_loss_score": -55233.91179161166,
+          "fit_seconds": 266.55043625831604,
+          "kw": {
+            "n_iter": 40,
+            "random_state": 534
+          },
+          "atom_topologies": [
+            "circle"
+          ],
+          "spearman_fitcoord_vs_grade": 0.3165952235150031
+        }
+      },
+      "topology_verdict": {
+        "circle_minus_linear_r2": 0.03667035228703641,
+        "prefers": "circle",
+        "note": "open/graded axis: linear-competitive or partial-arc expected; a large circle advantage with a small wraparound gap would be the surprising closed-loop outcome"
+      }
+    }
+  }
+}
