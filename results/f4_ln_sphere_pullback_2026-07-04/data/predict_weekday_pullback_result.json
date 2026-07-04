@@ -1,0 +1,24 @@
+{
+  "n": 70,
+  "weekday_mass": [
+    0.0031495762523263693,
+    0.5197003483772278
+  ],
+  "pred_accuracy": 0.7142857142857143,
+  "circ_corr_act_vs_beh": -0.08903170200365783,
+  "pullback_activation_ev": 0.13373814460539002,
+  "kl_same_target": 0.6732818882549978,
+  "kl_same_template": 2.68872798642367,
+  "kl_all": 2.511115345011788,
+  "order_purity_activation": 0.4142857142857143,
+  "order_purity_behavior": 1.0,
+  "calib_behavior_first": {
+    "r2": 0.367015364227968,
+    "median_ratio": 0.5544139616533509
+  },
+  "calib_activation_first": {
+    "r2": 0.006720379281766831,
+    "median_ratio": 0.47934054557084926
+  },
+  "n_pairs": 2415
+}

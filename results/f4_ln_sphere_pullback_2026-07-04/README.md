@@ -8,6 +8,8 @@ Artifact manifest (verdict lives in the lane hand-off, not here).
 - `harvest_behavior.py` — CPU forward pass harvesting the next-token distribution (restricted top-union vocab) for the 70 weekday prompts. Submitted via sbatch on MSI (`msismall`).
 - `pullback_pilot.py` — real-data behavior-first pullback vs activation-first circle: agreement, pullback activation EV, within/across-weekday KL diagnostic, same-template KL calibration.
 - `pullback_synthetic.py` — method check: shared-latent synthetic where behavior expresses the feature; behavior-first pullback vs activation-first vs truth.
+- `harvest_predict_weekday.py` / `harvest_predict_weekday_ml.py` — predict-the-weekday probe ("The day after Monday is ___") whose next-token readout CARRIES the weekday; single-layer (L18) and multi-layer (L11/L18/L23) harvests.
+- `predict_weekday_pullback.py` — behavior-first vs activation-first on the weekday-carrying readout: order purity, pullback EV, and P7-KL calibration.
 
 ## data/
 - `spurious_curvature_result.json` — flat/sphere hh-fraction + radial RMS vs norm-CV sweep.
