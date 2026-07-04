@@ -1,0 +1,409 @@
+{
+  "harness": "frontier_bench",
+  "dgp": {
+    "kind": "curved",
+    "p": 48,
+    "n_concepts": 8,
+    "intrinsic_dim": 1,
+    "extrinsic_dim": 2,
+    "signal_var": 1.0,
+    "noise_std": 0.05,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "harmonics": 1,
+    "active_mean": 3.0,
+    "seed": 0,
+    "freq_min": 0.117,
+    "freq_max": 1.0,
+    "support_entropy_bits": 5.016620461288076
+  },
+  "dgp_freq": [
+    1.0,
+    0.5636666666666666,
+    0.3293333333333333,
+    0.233,
+    0.18533333333333332,
+    0.147,
+    0.125,
+    0.117
+  ],
+  "config": {
+    "dgp": "curved",
+    "p": 48,
+    "n": 3000,
+    "concepts": 8,
+    "active": 3,
+    "active_mean": 3.0,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "noise": 0.05,
+    "harmonics": 1,
+    "k": [
+      6,
+      12,
+      18,
+      24
+    ],
+    "lanes": [
+      "linear",
+      "curved",
+      "manifold_linear"
+    ],
+    "epochs": 30,
+    "n_iter": 8,
+    "param_bits": 16.0,
+    "seed": 0,
+    "test_frac": 0.2
+  },
+  "matched_distortion_delta2": 0.005321261894645987,
+  "results": [
+    {
+      "cfg": {
+        "lane": "linear",
+        "K": 6,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "linear",
+      "K": 6,
+      "k_realized": 6,
+      "active": 3,
+      "p": 48,
+      "heldout_ev": 0.6644906251682082,
+      "heldout_mse": 0.0071660806950094484,
+      "train_ev": 0.6769427892443469,
+      "mean_l0": 3.0,
+      "dv_per_atom": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "fit_seconds": 0.1,
+      "support_entropy_bits": 4.175683951807266,
+      "flops": {
+        "encode_macs_per_token": 288.0,
+        "decode_macs_per_token": 144.0,
+        "infer_macs_per_token": 432.0,
+        "train_macs_total": 93312000.0,
+        "decoder_params": 288.0,
+        "mean_dv_per_atom": 1.0,
+        "K": 6,
+        "passes": 30
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.78083623977672,
+        "code_coord_bits": 11.34250871933016,
+        "selection_bits_combinatorial": 4.321928094887363,
+        "selection_bits_support_entropy": 4.175683951807266,
+        "dict_bits_per_token": 1.92,
+        "bits_per_token_combinatorial": 17.584436814217526,
+        "bits_per_token_support_entropy": 17.43819267113743
+      }
+    },
+    {
+      "cfg": {
+        "lane": "linear",
+        "K": 12,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "linear",
+      "K": 12,
+      "k_realized": 12,
+      "active": 3,
+      "p": 48,
+      "heldout_ev": 0.6731957837197149,
+      "heldout_mse": 0.006980148875148308,
+      "train_ev": 0.6940280395070764,
+      "mean_l0": 3.0,
+      "dv_per_atom": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "fit_seconds": 0.2,
+      "support_entropy_bits": 6.474598826258498,
+      "flops": {
+        "encode_macs_per_token": 576.0,
+        "decode_macs_per_token": 144.0,
+        "infer_macs_per_token": 720.0,
+        "train_macs_total": 155520000.0,
+        "decoder_params": 576.0,
+        "mean_dv_per_atom": 1.0,
+        "K": 12,
+        "passes": 30
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.78083623977672,
+        "code_coord_bits": 11.34250871933016,
+        "selection_bits_combinatorial": 7.78135971352466,
+        "selection_bits_support_entropy": 6.474598826258498,
+        "dict_bits_per_token": 3.84,
+        "bits_per_token_combinatorial": 22.96386843285482,
+        "bits_per_token_support_entropy": 21.65710754558866
+      }
+    },
+    {
+      "cfg": {
+        "lane": "linear",
+        "K": 18,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "linear",
+      "K": 18,
+      "k_realized": 18,
+      "active": 3,
+      "p": 48,
+      "heldout_ev": 0.7066378893807297,
+      "heldout_mse": 0.0062658653237631584,
+      "train_ev": 0.7248345831005139,
+      "mean_l0": 3.0,
+      "dv_per_atom": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "fit_seconds": 0.2,
+      "support_entropy_bits": 7.354726609234079,
+      "flops": {
+        "encode_macs_per_token": 864.0,
+        "decode_macs_per_token": 144.0,
+        "infer_macs_per_token": 1008.0,
+        "train_macs_total": 217728000.0,
+        "decoder_params": 864.0,
+        "mean_dv_per_atom": 1.0,
+        "K": 18,
+        "passes": 30
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.78083623977672,
+        "code_coord_bits": 11.34250871933016,
+        "selection_bits_combinatorial": 9.672425341971495,
+        "selection_bits_support_entropy": 7.354726609234079,
+        "dict_bits_per_token": 5.76,
+        "bits_per_token_combinatorial": 26.774934061301657,
+        "bits_per_token_support_entropy": 24.457235328564238
+      }
+    },
+    {
+      "cfg": {
+        "lane": "linear",
+        "K": 24,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "linear",
+      "K": 24,
+      "k_realized": 24,
+      "active": 3,
+      "p": 48,
+      "heldout_ev": 0.7508633620561599,
+      "heldout_mse": 0.005321261894645987,
+      "train_ev": 0.7673226885584253,
+      "mean_l0": 3.0,
+      "dv_per_atom": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "fit_seconds": 0.2,
+      "support_entropy_bits": 7.747989525619509,
+      "flops": {
+        "encode_macs_per_token": 1152.0,
+        "decode_macs_per_token": 144.0,
+        "infer_macs_per_token": 1296.0,
+        "train_macs_total": 279936000.0,
+        "decoder_params": 1152.0,
+        "mean_dv_per_atom": 1.0,
+        "K": 24,
+        "passes": 30
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.78083623977672,
+        "code_coord_bits": 11.34250871933016,
+        "selection_bits_combinatorial": 10.98299357469431,
+        "selection_bits_support_entropy": 7.747989525619509,
+        "dict_bits_per_token": 7.68,
+        "bits_per_token_combinatorial": 30.00550229402447,
+        "bits_per_token_support_entropy": 26.77049824494967
+      }
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 6,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 12,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 18,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 24,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 6,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 12,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 18,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 24,
+        "active": 3,
+        "data_npz": "/private/tmp/claude-501/-Users-user/402ec9d9-07ac-42f4-87a0-73d65d949d5b/scratchpad/fb_p48_curved/data.npz",
+        "epochs": 30,
+        "n_iter": 8,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' ",
+      "traceback": "Traceback (most recent call last):\n  File \"/Users/user/Manifold-SAE/experiments/frontier_bench.py\", line 368, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=1: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=2: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search' | rs=3: sae_manifold_fit() got an unexpected keyword argument '_run_structure_search'\n"
+    }
+  ]
+}
