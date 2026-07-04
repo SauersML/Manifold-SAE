@@ -154,12 +154,20 @@ one ambient p=1024/PCA-24 point even reads train 0.07 / held-out 0.62, which onl
 sense across conventions), so we do **not** read a train→held-out overfitting gap from it;
 it is shown only as the fit's own reported number.
 
-**Consequence.** The cold-joint `sae_manifold_fit` *dictionary* co-collapses here — this
-is the program's known scar tissue and exactly why the shipped curved path is the in-frame
-cascade above, not the cold joint. So this section is the honest "why the cascade" row, not
-a dead end: the curved-wins frontier IS drawn (headline above), and the cold-joint result
-explains why that arm and not this one. The `K=1` single-chart fits behind the dose crown
-are also unaffected.
+**Stagewise is the mitigation — the collapse is cold-joint-specific.** Reran the same clean
+planted circles through the shipped `sae_manifold_fit_stagewise` (SAC births + backfit,
+guards on): **`collapse_events=[]`, `births_rejected=0`, monotone EV trace** (0.59 flat
+across 8 births → 0.62 after backfit at C=3; 0.40 → 0.42 at C=6) — no co-collapse. So the
+`sae_manifold_fit` cold-joint dictionary is deprecated-for-discovery and stagewise is the
+shipped path (amended into gam#2132). Two residual notes: stagewise still sits below the
+linear-PCA floor on these circles (0.59–0.62 vs 0.80; births after the first add no EV), and
+`StagewiseSAE.reconstruct()` / `.reconstruction_ev()` raise a matmul-shape error (OOS-path
+bug family), so its EV is read from `ev_trace`.
+
+**Consequence.** This section is the honest "why the cascade" row, not a dead end: the
+curved-wins frontier IS drawn (in-frame headline above), the cold-joint co-collapse explains
+why that arm and not the cold joint, and stagewise+guards is confirmed as the mitigation.
+The `K=1` single-chart fits behind the dose crown are also unaffected.
 
 Jobs (checkpointed; `exact_p48`=12515810 raw p=48, `exact_p1024`=12515811 ambient
 p=1024/PCA-24 heavy-tailed — both reproduce the same co-collapse as they land). First-round
