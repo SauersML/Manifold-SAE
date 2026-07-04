@@ -118,13 +118,18 @@ it. Measured held-out EV (train `reconstruction_r2` in parens), `exact_p24_curve
 | C=6, p=24, K=6 | ~0.55 | **0.26** (train 0.37) | 0.25 (train 0.57) |
 | C=6, p=24, K=8 | ~0.56 | **0.11** (train 0.46) | 0.25 (train 0.57) |
 
-Three things, all reported not buried: (1) curved held-out EV **decreases** with K
-(0.26→0.11) — dictionary co-collapse (`[#1026] restoring incumbent` in the inner-fit
-logs); (2) a large train→held-out gap for **both** lanes (~0.55→~0.25) — the
-out-of-sample encode path generalizes poorly; (3) curved atoms underperform even the
-same-lane **linear** atoms on curved data, and both fall below a trivial linear-PCA
-baseline that recovers 0.55–0.73 on the identical data. So the structure is trivially
-recoverable; the gap is solver quality, filed as **gam#2132**.
+The load-bearing comparison is held-out EV computed the **same raw way** (`ev(test,
+reconstruct(test))`) for all three — curved chart, same-lane linear, and a linear-PCA
+reconstruction — on the identical held-out split. On that consistent metric: (1) curved
+held-out EV **decreases** with K (0.26→0.11) — dictionary co-collapse (`[#1026] restoring
+incumbent` in the inner-fit logs); (2) curved underperforms even the same-lane **linear**
+atoms on curved data; (3) both fall well below a trivial linear-PCA baseline (0.55–0.73)
+on the same data. So the structure is trivially recoverable and the gap is solver quality
+(**gam#2132**). The `train` column is gamfit's internal `reconstruction_r2` (a
+whitened/penalized in-model R², a **different convention** from the raw held-out `ev()` —
+one ambient p=1024/PCA-24 point even reads train 0.07 / held-out 0.62, which only makes
+sense across conventions), so we do **not** read a train→held-out overfitting gap from it;
+it is shown only as the fit's own reported number.
 
 **Consequence for the mission.** The compute-matched *curved-wins* frontier cannot be
 demonstrated on synthetic with the current `sae_manifold_fit` dictionary solver — an
