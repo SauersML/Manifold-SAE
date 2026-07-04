@@ -1,0 +1,23 @@
+{
+  "n": 70,
+  "behavior_first_order_purity": 1.0,
+  "per_layer": {
+    "11": {
+      "activation_first_order_purity": 0.4714285714285714,
+      "behavior_pullback_ev": 0.14579203337567792
+    },
+    "18": {
+      "activation_first_order_purity": 0.4142857142857143,
+      "behavior_pullback_ev": 0.1337383935099723
+    },
+    "23": {
+      "activation_first_order_purity": 0.35714285714285715,
+      "behavior_pullback_ev": 0.13766368859856037
+    }
+  },
+  "activation_first_cross_layer_corr": {
+    "L11_vs_L18": 0.3664277237783239,
+    "L18_vs_L23": 0.27613179533732785,
+    "L11_vs_L23": 0.4223535434810828
+  }
+}
