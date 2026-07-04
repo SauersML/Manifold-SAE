@@ -42,54 +42,69 @@ def load(name):
 
 
 def dev_json():
+    # prefer the ROBUST aggregated file (aggregate_premise.py); fall back to per-feature results
     p = os.path.join(DATA, "premise_deviance.json")
     if os.path.exists(p):
-        return json.load(open(p))["results"]
-    # else assemble from per-feature result_*.json
-    res = []
-    for f in sorted(os.listdir(DATA)):
-        if f.startswith("result_") and f.endswith(".json"):
-            res.append(json.load(open(os.path.join(DATA, f))))
-    return res
+        d = json.load(open(p))
+        if d.get("instrument") == "held_out_paired_deviance_robust":
+            return d["results"]
+    return [json.load(open(os.path.join(DATA, f))) for f in sorted(os.listdir(DATA))
+            if f.startswith("result_") and f.endswith(".json")]
+
+
+def _sig(p):
+    return "***" if p < 1e-3 else ("**" if p < 1e-2 else ("*" if p < 0.05 else "n.s."))
+
+
+def _signed_log(x):
+    return np.sign(x) * np.log10(1 + np.abs(x))
 
 
 def fig_hero(results):
-    """Per-feature curvature dividend: behavioral paired Delta (nats) with sign-flip p,
-    real vs Gaussian-null surrogate. THE premise number."""
-    rs = [r for r in results if "paired_deviance_behavioral" in r]
-    rs = sorted(rs, key=lambda r: r["paired_deviance_behavioral"].get("mean", 0) or 0)
+    """THE premise figure: per-feature ROBUST median curvature dividend, in BOTH the behavioral
+    (output-Fisher, nats) metric and the raw activation metric, with the distribution-free
+    sign-test significance. Positive ⇒ the closed circle reconstructs unseen rows better than a
+    straight line. The split (raw pays for some features while behavioral stays flat) is the
+    'geometry real in activations, behaviorally inert' story; behavioral-flat everywhere sharpens
+    the crown: the metric buys dose FORECASTING, not per-row behavioral likelihood."""
+    rs = [r for r in results if r.get("paired_deviance_behavioral", {}).get("n")]
     if not rs:
         return
+    rs = list(reversed(rs))
     labels = [PRETTY.get(r["name"], r["name"]) for r in rs]
-    means = np.array([r["paired_deviance_behavioral"]["mean"] for r in rs])
-    sds = np.array([(r["paired_deviance_behavioral"].get("sd") or 0) /
-                    max(np.sqrt(r["paired_deviance_behavioral"].get("n", 1)), 1) for r in rs])
-    ps = [r["paired_deviance_behavioral"]["p_two_sided"] for r in rs]
-    gm = np.array([r["surrogate_gaussian_behavioral"]["mean"] for r in rs])
+    beh_med = np.array([r["paired_deviance_behavioral"]["median"] for r in rs])
+    beh_p = [r["paired_deviance_behavioral"].get("sign_test_p", 1) for r in rs]
+    raw_med = np.array([r["paired_deviance_raw"]["median"] for r in rs])
+    raw_p = [r["paired_deviance_raw"].get("sign_test_p", 1) for r in rs]
     y = np.arange(len(rs))
-    fig, ax = plt.subplots(figsize=(10.2, 0.66 * len(rs) + 2.6))
-    ax.axvline(0, color=INK2, lw=1.0, ls="--")
-    cols = [BLUE if (m > 0 and p < 0.05) else (YELLOW if (m < 0 and p < 0.05) else INK2)
-            for m, p in zip(means, ps)]
-    ax.barh(y, means, xerr=sds, color=cols, alpha=0.88, height=0.6,
-            error_kw=dict(ecolor=INK2, lw=1.0, capsize=3))
-    ax.scatter(gm, y, marker="x", color=RED, s=55, lw=1.8, zorder=5,
-               label="Gaussian-matched surrogate (null)")
-    span = float(np.nanmax(np.abs(means) + sds)) or 1.0
-    pad = span * 0.55
-    ax.set_xlim(-span - pad, span + pad)
-    for i, (m, p) in enumerate(zip(means, ps)):
-        star = "***" if p < 1e-3 else ("**" if p < 1e-2 else ("*" if p < 0.05 else "n.s."))
-        tip = m + np.sign(m or 1) * (sds[i] + span * 0.03)
-        ax.text(tip, i, f"p={p:.1e} {star}", va="center",
-                ha="left" if m >= 0 else "right", fontsize=9, color=INK2)
-    ax.set_yticks(y); ax.set_yticklabels(labels)
-    ax.set_xlabel("curvature dividend  Δ = deviance(line) − deviance(circle)   [behavioral, nats]")
-    ax.set_title("Does curvature pay?  Held-out paired behavioral deviance, per feature\n"
-                 "Δ > 0 ⇒ the curved chart reconstructs unseen rows with less behavioral error",
-                 loc="left", fontsize=12)
-    ax.legend(frameon=False, loc="lower right", fontsize=9)
-    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "fig1_curvature_dividend.png"), dpi=200)
+    fig, axes = plt.subplots(1, 2, figsize=(12.6, 0.66 * len(rs) + 2.8))
+    for ax, med, ps, title, unit in (
+        (axes[0], beh_med, beh_p, "Behavioral dividend  (output-Fisher, nats)", "nats"),
+        (axes[1], raw_med, raw_p, "Activation-space dividend  (raw)", "act. units²")):
+        ax.axvline(0, color=INK2, lw=1.0, ls="--")
+        xs = _signed_log(med)
+        cols = [BLUE if (m > 0 and p < 0.05) else (YELLOW if (m < 0 and p < 0.05) else INK2)
+                for m, p in zip(med, ps)]
+        ax.barh(y, xs, color=cols, alpha=0.88, height=0.6)
+        span = float(np.nanmax(np.abs(xs))) or 1.0
+        ax.set_xlim(-span * 1.7, span * 1.7)
+        for i, (m, p) in enumerate(zip(med, ps)):
+            ax.text(xs[i] + np.sign(xs[i] or 1) * span * 0.04, i,
+                    f"{m:+.3g} {_sig(p)}", va="center",
+                    ha="left" if xs[i] >= 0 else "right", fontsize=8.5, color=INK2)
+        ax.set_yticks(y); ax.set_yticklabels(labels if ax is axes[0] else [])
+        ax.set_xlabel(f"signed log10(1+|median Δ|)   [{unit}]")
+        ax.set_title(title, loc="left", fontsize=11.5, pad=10)
+    fig.suptitle("Does curvature pay?  Held-out paired dividend Δ = deviance(line) − deviance(circle), median + sign test",
+                 x=0.012, ha="left", fontsize=13, fontweight="bold")
+    # legend
+    from matplotlib.patches import Patch
+    axes[1].legend(handles=[Patch(color=BLUE, label="circle wins (p<.05)"),
+                            Patch(color=YELLOW, label="line wins (p<.05)"),
+                            Patch(color=INK2, label="n.s.")],
+                   frameon=False, loc="upper left", fontsize=8.5)
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(os.path.join(FIGS, "fig1_curvature_dividend.png"), dpi=200)
     plt.close(fig)
 
 
@@ -165,33 +180,38 @@ def fig_atlas():
     a = load("slow_feature_atlas.json")
     if not a:
         return
-    groups = a["results"]
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
+    groups = [g for g in a["results"] if "pca_ev_fraction_top10" in g]
+    if not groups:
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(11.8, 4.7))
     ax = axes[0]
     for gi, g in enumerate(groups):
-        if "pca_ev_fraction_top10" not in g:
-            continue
         ev = np.array(g["pca_ev_fraction_top10"])
         ax.plot(np.arange(1, len(ev) + 1), np.cumsum(ev), marker="o",
-                color=[BLUE, AQUA][gi % 2], label=f"{g['group']} (n={g['n_template_means']})")
+                color=[BLUE, AQUA][gi % 2],
+                label=f"{g['group']} (n={g.get('n_context_means','?')}, PC1={g.get('pc1_fraction',0):.2f})")
     ax.set(xlabel="PC index", ylabel="cumulative EV fraction", ylim=(0, 1.02))
-    ax.set_title("Template-mean population: intrinsic spectrum", loc="left")
+    ax.set_title("Context-mean population: one dominant common-mode axis", loc="left", fontsize=11.5)
     ax.legend(frameon=False, fontsize=9)
     ax2 = axes[1]
-    labs, prs, prg = [], [], []
+    labs, real, base, null = [], [], [], []
     for g in groups:
-        if "participation_ratio" not in g:
-            continue
-        labs.append(g["group"]); prs.append(g["participation_ratio"])
-        prg.append(g.get("participation_ratio_gaussian_null", np.nan))
+        lab = g.get("feature_of_origin_recovery") or {}
+        labg = g.get("feature_of_origin_recovery_gaussian_null") or {}
+        labs.append(g["group"]); real.append(lab.get("nn_loo_acc", np.nan))
+        base.append(lab.get("majority_baseline", np.nan)); null.append(labg.get("nn_loo_acc", np.nan))
     y = np.arange(len(labs))
-    ax2.barh(y - 0.2, prs, height=0.38, color=BLUE, label="template means (real)")
-    ax2.barh(y + 0.2, prg, height=0.38, color=INK2, alpha=0.5, label="Gaussian null")
-    ax2.set_yticks(y); ax2.set_yticklabels(labs)
-    ax2.set_xlabel("participation ratio (intrinsic dim)")
-    ax2.set_title("Structured ⇒ lower than the matched null", loc="left")
-    ax2.legend(frameon=False, fontsize=9)
-    fig.tight_layout(); fig.savefig(os.path.join(FIGS, "fig4_slow_feature_atlas.png"), dpi=200)
+    ax2.barh(y + 0.24, real, height=0.22, color=BLUE, label="real context means")
+    ax2.barh(y, null, height=0.22, color=INK2, alpha=0.5, label="Gaussian-matched null")
+    ax2.barh(y - 0.24, base, height=0.22, color=YELLOW, alpha=0.8, label="majority baseline")
+    ax2.set_yticks(y); ax2.set_yticklabels(labs); ax2.set_xlim(0, 1.05)
+    ax2.set_xlabel("feature-of-origin 1-NN LOO accuracy")
+    ax2.set_title("Context mean carries contextual identity ≫ null", loc="left", fontsize=11.5)
+    ax2.legend(frameon=False, fontsize=8.5, loc="lower right")
+    fig.suptitle("Slow-feature atlas pilot: the subtracted PerContextMean is a modeled feature",
+                 x=0.012, ha="left", fontsize=12.5, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(os.path.join(FIGS, "fig4_slow_feature_atlas.png"), dpi=200)
     plt.close(fig)
 
 

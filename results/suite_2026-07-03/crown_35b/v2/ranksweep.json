@@ -1,0 +1,53 @@
+{
+  "experiment": "35B crown v2 rank sweep (floor protocol)",
+  "ranks": [
+    8,
+    32,
+    64
+  ],
+  "per_rank": [
+    {
+      "rank": 8,
+      "status": "OK",
+      "floor_median": 0.0,
+      "floor_n": 10,
+      "gate_floor_mult": 30.0,
+      "n_gated": 25,
+      "n_manifold": 300,
+      "raw_slope": 0.6247484721776706,
+      "raw_r2": 0.7478316083451761,
+      "raw_median_ratio": 1.85209740281956,
+      "raw_n": 150,
+      "cens_slope": 0.56884309828166,
+      "cens_r2": 0.6224283258972814,
+      "cens_median_ratio": 1.4883481169036008,
+      "cens_n": 134,
+      "router_frac_flip": 0.8766666666666667,
+      "router_mean_flips": 12.956666666666667
+    },
+    {
+      "rank": 32,
+      "status": "OK",
+      "floor_median": 0.0,
+      "floor_n": 10,
+      "gate_floor_mult": 30.0,
+      "n_gated": 29,
+      "n_manifold": 300,
+      "raw_slope": 0.6188244977282754,
+      "raw_r2": 0.7458755517919551,
+      "raw_median_ratio": 1.5339395586713738,
+      "raw_n": 150,
+      "cens_slope": 0.5567416113818681,
+      "cens_r2": 0.6036053090074839,
+      "cens_median_ratio": 1.2920273545597514,
+      "cens_n": 133,
+      "router_frac_flip": 0.8833333333333333,
+      "router_mean_flips": 12.95
+    },
+    {
+      "rank": 64,
+      "status": "MISSING"
+    }
+  ],
+  "norm_discriminator": "CURVATURE/CLAMP: median improves but censored slope stays flat (0.569->0.557) as s grows"
+}

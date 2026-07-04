@@ -33,15 +33,16 @@ OUT = os.environ.get("PREMISE_OUT", os.path.join(ROOT, "premise_out"))
 os.makedirs(OUT, exist_ok=True)
 FIT_ALARM = int(os.environ.get("ATLAS_FIT_ALARM", "240"))
 
-# (feature_label, npz, model_group)
+# (feature_label, npz, model_group). The PerContextMean is the per-PROMPT token-mean
+# (tmpl_mean, one vector per row) — the "slow"/contextual signature the suite subtracts.
 CACHES = [
     ("weekday", f"{ROOT}/dose_qwen8b_out/harvest_cache_weekday_L18_n70.npz", "8b_L18"),
     ("month", f"{ROOT}/dose_month_out/harvest_cache_month_L18_n120.npz", "8b_L18"),
     ("sycophancy", f"{OUT}/harvest_cache_sycophancy_L18.npz", "8b_L18"),
     ("hedging", f"{OUT}/harvest_cache_hedging_L18.npz", "8b_L18"),
     ("color", f"{ROOT}/dose_qwen36b_out/harvest_cache_color_L17_n48.npz", "35b_L17"),
-    ("weekday", f"{ROOT}/dose_qwen36b_out/harvest_cache_month_L17_n72.npz", "35b_L17"),
-    ("month", f"{ROOT}/dose_qwen36b_out/harvest_cache_weekday_L17_n42.npz", "35b_L17"),
+    ("month", f"{ROOT}/dose_qwen36b_out/harvest_cache_month_L17_n72.npz", "35b_L17"),
+    ("weekday", f"{ROOT}/dose_qwen36b_out/harvest_cache_weekday_L17_n42.npz", "35b_L17"),
 ]
 
 
@@ -53,14 +54,12 @@ def _h(s, f):
     raise _TO()
 
 
-def unique_template_means(tm):
+def context_means(tm):
+    """The per-prompt context means ARE the tmpl_mean rows (one token-mean vector per prompt).
+    De-duplicate exact repeats defensively, but each prompt is its own context signature."""
     key = np.round(tm, 5)
-    uniq, idx = np.unique(key, axis=0, return_inverse=True)
-    # return the true-precision mean per unique group (not the rounded key)
-    means = np.zeros((len(uniq), tm.shape[1]))
-    for g in range(len(uniq)):
-        means[g] = tm[idx == g].mean(0)
-    return means
+    _, keep = np.unique(key, axis=0, return_index=True)
+    return tm[np.sort(keep)]
 
 
 def participation_ratio(S):
@@ -89,7 +88,13 @@ def atlas_fit(M, Ks=(1, 2, 3), seconds=FIT_ALARM):
             signal.alarm(int(seconds))
             t0 = time.time()
             try:
-                sae = gamfit.sae_manifold_fit(Mr, K=K, d_atom=1, n_iter=50, random_state=0)
+                # descriptive fit (not a fairness-critical paired test) -> fast path OK
+                try:
+                    sae = gamfit.sae_manifold_fit(Mr, K=K, d_atom=1, n_iter=40, random_state=0,
+                                                  _run_structure_search=False,
+                                                  _run_outer_rho_search=False)
+                except TypeError:
+                    sae = gamfit.sae_manifold_fit(Mr, K=K, d_atom=1, n_iter=40, random_state=0)
                 signal.alarm(0)
                 r2 = float(sae.reconstruction_r2)
                 cert = None
@@ -159,61 +164,78 @@ def analyze_group(group, entries):
             print(f"[atlas:{group}] MISSING {npz}", flush=True)
             continue
         z = np.load(npz)
-        m = unique_template_means(z["tmpl_mean"].astype(np.float64))
+        m = context_means(z["tmpl_mean"].astype(np.float64))
         means.append(m)
         feat_label += [feat] * len(m)
         tpl_label += list(range(len(m)))
-        print(f"[atlas:{group}] {feat}: {len(m)} unique template means", flush=True)
+        print(f"[atlas:{group}] {feat}: {len(m)} context means", flush=True)
     if not means:
         return dict(group=group, error="no caches present")
     M = np.vstack(means)
     feat_label = np.asarray(feat_label)
     n, d = M.shape
-    print(f"[atlas:{group}] pooled {n} template means, d={d}, features={sorted(set(feat_label))}",
+    print(f"[atlas:{group}] pooled {n} context means, d={d}, features={sorted(set(feat_label))}",
           flush=True)
 
     mu = M.mean(0); Mc = M - mu
-    _, S, _ = np.linalg.svd(Mc, full_matrices=False)
+    Uu, S, Vt = np.linalg.svd(Mc, full_matrices=False)
     ev = S ** 2
     ev_frac = (ev / ev.sum()).tolist()
     pr = participation_ratio(S)
+    pc1_frac = float(ev_frac[0])
 
-    best, tried, _, rdim, _, _ = atlas_fit(M)
+    # STANDARDIZED top-k PCA coordinates: z-score each PC so a single dominant common-mode axis
+    # (context means are near rank-1: PC1 often ~99%) does not swamp the minor-axis structure.
+    k = min(10, len(S) - 1)
+    coords_std = (Uu[:, :k] * S[:k])
+    coords_std = coords_std / (coords_std.std(0, keepdims=True) + 1e-9)
+    # residual intrinsic dim after removing the dominant common-mode axis (PC1)
+    pr_resid = participation_ratio(S[1:]) if len(S) > 1 else float("nan")
+
     lab = None
-    if best is not None and best.get("_coords") is not None and len(set(feat_label)) > 1:
-        lab = label_recovery(best["_coords"], feat_label)
+    if len(set(feat_label)) > 1:
+        lab = label_recovery(coords_std, feat_label)
 
-    # Gaussian-matched null: intrinsic dim + atlas EV
+    # Gaussian-matched null: intrinsic dim + feature recovery must NOT exceed it if unstructured
     Mg = gaussian_surrogate(M, seed=7)
-    _, Sg, _ = np.linalg.svd(Mg - Mg.mean(0), full_matrices=False)
+    Ug, Sg, _ = np.linalg.svd(Mg - Mg.mean(0), full_matrices=False)
     pr_g = participation_ratio(Sg)
-    bestg, _, _, _, _, _ = atlas_fit(Mg, Ks=(best["K"],) if best else (2,))
+    pr_g_resid = participation_ratio(Sg[1:]) if len(Sg) > 1 else float("nan")
+    cg = (Ug[:, :k] * Sg[:k]); cg = cg / (cg.std(0, keepdims=True) + 1e-9)
+    lab_g = label_recovery(cg, feat_label) if len(set(feat_label)) > 1 else None
+
+    # optional descriptive SAE atlas fit (verdict does NOT depend on it)
+    best, tried, _, rdim, _, _ = atlas_fit(M)
 
     rec = dict(
-        group=group, n_template_means=int(n), d=int(d),
+        group=group, n_context_means=int(n), d=int(d),
         features=sorted(set(feat_label.tolist())),
         pca_ev_fraction_top10=[float(x) for x in ev_frac[:10]],
+        pc1_fraction=pc1_frac,
         participation_ratio=pr, participation_ratio_gaussian_null=pr_g,
-        atlas_best=({k: v for k, v in best.items() if not k.startswith("_")} if best else None),
-        atlas_tried=tried,
-        atlas_gaussian_null_r2=(bestg["r2"] if bestg else None),
+        participation_ratio_residual_no_pc1=pr_resid,
+        participation_ratio_residual_gaussian_null=pr_g_resid,
         feature_of_origin_recovery=lab,
+        feature_of_origin_recovery_gaussian_null=lab_g,
+        atlas_best=({kk: vv for kk, vv in best.items() if not kk.startswith("_")} if best else None),
+        atlas_tried=tried,
     )
-    # verdict
+    # verdict: the context mean CHARTS (is a modeled feature) if feature-of-origin is recoverable
+    # from its geometry well above the majority baseline AND above the Gaussian-null recovery.
     charts = False
-    if best is not None and bestg is not None:
-        charts = (best["r2"] - bestg["r2"] > 0.05) or (pr < 0.6 * pr_g)
-    if lab is not None and lab["perm_p"] < 0.05 and lab["nn_loo_acc"] > lab["majority_baseline"] + 0.1:
-        charts = True
+    if lab is not None:
+        base = lab["majority_baseline"]
+        charts = (lab["perm_p"] < 0.05 and lab["nn_loo_acc"] > base + 0.15 and
+                  lab["nn_loo_acc"] > (lab_g["nn_loo_acc"] if lab_g else 0) + 0.1)
     rec["verdict"] = "contextual_structure_charts" if charts else "unstructured_or_weak"
     with open(os.path.join(OUT, f"atlas_{group}.json"), "w") as fh:
         json.dump(rec, fh, indent=2)
     np.savez(os.path.join(OUT, f"atlas_means_{group}.npz"), M=M, feat=feat_label,
-             coords=(best["_coords"] if best and best.get("_coords") is not None else np.zeros((n, 1))),
-             ev_frac=np.asarray(ev_frac))
-    print(f"[atlas:{group}] VERDICT={rec['verdict']} pr={pr:.2f} (null {pr_g:.2f}) "
-          f"atlas_r2={best['r2'] if best else None} null_r2={bestg['r2'] if bestg else None} "
-          f"feat_recovery={lab}", flush=True)
+             coords_std=coords_std, ev_frac=np.asarray(ev_frac))
+    print(f"[atlas:{group}] VERDICT={rec['verdict']} pc1={pc1_frac:.3f} pr={pr:.2f} (null {pr_g:.2f}) "
+          f"pr_resid={pr_resid:.2f} (null {pr_g_resid:.2f}) "
+          f"feat_recovery acc={lab['nn_loo_acc']:.2f} base={lab['majority_baseline']:.2f} "
+          f"p={lab['perm_p']:.3g} nullacc={lab_g['nn_loo_acc']:.2f}", flush=True)
     return rec
 
 

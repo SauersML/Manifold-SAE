@@ -1,0 +1,41 @@
+JOINT-vs-CASCADE — pairwise-κ ENERGY screen, REAL shipped statistic
+gam @ accd993f3 (origin/main), cargo test -p gam-sae, job 12516330, wall 86s
+
+The screen: ρ = E[r_A²·r_B²] / (E[r_A²]·E[r_B²]) over ALL rows; independence null
+ρ = 1; z against delta-method SE √((κ_Aκ_B − 1)/N); MERGE fires iff z > 3 (ρ>1).
+
+  test manifold::pair_kappa::tests::gated_torus_split_is_flagged
+    [pair-κ torus]  n=6000 co_active=2452 ρ=2.4414 κ_A=2.445 κ_B=2.445 SE=0.0288 z=50.035 merge=true
+  test manifold::pair_kappa::tests::two_independent_circles_not_flagged
+    [pair-κ indep]  n=6000 co_active=1497 ρ=0.9915 κ_A=1.963 κ_B=2.026 SE=0.0223 z=-0.383 merge=false
+  test manifold::pair_kappa::tests::screen_all_pairs_selects_only_bound_pair
+    [pair-κ all]    proposals: [(1, 2, 2.5)]
+
+  #2131 NEW — the three joint-dependence regimes, at scale p ∈ {512, 2048}:
+  test manifold::tests_joint_vs_cascade_2131::gated_torus_fires_scale_invariant
+    [exp3 gated-torus] p=512  q=0.4 ρ=2.5002 z=50.614 merge=true
+    [exp3 gated-torus] p=2048 q=0.4 ρ=2.4305 z=49.925 merge=true
+  test manifold::tests_joint_vs_cascade_2131::phase_correlation_is_invisible_to_energy_screen
+    [exp2 phase-corr dense] p=512  ρ=1.0000 z=-0.030 merge=false
+    [exp2 phase-corr dense] p=2048 ρ=1.0000 z=-0.016 merge=false
+  test manifold::tests_joint_vs_cascade_2131::split_single_circle_is_a_lower_tail_gap
+    [exp1 split-circle] p=512  ρ=0.5014 z=-34.472 merge=false
+    [exp1 split-circle] p=2048 ρ=0.5005 z=-34.493 merge=false
+
+  test result: ok. 6 passed; 0 failed; 707 filtered out; finished in 4.56s
+
+VERDICT — the energy screen adjudicates exactly ONE of the three joint-dependence
+regimes a cascade can split across frames:
+
+  regime                          | ρ anchor | z       | screen fires? | recovery
+  --------------------------------+----------+---------+---------------+---------------------
+  E3 shared-presence (gated torus)| 1/q=2.50 | +50     | YES  ρ>1      | merge → torus atom
+  E2 phase law @ dense presence   | 1.00     | ~0      | no            | JOINT fit only (2-D coord)
+  E1 split single circle          | 1/2=0.50 | −34     | no  (ρ<1)     | JOINT fit only (unfreeze frame)
+
+ρ is ambient-width invariant (identical at p=512 and p=2048), so these are
+structural facts of the statistic, not small-p artifacts. The two "no" regimes are
+the honest UNRECOVERED-BY-SCREEN gaps: energy complementarity of a split chart
+lives in the LOWER tail (ρ<1) the merge screen does not adjudicate; a phase law at
+dense presence is invisible to a second-order ENERGY moment (each r² ≡ 1). Both are
+the province of the terminal joint fit — see results.json / REPORT.md.

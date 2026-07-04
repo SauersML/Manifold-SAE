@@ -62,21 +62,30 @@ ROOT = os.environ.get("ROOT", "/projects/standard/hsiehph/sauer354")
 OUT = os.environ.get("PREMISE_OUT", os.path.join(ROOT, "premise_out"))
 os.makedirs(OUT, exist_ok=True)
 RDIM = int(os.environ.get("PREMISE_RDIM", "8"))
-NITER = int(os.environ.get("PREMISE_NITER", "50"))
-FIT_ALARM = int(os.environ.get("PREMISE_FIT_ALARM", "300"))
+NITER = int(os.environ.get("PREMISE_NITER", "40"))
+FIT_ALARM = int(os.environ.get("PREMISE_FIT_ALARM", "450"))
 B_PERM = int(os.environ.get("PREMISE_BPERM", "20000"))
+# Outer-rho (smoothness/REML) search MUST stay on: it regularizes the circle so its extra
+# geometric freedom does not overfit held-out rows. Turning it off makes the Gaussian
+# surrogate non-flat (the circle wins on noise) — the falsification gate catches it. The
+# inner topology/STRUCTURE search is always off (we fix K=1, d_atom=1), which is the cheap,
+# fairness-neutral speedup. Env override only for experiments.
+RHO_SEARCH = os.environ.get("PREMISE_RHO_SEARCH", "1") != "0"
 SEED = int(os.environ.get("PREMISE_SEED", "0"))
 
 CACHES = [
-    # name, npz, model, layer, expect_cyclic
-    ("weekday_8b_L18", f"{ROOT}/dose_qwen8b_out/harvest_cache_weekday_L18_n70.npz", "qwen3-8b", 18, True),
-    ("month_8b_L18", f"{ROOT}/dose_month_out/harvest_cache_month_L18_n120.npz", "qwen3-8b", 18, True),
-    ("color_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_color_L17_n48.npz", "qwen3-35b", 17, True),
-    ("weekday_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_weekday_L17_n42.npz", "qwen3-35b", 17, True),
-    ("month_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_month_L17_n72.npz", "qwen3-35b", 17, True),
+    # name, npz, model, layer, expect_cyclic, n_categories (words per template; template-major
+    # build so original prompt index kept[row] -> template = kept//C, category = kept%C).
+    # tmpl_mean is a per-PROMPT token-mean (unique per row), so template grouping comes from
+    # the build convention, NOT from tmpl_mean. Safety caches carry saved template/level arrays.
+    ("weekday_8b_L18", f"{ROOT}/dose_qwen8b_out/harvest_cache_weekday_L18_n70.npz", "qwen3-8b", 18, True, 7),
+    ("month_8b_L18", f"{ROOT}/dose_month_out/harvest_cache_month_L18_n120.npz", "qwen3-8b", 18, True, 12),
+    ("color_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_color_L17_n48.npz", "qwen3-35b", 17, True, 8),
+    ("weekday_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_weekday_L17_n42.npz", "qwen3-35b", 17, True, 7),
+    ("month_35b_L17", f"{ROOT}/dose_qwen36b_out/harvest_cache_month_L17_n72.npz", "qwen3-35b", 17, True, 12),
     # safety caches produced by harvest_safety_acts.py (graded, NOT cyclic)
-    ("sycophancy_8b_L18", f"{OUT}/harvest_cache_sycophancy_L18.npz", "qwen3-8b", 18, False),
-    ("hedging_8b_L18", f"{OUT}/harvest_cache_hedging_L18.npz", "qwen3-8b", 18, False),
+    ("sycophancy_8b_L18", f"{OUT}/harvest_cache_sycophancy_L18.npz", "qwen3-8b", 18, False, 7),
+    ("hedging_8b_L18", f"{OUT}/harvest_cache_hedging_L18.npz", "qwen3-8b", 18, False, 7),
 ]
 
 
@@ -90,18 +99,29 @@ def _alarm_handler(signum, frame):
 
 def robust_fit(Hr, topo, seconds=FIT_ALARM):
     """Fit one K=1 d_atom=1 chart of the given topology on reduced-frame Hr, with a hard
-    wall-clock alarm and seed retries. Return (sae, info) or (None, info-with-error)."""
+    wall-clock alarm. Return (sae, info) or (None, info-with-error).
+
+    Speed: K and topology are FIXED here, so gamfit's inner topology/structure search and
+    outer-rho search (the '#1026 revival' + 'coherence collapse' churn that dominated the
+    wall time and starved the job) are disabled — they only explore K>1 candidates we never
+    want. One retry on a DIFFERENT seed (not more iters — a grind won't be rescued by more
+    iters); a timeout/failure is RECORDED as a fold failure, never hung."""
     import gamfit
+    fixedkw = dict(_run_structure_search=False, _run_outer_rho_search=RHO_SEARCH)
     attempts = [dict(n_iter=NITER, random_state=SEED),
-                dict(n_iter=NITER + 20, random_state=SEED + 101),
-                dict(n_iter=NITER + 40, random_state=SEED + 202)]
+                dict(n_iter=NITER, random_state=SEED + 101)]
     old = signal.signal(signal.SIGALRM, _alarm_handler)
+    last = dict(ok=False, reason="no attempt")
     try:
         for kw in attempts:
             signal.alarm(int(seconds))
             t0 = time.time()
             try:
-                sae = gamfit.sae_manifold_fit(Hr, K=1, d_atom=1, atom_topology=topo, **kw)
+                try:
+                    sae = gamfit.sae_manifold_fit(Hr, K=1, d_atom=1, atom_topology=topo,
+                                                  **kw, **fixedkw)
+                except TypeError:  # older wheel without the private fast-path kwargs
+                    sae = gamfit.sae_manifold_fit(Hr, K=1, d_atom=1, atom_topology=topo, **kw)
                 signal.alarm(0)
                 r2 = float(sae.reconstruction_r2)
                 if np.isfinite(r2) and len(sae.atom_topologies) == 1:
@@ -120,12 +140,43 @@ def robust_fit(Hr, topo, seconds=FIT_ALARM):
         signal.signal(signal.SIGALRM, old)
 
 
-def templates_from_tmpl_mean(tm):
-    """Recover template id per row from the per-template mean (rows of a template are
-    identical in tmpl_mean). Assumption-free grouping."""
-    key = np.round(tm, 5)
-    uniq, tid = np.unique(key, axis=0, return_inverse=True)
-    return tid, len(uniq)
+def template_ids(z, C):
+    """Template id per kept row. Prefer a saved 'template' array (safety caches); else derive
+    from the template-major build convention: original prompt index kept[row] -> template =
+    kept//C (C = words per template). tmpl_mean is a per-PROMPT token-mean, NOT a group mean,
+    so it cannot be used for grouping."""
+    if "template" in z.files:
+        tid = np.asarray(z["template"]).astype(int)
+        return tid, len(np.unique(tid))
+    kept = np.asarray(z["kept"]).astype(int) if "kept" in z.files else np.arange(len(z["X_last"]))
+    tid = kept // int(C)
+    # renumber to 0..T-1 contiguous
+    _, tid = np.unique(tid, return_inverse=True)
+    return tid, len(np.unique(tid))
+
+
+def heldout_reconstruct_polyline(sae, Hr_fit, Hr_test, closed=False):
+    """Robust held-out reconstruction that avoids gamfit's OOS predict path (which raises a
+    basis-dimension mismatch, GamError M=2 vs M=3, on some 35B circle fits): the fitted rows'
+    reconstructions sae.fitted are points ON the learned 1-D manifold; order them by the fitted
+    1-D coordinate to get a polyline (closed for a circle), and project each held-out point onto
+    the nearest segment. Identical treatment for line and circle -> fair. Pure numpy."""
+    P = np.asarray(sae.fitted, dtype=np.float64)          # (n_fit, rdim) manifold vertices
+    coords = np.asarray(sae.coords, dtype=np.float64).reshape(len(P), -1)[:, 0]
+    order = np.argsort(coords)
+    V = P[order]
+    if closed and len(V) > 2:
+        V = np.vstack([V, V[:1]])
+    A = V[:-1]; B = V[1:]                                  # segment endpoints (m-1, rdim)
+    AB = B - A
+    denom = np.einsum("md,md->m", AB, AB) + 1e-12
+    rec = np.empty((len(Hr_test), P.shape[1]), dtype=np.float64)
+    for i, x in enumerate(Hr_test):
+        t = np.clip(np.einsum("md,md->m", x[None, :] - A, AB) / denom, 0.0, 1.0)
+        proj = A + t[:, None] * AB                         # nearest point on each segment
+        d2 = np.einsum("md,md->m", x[None, :] - proj, x[None, :] - proj)
+        rec[i] = proj[int(np.argmin(d2))]
+    return rec
 
 
 def deviances_for_fold(H, U, fit_idx, test_idx):
@@ -145,7 +196,23 @@ def deviances_for_fold(H, U, fit_idx, test_idx):
         if sae is None:
             out[topo] = None
             continue
-        rec_red = np.asarray(sae.reconstruct(Hr_all[test_idx]), dtype=np.float64)  # (nt, rdim)
+        try:
+            rec_red = np.asarray(sae.reconstruct(Hr_all[test_idx]), dtype=np.float64)
+            if rec_red.shape != (len(test_idx), rdim):
+                raise ValueError("reconstruct shape")
+            info[topo]["oos"] = "gamfit_reconstruct"
+        except Exception as exc:  # noqa: BLE001  (gamfit predict_oos basis-mismatch bug)
+            # The polyline fallback is only a CRUDE proxy (corr ~0.54, ~1.4x vs true gamfit
+            # reconstruct) so it is NOT mixed into published numbers by default: a failed OOS
+            # reconstruct is recorded as an honest fold failure. Set PREMISE_ALLOW_FALLBACK=1
+            # to use it (annotated) for exploration only.
+            if os.environ.get("PREMISE_ALLOW_FALLBACK", "0") == "0":
+                info[topo]["oos"] = f"gamfit_oos_bug ({type(exc).__name__}: {str(exc)[:80]})"
+                out[topo] = None
+                continue
+            rec_red = heldout_reconstruct_polyline(sae, Hr_all[fit_idx], Hr_all[test_idx],
+                                                   closed=(topo == "circle"))
+            info[topo]["oos"] = f"polyline_fallback ({type(exc).__name__})"
         resid = H[test_idx] - (mu + rec_red @ Vt)                                  # (nt, p) full
         raw = np.einsum("np,np->n", resid, resid)
         if U is not None:
@@ -183,23 +250,49 @@ def run_pipeline(H, U, tid):
                 fold_info=fold_info)
 
 
+def _binom_two_sided(k, n, p=0.5):
+    """Exact two-sided binomial sign-test p (k successes of n)."""
+    from math import comb
+    if n == 0:
+        return float("nan")
+    pmf = [comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(n + 1)]
+    p0 = pmf[k]
+    return float(min(1.0, sum(pm for pm in pmf if pm <= p0 + 1e-15)))
+
+
 def signflip_test(delta, B=B_PERM, seed=0):
-    """Paired sign-flip randomization test. Returns dict with observed mean, p, null summary."""
+    """Paired randomization test on the per-row curvature dividend. Squared-deviance means are
+    outlier-sensitive (a held-out point that projects catastrophically onto the closed circle
+    dominates the mean), so we report BOTH a robust sign test (distribution-free, on the sign
+    of each row's contrast) and the mean-based sign-flip permutation, plus a 10%-winsorized
+    mean-based permutation. The robust headline is the sign test + median."""
     delta = np.asarray(delta, float)
     delta = delta[np.isfinite(delta)]
     n = len(delta)
     if n == 0:
-        return dict(n=0, mean=float("nan"), p=float("nan"))
+        return dict(n=0, mean=float("nan"), median=float("nan"), p_two_sided=float("nan"))
     T = float(delta.mean())
     rng = np.random.default_rng(seed)
     signs = rng.integers(0, 2, size=(B, n)) * 2 - 1
     null = (signs * delta[None, :]).mean(1)
-    p = (1 + int(np.sum(np.abs(null) >= abs(T)))) / (B + 1)
+    p_mean = (1 + int(np.sum(np.abs(null) >= abs(T)))) / (B + 1)
+    # winsorized (robust) mean + its sign-flip null
+    lo, hi = np.percentile(delta, [10, 90])
+    dw = np.clip(delta, lo, hi)
+    Tw = float(dw.mean())
+    nullw = (signs * dw[None, :]).mean(1)
+    p_wins = (1 + int(np.sum(np.abs(nullw) >= abs(Tw)))) / (B + 1)
+    # robust sign test (ignore exact zeros)
+    nz = delta[delta != 0.0]
+    k = int(np.sum(nz > 0))
+    p_sign = _binom_two_sided(k, len(nz))
     sd = float(delta.std(ddof=1)) if n > 1 else float("nan")
     return dict(n=int(n), mean=T, sd=sd, median=float(np.median(delta)),
                 frac_positive=float(np.mean(delta > 0)),
+                winsorized_mean=Tw, p_winsorized=float(p_wins),
+                sign_test_p=p_sign, n_positive=k, n_nonzero=int(len(nz)),
                 effect_size=(T / sd if sd and np.isfinite(sd) and sd > 0 else float("nan")),
-                p_two_sided=float(p),
+                p_two_sided=float(p_mean),
                 null_mean=float(null.mean()), null_sd=float(null.std()))
 
 
@@ -217,7 +310,7 @@ def gaussian_surrogate(H, tid, seed=0):
     return Hg
 
 
-def analyze_cache(name, npz, model, layer, cyclic):
+def analyze_cache(name, npz, model, layer, cyclic, C):
     if not os.path.exists(npz):
         return dict(name=name, error="cache missing", npz=npz)
     z = np.load(npz)
@@ -226,7 +319,7 @@ def analyze_cache(name, npz, model, layer, cyclic):
     U = z["U_last"].astype(np.float64) if "U_last" in z.files else None
     H = X - tm
     n, p = H.shape
-    tid, T = templates_from_tmpl_mean(tm)
+    tid, T = template_ids(z, C)
     print(f"[{name}] n={n} p={p} templates={T} rows/tpl={n/T:.1f} U={'yes' if U is not None else 'NO'}",
           flush=True)
     res = run_pipeline(H, U, tid)
@@ -280,11 +373,11 @@ def analyze_cache(name, npz, model, layer, cyclic):
 def main():
     only = os.environ.get("PREMISE_ONLY")
     results = []
-    for name, npz, model, layer, cyclic in CACHES:
+    for name, npz, model, layer, cyclic, C in CACHES:
         if only and name not in only.split(","):
             continue
         try:
-            results.append(analyze_cache(name, npz, model, layer, cyclic))
+            results.append(analyze_cache(name, npz, model, layer, cyclic, C))
         except Exception as exc:  # noqa: BLE001
             import traceback
             traceback.print_exc()
