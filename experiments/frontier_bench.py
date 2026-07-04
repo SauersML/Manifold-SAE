@@ -172,6 +172,26 @@ def split_scale(X, test_frac=0.2, seed=1):
     return train / s, test / s
 
 
+def pca_whiten(train, test, pca_dim: int):
+    """Train-PCA-whiten to ``pca_dim`` components (the repo's real-activation recipe).
+
+    Concentrates planted signal into its informative subspace and drops noise dims, so
+    the manifold fit can FIND the low-dim structure at feasible cost -- exactly what the
+    scale runs do (PCA-128 arm). ``pca_dim<=0`` is a no-op. The FLOP model then prices
+    the fit at the reduced dimension the SAE actually operates on (honest: that IS the
+    deployed encoder width), while the *ambient* p is recorded separately as data richness.
+    """
+    if pca_dim is None or pca_dim <= 0 or pca_dim >= train.shape[1]:
+        return train, test, train.shape[1]
+    mu = train.mean(0)
+    tr_c, te_c = train - mu, test - mu
+    _, _, Vt = np.linalg.svd(tr_c, full_matrices=False)
+    V = Vt[:pca_dim]
+    tr_p, te_p = tr_c @ V.T, te_c @ V.T
+    sd = tr_p.std(0) + 1e-8
+    return tr_p / sd, te_p / sd, pca_dim
+
+
 def ev(x, xhat):
     sst = float(((x - x.mean(0)) ** 2).sum())
     return float(1.0 - ((x - xhat) ** 2).sum() / sst) if sst > 0 else float("nan")
@@ -433,6 +453,10 @@ def run(args) -> dict:
                    zipf_s=args.zipf_s, noise_std=args.noise, harmonics=args.harmonics,
                    rotate=not args.no_rotate, seed=args.seed)
     train, test = split_scale(dgp["X"], test_frac=args.test_frac, seed=args.seed + 1)
+    ambient_p = train.shape[1]
+    train, test, fit_dim = pca_whiten(train, test, args.pca_dim)
+    if args.pca_dim and args.pca_dim > 0:
+        print(f"[pca] ambient p={ambient_p} -> fit_dim={fit_dim} (train-PCA-whiten)", flush=True)
     data_npz = scratch / "data.npz"
     np.savez(data_npz, train=train, test=test)
 
@@ -485,7 +509,8 @@ def run(args) -> dict:
         "config": {k: getattr(args, k) for k in
                    ("dgp", "p", "n", "concepts", "active", "active_mean", "firing_tail",
                     "zipf_s", "noise", "harmonics", "k", "lanes", "epochs", "n_iter",
-                    "param_bits", "seed", "test_frac")},
+                    "param_bits", "seed", "test_frac", "pca_dim")},
+        "ambient_p": ambient_p, "fit_dim": fit_dim,
         "matched_distortion_delta2": delta2,
         "results": results,
     }
@@ -509,6 +534,10 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--noise", type=float, default=0.05)
     ap.add_argument("--harmonics", type=int, default=1)
     ap.add_argument("--no-rotate", action="store_true")
+    ap.add_argument("--pca-dim", type=int, default=0,
+                    help="train-PCA-whiten to this many dims before fitting (0=off; the real "
+                         "recipe -- concentrates planted signal so the manifold fit is feasible). "
+                         "ambient p stays the data-richness axis; fit_dim is what the SAE sees.")
     ap.add_argument("--k", type=int, nargs="+", default=[8, 16, 24, 32, 48])
     ap.add_argument("--lanes", nargs="+", default=["linear", "curved", "manifold_linear"],
                     choices=["linear", "curved", "manifold_linear"])
