@@ -104,15 +104,37 @@ here because they are the kind of thing a reviewer should see us catch ourselves
    can be ≥1024 (data richness) while the SAE operates on a feasible `fit_dim`, priced at
    that dimension in the FLOP model.
 
-**Clean single-active frontier (in flight, checkpointed):**
+### Synthetic verdict: the curved lane does NOT clear the bar here (falsified, gam#2132)
 
-| job | what | out |
-|---|---|---|
-| `12515799` | p=24 raw, exactly-1, K={4,6,8,12}, curved-DGP (convergence check) | `exact_p24_curved.json` |
-| `12515810` | p=48 raw, exactly-1, K={6,10,16,24}, curved+linear DGP | `exact_p48_{curved,linear}.json` |
-| `12515811` | **ambient p=1024**, PCA-24, exactly-1, heavy-tailed, K={6,10,16,24}, curved+linear DGP | `exact_p1024_{curved,linear}.json` |
+Even in the cleanest regime (single-active planted circles), the multi-atom manifold
+dictionary **co-collapses** — it cannot be placed on a fair compute-matched frontier
+against linear because it does not reach the linear reconstruction ceiling, let alone beat
+it. Measured held-out EV (train `reconstruction_r2` in parens), `exact_p24_curved.json`,
+`manifold_cocollapse_p24.png`:
 
-Each fit checkpoints its JSON, so partial frontiers survive OOM/timeout. Finalize with
-`bash collect.sh` then read `verdicts_*.md` (EV-at-matched-FLOP, bits crossover, and the
-pure-linear overhead line). Superseded first-round artifacts (`synth_p*`) are kept as the
-honest record of the multi-active dead end.
+| regime | linear PCA @rank | curved chart | same-lane linear |
+|---|---|---|---|
+| C=3, p=12, K=6 | ~0.73 | **0.23** (train 0.54) | — |
+| C=6, p=24, K=6 | ~0.55 | **0.26** (train 0.37) | 0.25 (train 0.57) |
+| C=6, p=24, K=8 | ~0.56 | **0.11** (train 0.46) | 0.25 (train 0.57) |
+
+Three things, all reported not buried: (1) curved held-out EV **decreases** with K
+(0.26→0.11) — dictionary co-collapse (`[#1026] restoring incumbent` in the inner-fit
+logs); (2) a large train→held-out gap for **both** lanes (~0.55→~0.25) — the
+out-of-sample encode path generalizes poorly; (3) curved atoms underperform even the
+same-lane **linear** atoms on curved data, and both fall below a trivial linear-PCA
+baseline that recovers 0.55–0.73 on the identical data. So the structure is trivially
+recoverable; the gap is solver quality, filed as **gam#2132**.
+
+**Consequence for the mission.** The compute-matched *curved-wins* frontier cannot be
+demonstrated on synthetic with the current `sae_manifold_fit` dictionary solver — an
+honest negative, not a claim that curvature has no value (the `K=1` single-chart fits
+behind the dose-calibration crown are unaffected; the failure is specific to the
+multi-atom dictionary sweep). The harness, FLOP accounting, and MDL-bits currency are
+complete and correct, and will produce the frontier the moment the solver reaches the
+linear ceiling. The **real-35B block-lane frontier above stands on its own** as the
+delivered compute/bits frontier.
+
+Jobs (checkpointed; `exact_p48`=12515810 raw p=48, `exact_p1024`=12515811 ambient
+p=1024/PCA-24 heavy-tailed — both reproduce the same co-collapse as they land). First-round
+`synth_p*` multi-active artifacts are kept as the record of the earlier diagnosed dead end.

@@ -1,0 +1,287 @@
+{
+  "harness": "frontier_bench",
+  "status": "in_progress",
+  "dgp": {
+    "kind": "curved",
+    "p": 24,
+    "n_concepts": 6,
+    "intrinsic_dim": 1,
+    "extrinsic_dim": 2,
+    "signal_var": 1.0,
+    "noise_std": 0.05,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "harmonics": 1,
+    "active_mean": 4.0,
+    "seed": 0,
+    "freq_min": 0.052,
+    "freq_max": 0.448,
+    "support_entropy_bits": 2.184444972507056
+  },
+  "config": {
+    "dgp": "curved",
+    "p": 24,
+    "n": 1500,
+    "concepts": 6,
+    "active": 1,
+    "active_mean": 4.0,
+    "firing_tail": "zipf",
+    "zipf_s": 1.2,
+    "noise": 0.05,
+    "harmonics": 1,
+    "k": [
+      4,
+      6,
+      8,
+      12
+    ],
+    "lanes": [
+      "curved",
+      "manifold_linear"
+    ],
+    "epochs": 30,
+    "n_iter": 12,
+    "param_bits": 16.0,
+    "seed": 0,
+    "test_frac": 0.2
+  },
+  "matched_distortion_delta2": NaN,
+  "results": [
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 4,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "RuntimeError: manifold fit non-convergence: rs=0: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: cross-row IBP joint Hessian is non-PD a | rs=1: REML smoothing optimization failed ",
+      "traceback": "Traceback (most recent call last):\n  File \"/projects/standard/hsiehph/sauer354/Manifold-SAE/experiments/frontier_bench.py\", line 406, in _fit_worker\n    raise RuntimeError(\"manifold fit non-convergence: \" + \" | \".join(errs))\nRuntimeError: manifold fit non-convergence: rs=0: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: cross-row IBP joint Hessian is non-PD a | rs=1: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: cross-row IBP joint Hessian is non-PD a | rs=2: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: cross-row IBP joint Hessian is non-PD a | rs=3: REML smoothing optimization failed to converge: SaeManifoldTerm::reml_criterion: cross-row IBP joint Hessian is non-PD a\n"
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 6,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "curved",
+      "K": 6,
+      "k_realized": 6,
+      "active": 1,
+      "p": 24,
+      "heldout_ev": 0.26004009310427045,
+      "heldout_mse": 0.031032055442592545,
+      "train_ev": 0.3662313491141832,
+      "mean_l0": 1.0,
+      "dv_per_atom": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "fit_seconds": 106.9,
+      "support_entropy_bits": 0.5541888515109845,
+      "flops": {
+        "encode_macs_per_token": 459.0,
+        "decode_macs_per_token": 72.0,
+        "infer_macs_per_token": 531.0,
+        "train_macs_total": 22939200.0,
+        "decoder_params": 432.0,
+        "mean_dv_per_atom": 3.0,
+        "K": 6,
+        "passes": 12
+      }
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 8,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "curved",
+      "K": 8,
+      "k_realized": 8,
+      "active": 1,
+      "p": 24,
+      "heldout_ev": 0.1075760910416046,
+      "heldout_mse": 0.03742601181903564,
+      "train_ev": 0.46419716523202237,
+      "mean_l0": 1.0,
+      "dv_per_atom": [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3
+      ],
+      "fit_seconds": 130.2,
+      "support_entropy_bits": 0.41230491634003397,
+      "flops": {
+        "encode_macs_per_token": 603.0,
+        "decode_macs_per_token": 72.0,
+        "infer_macs_per_token": 675.0,
+        "train_macs_total": 29160000.0,
+        "decoder_params": 576.0,
+        "mean_dv_per_atom": 3.0,
+        "K": 8,
+        "passes": 12
+      }
+    },
+    {
+      "cfg": {
+        "lane": "curved",
+        "K": 12,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": false,
+      "error": "timeout>600s",
+      "lane": "curved",
+      "K": 12
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 4,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "manifold_linear",
+      "K": 4,
+      "k_realized": 4,
+      "active": 1,
+      "p": 24,
+      "heldout_ev": 0.2512512593269085,
+      "heldout_mse": 0.03140063700290843,
+      "train_ev": 0.5253289676519479,
+      "mean_l0": 1.0,
+      "dv_per_atom": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "fit_seconds": 30.3,
+      "support_entropy_bits": 0.46711321408479234,
+      "flops": {
+        "encode_macs_per_token": 192.0,
+        "decode_macs_per_token": 48.0,
+        "infer_macs_per_token": 240.0,
+        "train_macs_total": 10368000.0,
+        "decoder_params": 192.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 4,
+        "passes": 12
+      }
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 6,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "manifold_linear",
+      "K": 6,
+      "k_realized": 6,
+      "active": 1,
+      "p": 24,
+      "heldout_ev": 0.24995014015699812,
+      "heldout_mse": 0.03145520266496905,
+      "train_ev": 0.5691278967407933,
+      "mean_l0": 1.0,
+      "dv_per_atom": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "fit_seconds": 60.0,
+      "support_entropy_bits": 0.30039141736478187,
+      "flops": {
+        "encode_macs_per_token": 288.0,
+        "decode_macs_per_token": 48.0,
+        "infer_macs_per_token": 336.0,
+        "train_macs_total": 14515200.0,
+        "decoder_params": 288.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 6,
+        "passes": 12
+      }
+    },
+    {
+      "cfg": {
+        "lane": "manifold_linear",
+        "K": 8,
+        "active": 1,
+        "data_npz": "/dev/shm/exval/data.npz",
+        "epochs": 30,
+        "n_iter": 12,
+        "retries": 4
+      },
+      "ok": true,
+      "lane": "manifold_linear",
+      "K": 8,
+      "k_realized": 8,
+      "active": 1,
+      "p": 24,
+      "heldout_ev": 0.25260402276453986,
+      "heldout_mse": 0.03134390551028824,
+      "train_ev": 0.5710734442814804,
+      "mean_l0": 1.0,
+      "dv_per_atom": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "fit_seconds": 45.5,
+      "support_entropy_bits": 0.30039141736478187,
+      "flops": {
+        "encode_macs_per_token": 384.0,
+        "decode_macs_per_token": 48.0,
+        "infer_macs_per_token": 432.0,
+        "train_macs_total": 18662400.0,
+        "decoder_params": 384.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 8,
+        "passes": 12
+      }
+    }
+  ]
+}
