@@ -1,0 +1,138 @@
+{
+  "harness": "real35b_frontier",
+  "source": "scale_evidence/t1_frame_health.json (Qwen3.6-35B-A3B L17, block lane)",
+  "conventions": {
+    "p": 2048,
+    "n_tokens": 150000,
+    "param_bits": 16.0,
+    "matched_distortion_delta2_normalized": 0.010462324497560127,
+    "signal_var_per_coord": 1.0,
+    "selection": "combinatorial only (H(S) owed)"
+  },
+  "curved_feasibility": "manifold REML lane is a small-K tool (~70s at p=12; >5min at p=256/N=6k/K=24 on 16 cores); K in the thousands extrapolates to days -- not run. Block lane owns massive K; curved owns small-K EV-per-atom + bits (see synthetic frontier).",
+  "config": {
+    "dgp": "real35b_L17",
+    "p": 2048,
+    "n": 150000,
+    "concepts": null,
+    "lanes": [
+      "block"
+    ],
+    "k": [
+      2000,
+      8000,
+      16000
+    ]
+  },
+  "matched_distortion_delta2": 0.010462324497560127,
+  "results": [
+    {
+      "ok": true,
+      "lane": "block",
+      "K": 2000,
+      "k_realized": 2000,
+      "active": 2,
+      "p": 2048,
+      "block_size": 2,
+      "heldout_ev": 0.7072770359327769,
+      "heldout_mse": 0.2927229640672231,
+      "mean_l0": 4.0,
+      "dv_per_atom": [
+        2
+      ],
+      "frac_dead_blocks": 0.0,
+      "wall_s": 427.783828496933,
+      "flops": {
+        "encode_macs_per_token": 8192000.0,
+        "decode_macs_per_token": 8192.0,
+        "infer_macs_per_token": 8200192.0,
+        "train_macs_total": 3690086400000.0,
+        "decoder_params": 8192000.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 2000,
+        "passes": 1
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.2968341494140803,
+        "code_coord_bits": 13.187336597656321,
+        "selection_bits_combinatorial": 39.273844025921946,
+        "selection_bits_support_entropy": 39.273844025921946,
+        "dict_bits_per_token": 873.8133333333334,
+        "bits_per_token_combinatorial": 926.2745139569116,
+        "bits_per_token_support_entropy": 926.2745139569116
+      }
+    },
+    {
+      "ok": true,
+      "lane": "block",
+      "K": 8000,
+      "k_realized": 8000,
+      "active": 2,
+      "p": 2048,
+      "block_size": 2,
+      "heldout_ev": 0.9056558227482489,
+      "heldout_mse": 0.09434417725175115,
+      "mean_l0": 4.0,
+      "dv_per_atom": [
+        2
+      ],
+      "frac_dead_blocks": 0.0,
+      "wall_s": 1420.0981438159943,
+      "flops": {
+        "encode_macs_per_token": 32768000.0,
+        "decode_macs_per_token": 8192.0,
+        "infer_macs_per_token": 32776192.0,
+        "train_macs_total": 14749286400000.0,
+        "decoder_params": 32768000.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 8000,
+        "passes": 1
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.2968341494140803,
+        "code_coord_bits": 13.187336597656321,
+        "selection_bits_combinatorial": 47.27709245881793,
+        "selection_bits_support_entropy": 47.27709245881793,
+        "dict_bits_per_token": 3495.2533333333336,
+        "bits_per_token_combinatorial": 3555.717762389808,
+        "bits_per_token_support_entropy": 3555.717762389808
+      }
+    },
+    {
+      "ok": true,
+      "lane": "block",
+      "K": 16000,
+      "k_realized": 16000,
+      "active": 2,
+      "p": 2048,
+      "block_size": 2,
+      "heldout_ev": 0.9895376755024399,
+      "heldout_mse": 0.010462324497560127,
+      "mean_l0": 4.0,
+      "dv_per_atom": [
+        2
+      ],
+      "frac_dead_blocks": 0.0,
+      "wall_s": 3276.7708377838135,
+      "flops": {
+        "encode_macs_per_token": 65536000.0,
+        "decode_macs_per_token": 8192.0,
+        "infer_macs_per_token": 65544192.0,
+        "train_macs_total": 29494886400000.0,
+        "decoder_params": 65536000.0,
+        "mean_dv_per_atom": 2.0,
+        "K": 16000,
+        "passes": 1
+      },
+      "mdl": {
+        "rate_bits_per_coord": 3.2968341494140803,
+        "code_coord_bits": 13.187336597656321,
+        "selection_bits_combinatorial": 51.27763358783394,
+        "selection_bits_support_entropy": 51.27763358783394,
+        "dict_bits_per_token": 6990.506666666667,
+        "bits_per_token_combinatorial": 7054.971636852158,
+        "bits_per_token_support_entropy": 7054.971636852158
+      }
+    }
+  ]
+}

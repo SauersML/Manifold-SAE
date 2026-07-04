@@ -32,6 +32,7 @@ LANE_STYLE = {
     "curved": (BLUE, "o", "Curved chart (ours)"),
     "manifold_linear": (AQUA, "s", "Same-lane linear (control)"),
     "linear": (YELLOW, "^", "Block/TopK linear"),
+    "block": (YELLOW, "D", "Block-sparse (real 35B)"),
 }
 
 
