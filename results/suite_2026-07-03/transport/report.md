@@ -169,10 +169,15 @@ of evidence converge.
 **Topology side (TOPO — fit-free Vietoris–Rips persistent homology on the raw
 weekday clouds):** Fit-free persistent homology on the raw weekday clouds (n=210
 dense, W7-demeaned, projected into each layer's fitted-circle plane, 500× bootstrap)
-finds a single connected component (H0=1, bootstrap [1,1,1]) and a single dominant
-H1 loop generator at BOTH L20 and L21 — crisp at L21 (dominance ratio ~10×) and
-weak-but-single at L20 (ratio ~2×, the fuzziest ring in the sweep), with no second
-generator and no fragmentation at either layer. Since homology counts loops rather
+finds a single connected component (H0=1, bootstrap 5/50/95 = [1,1,1] at every
+projection: fit-plane, PCA-2/3/8, full-4096) and a single dominant H1 loop
+generator at BOTH L20 and L21 — crisp at L21 (H1_dom 6.41, bootstrap dominance
+ratio median 9.9×, 5th-pct 2.9×; H1_2nd 0.90) and single-but-faint at L20 (H1_dom
+~2.0, ratio median 1.8×, 5th-pct ~1.0×; H1_2nd 0.80, the fuzziest ring in the
+sweep), with no second comparable generator and no fragmentation at either layer.
+L20's b1 is faint (5th-pct dominance ~1×), but that faintness is the *mechanism*
+(weakest ring → its rank-8 chart wobbles), not evidence of doubling or collapse.
+Since homology counts loops rather
 than winding number, the rank-8 degree-2 is invisible to H1 by construction; the
 manifold's topology is an unchanged single S¹ across the hop, and L20's
 poorly-resolved ring is precisely what destabilizes its rank-8 chart into the
