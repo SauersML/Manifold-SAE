@@ -1,0 +1,626 @@
+{
+  "harness": "inframe_frontier",
+  "arm": "Tier-1 SAE (linear) vs same SAE + in-frame curved refinement (evidence-gated)",
+  "source": "vendored mirror of gam/bench/inframe_curved_frontier.py + gam/crates/gam-sae/src/manifold/inframe_curved.rs",
+  "config": {
+    "p": [
+      48,
+      256,
+      1024,
+      2048
+    ],
+    "n": 1500,
+    "r_true": 8,
+    "m": 8,
+    "l0": 16,
+    "folds": 4,
+    "shell_noise": 0.02,
+    "ambient_noise": 0.01,
+    "seeds": 5,
+    "seed": 1
+  },
+  "verdict": {
+    "curved_never_loses_ev": true,
+    "curved_wins_bits": true
+  },
+  "aggregate": {
+    "48": {
+      "mean_delta_ev": 0.8481423993600501,
+      "min_delta_ev": 0.8464006428143548,
+      "mean_ev_linear": 0.13882547234730064,
+      "mean_ev_curved": 0.9869678717073509,
+      "all_delta_bits_le_0": true,
+      "all_delta_ev_ge_0": true,
+      "border_shrink": 1.5
+    },
+    "256": {
+      "mean_delta_ev": 0.8307356250118906,
+      "min_delta_ev": 0.8289313729816487,
+      "mean_ev_linear": 0.13726614074471105,
+      "mean_ev_curved": 0.9680017657566017,
+      "all_delta_bits_le_0": true,
+      "all_delta_ev_ge_0": true,
+      "border_shrink": 8.0
+    },
+    "1024": {
+      "mean_delta_ev": 0.7767450654853316,
+      "min_delta_ev": 0.7754654249044108,
+      "mean_ev_linear": 0.12727323559425271,
+      "mean_ev_curved": 0.9040183010795844,
+      "all_delta_bits_le_0": true,
+      "all_delta_ev_ge_0": true,
+      "border_shrink": 32.0
+    },
+    "2048": {
+      "mean_delta_ev": 0.7151462797915806,
+      "min_delta_ev": 0.7131874837622066,
+      "mean_ev_linear": 0.11496128095661914,
+      "mean_ev_curved": 0.8301075607481998,
+      "all_delta_bits_le_0": true,
+      "all_delta_ev_ge_0": true,
+      "border_shrink": 64.0
+    }
+  },
+  "rows": [
+    {
+      "p": 48,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 1,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1303.3229396710196,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13769452997186193,
+        "border": 384,
+        "bits": -41018.1332421103,
+        "infer_macs_per_token": 6144.0
+      },
+      "curved": {
+        "ev": 0.9872323031314616,
+        "border": 256,
+        "bits": -193143.0655184789,
+        "infer_macs_per_token": 5632.0
+      },
+      "delta_ev": 0.8495377731595997,
+      "delta_bits": -152124.9322763686,
+      "border_shrink": 1.5
+    },
+    {
+      "p": 48,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 2,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1291.261864756001,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.1405067727607313,
+        "border": 384,
+        "bits": -41024.74832798123,
+        "infer_macs_per_token": 6144.0
+      },
+      "curved": {
+        "ev": 0.9869074155750861,
+        "border": 256,
+        "bits": -192127.48461169217,
+        "infer_macs_per_token": 5632.0
+      },
+      "delta_ev": 0.8464006428143548,
+      "delta_bits": -151102.73628371092,
+      "border_shrink": 1.5
+    },
+    {
+      "p": 48,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 3,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1298.5987024368414,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13778306156986797,
+        "border": 384,
+        "bits": -40966.546146030756,
+        "infer_macs_per_token": 6144.0
+      },
+      "curved": {
+        "ev": 0.98702763468028,
+        "border": 256,
+        "bits": -192515.27232046064,
+        "infer_macs_per_token": 5632.0
+      },
+      "delta_ev": 0.849244573110412,
+      "delta_bits": -151548.72617442987,
+      "border_shrink": 1.5
+    },
+    {
+      "p": 48,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 4,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1294.4415430549875,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.139897652647908,
+        "border": 384,
+        "bits": -41082.5245860987,
+        "infer_macs_per_token": 6144.0
+      },
+      "curved": {
+        "ev": 0.9870045704840895,
+        "border": 256,
+        "bits": -192478.9028386079,
+        "infer_macs_per_token": 5632.0
+      },
+      "delta_ev": 0.8471069178361815,
+      "delta_bits": -151396.3782525092,
+      "border_shrink": 1.5
+    },
+    {
+      "p": 48,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 5,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1299.5602282045668,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13824534478613393,
+        "border": 384,
+        "bits": -40912.92379272961,
+        "infer_macs_per_token": 6144.0
+      },
+      "curved": {
+        "ev": 0.9866674346658364,
+        "border": 256,
+        "bits": -191456.36746638583,
+        "infer_macs_per_token": 5632.0
+      },
+      "delta_ev": 0.8484220898797025,
+      "delta_bits": -150543.4436736562,
+      "border_shrink": 1.5
+    },
+    {
+      "p": 256,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 1,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1305.1049497047225,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13651746673701282,
+        "border": 2048,
+        "bits": -535829.7438814596,
+        "infer_macs_per_token": 32768.0
+      },
+      "curved": {
+        "ev": 0.9681631982758054,
+        "border": 256,
+        "bits": -1176049.7356475382,
+        "infer_macs_per_token": 12288.0
+      },
+      "delta_ev": 0.8316457315387926,
+      "delta_bits": -640219.9917660786,
+      "border_shrink": 8.0
+    },
+    {
+      "p": 256,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 2,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1286.5385684149658,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.1390874821248621,
+        "border": 2048,
+        "bits": -536248.3739773742,
+        "infer_macs_per_token": 32768.0
+      },
+      "curved": {
+        "ev": 0.9681175553068464,
+        "border": 256,
+        "bits": -1175620.9923340722,
+        "infer_macs_per_token": 12288.0
+      },
+      "delta_ev": 0.8290300731819843,
+      "delta_bits": -639372.6183566981,
+      "border_shrink": 8.0
+    },
+    {
+      "p": 256,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 3,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1297.3193208349744,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13584841822502847,
+        "border": 2048,
+        "bits": -535425.9246873185,
+        "infer_macs_per_token": 32768.0
+      },
+      "curved": {
+        "ev": 0.9681975055948219,
+        "border": 256,
+        "bits": -1176001.636041037,
+        "infer_macs_per_token": 12288.0
+      },
+      "delta_ev": 0.8323490873697934,
+      "delta_bits": -640575.7113537185,
+      "border_shrink": 8.0
+    },
+    {
+      "p": 256,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 4,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1290.6700980206942,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.13848883673932733,
+        "border": 2048,
+        "bits": -536319.7080586217,
+        "infer_macs_per_token": 32768.0
+      },
+      "curved": {
+        "ev": 0.967420209720976,
+        "border": 256,
+        "bits": -1171671.5562979449,
+        "infer_macs_per_token": 12288.0
+      },
+      "delta_ev": 0.8289313729816487,
+      "delta_bits": -635351.8482393231,
+      "border_shrink": 8.0
+    },
+    {
+      "p": 256,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 5,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1293.39103941979,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.1363884998973245,
+        "border": 2048,
+        "bits": -536042.6507010945,
+        "infer_macs_per_token": 32768.0
+      },
+      "curved": {
+        "ev": 0.9681103598845585,
+        "border": 256,
+        "bits": -1175972.9254635498,
+        "infer_macs_per_token": 12288.0
+      },
+      "delta_ev": 0.831721859987234,
+      "delta_bits": -639930.2747624553,
+      "border_shrink": 8.0
+    },
+    {
+      "p": 1024,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 1,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1303.013468782331,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.1274098832340188,
+        "border": 8192,
+        "bits": -3144401.575592314,
+        "infer_macs_per_token": 131072.0
+      },
+      "curved": {
+        "ev": 0.9034185528748918,
+        "border": 256,
+        "bits": -4863849.313761719,
+        "infer_macs_per_token": 36864.0
+      },
+      "delta_ev": 0.776008669640873,
+      "delta_bits": -1719447.7381694047,
+      "border_shrink": 32.0
+    },
+    {
+      "p": 1024,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 2,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1298.696187986496,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.12923332719375547,
+        "border": 8192,
+        "bits": -3144241.7912863903,
+        "infer_macs_per_token": 131072.0
+      },
+      "curved": {
+        "ev": 0.9046987520981663,
+        "border": 256,
+        "bits": -4872330.974264187,
+        "infer_macs_per_token": 36864.0
+      },
+      "delta_ev": 0.7754654249044108,
+      "delta_bits": -1728089.1829777965,
+      "border_shrink": 32.0
+    },
+    {
+      "p": 1024,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 3,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1301.4802353977263,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.12774593742168983,
+        "border": 8192,
+        "bits": -3143370.0501853954,
+        "infer_macs_per_token": 131072.0
+      },
+      "curved": {
+        "ev": 0.904289436959788,
+        "border": 256,
+        "bits": -4869478.497425462,
+        "infer_macs_per_token": 36864.0
+      },
+      "delta_ev": 0.7765434995380982,
+      "delta_bits": -1726108.4472400667,
+      "border_shrink": 32.0
+    },
+    {
+      "p": 1024,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 4,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1310.0310801443013,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.12708273785392687,
+        "border": 8192,
+        "bits": -3144464.552284805,
+        "infer_macs_per_token": 131072.0
+      },
+      "curved": {
+        "ev": 0.9038326738791524,
+        "border": 256,
+        "bits": -4867500.272867327,
+        "infer_macs_per_token": 36864.0
+      },
+      "delta_ev": 0.7767499360252256,
+      "delta_bits": -1723035.7205825215,
+      "border_shrink": 32.0
+    },
+    {
+      "p": 1024,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 5,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1308.2210320460783,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.12489429226787263,
+        "border": 8192,
+        "bits": -3141749.8320766096,
+        "infer_macs_per_token": 131072.0
+      },
+      "curved": {
+        "ev": 0.9038520895859231,
+        "border": 256,
+        "bits": -4866863.627144846,
+        "infer_macs_per_token": 36864.0
+      },
+      "delta_ev": 0.7789577973180505,
+      "delta_bits": -1725113.7950682365,
+      "border_shrink": 32.0
+    },
+    {
+      "p": 2048,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 1,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1304.6734262776413,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.11708057139544725,
+        "border": 16384,
+        "bits": -7198524.947075194,
+        "infer_macs_per_token": 262144.0
+      },
+      "curved": {
+        "ev": 0.8303467982220281,
+        "border": 256,
+        "bits": -9791096.327160988,
+        "infer_macs_per_token": 69632.0
+      },
+      "delta_ev": 0.7132662268265808,
+      "delta_bits": -2592571.3800857943,
+      "border_shrink": 64.0
+    },
+    {
+      "p": 2048,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 2,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1310.2368496802362,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.11432261639097563,
+        "border": 16384,
+        "bits": -7196867.444142648,
+        "infer_macs_per_token": 262144.0
+      },
+      "curved": {
+        "ev": 0.8301908544471406,
+        "border": 256,
+        "bits": -9792818.084239056,
+        "infer_macs_per_token": 69632.0
+      },
+      "delta_ev": 0.715868238056165,
+      "delta_bits": -2595950.6400964083,
+      "border_shrink": 64.0
+    },
+    {
+      "p": 2048,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 3,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1323.407731384178,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.11376575527626431,
+        "border": 16384,
+        "bits": -7192102.641682679,
+        "infer_macs_per_token": 262144.0
+      },
+      "curved": {
+        "ev": 0.8298186749773125,
+        "border": 256,
+        "bits": -9785655.876923187,
+        "infer_macs_per_token": 69632.0
+      },
+      "delta_ev": 0.7160529197010482,
+      "delta_bits": -2593553.235240508,
+      "border_shrink": 64.0
+    },
+    {
+      "p": 2048,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 4,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1302.2849846652434,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.11689095875239042,
+        "border": 16384,
+        "bits": -7199925.14875207,
+        "infer_macs_per_token": 262144.0
+      },
+      "curved": {
+        "ev": 0.8300784425145971,
+        "border": 256,
+        "bits": -9790398.649725854,
+        "infer_macs_per_token": 69632.0
+      },
+      "delta_ev": 0.7131874837622066,
+      "delta_bits": -2590473.5009737844,
+      "border_shrink": 64.0
+    },
+    {
+      "p": 2048,
+      "n": 1500,
+      "r_true": 8,
+      "M": 8,
+      "l0": 16,
+      "seed": 5,
+      "r_learned": 32,
+      "r_linear": 8,
+      "gate_gain": 1325.966560432026,
+      "gate_charge": 234.02305238688965,
+      "accepted": true,
+      "linear": {
+        "ev": 0.11274650296801814,
+        "border": 16384,
+        "bits": -7190355.9515910605,
+        "infer_macs_per_token": 262144.0
+      },
+      "curved": {
+        "ev": 0.8301030335799202,
+        "border": 256,
+        "bits": -9788243.388213899,
+        "infer_macs_per_token": 69632.0
+      },
+      "delta_ev": 0.7173565306119021,
+      "delta_bits": -2597887.4366228385,
+      "border_shrink": 64.0
+    }
+  ]
+}

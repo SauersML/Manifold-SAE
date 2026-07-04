@@ -104,7 +104,30 @@ here because they are the kind of thing a reviewer should see us catch ourselves
    can be ≥1024 (data richness) while the SAE operates on a feasible `fit_dim`, priced at
    that dimension in the FLOP model.
 
-### Synthetic verdict: the curved lane does NOT clear the bar here (falsified, gam#2132)
+### Synthetic HEADLINE: SAE + in-frame curved refinement cannot lose EV, and wins bits
+
+Drawn with the **shipped** curved arm — the low-rank ambient-frame curved cascade
+(`gam/crates/gam-sae/src/manifold/inframe_curved.rs`; self-contained numpy mirror
+vendored into `experiments/inframe_frontier.py`), NOT the deprecated cold-joint dictionary.
+`inframe_frontier.json`, `inframe_frontier.png`. Tier-1 SAE (linear) vs the SAME SAE plus
+an **evidence-gated** curved refinement fit purely inside a learned r-dim frame on the
+residual — so it can only *reduce* that residual (EV monotone), and is kept only where it
+pays its ½·2r·log n description charge. 5 seeds each:
+
+| ambient p | EV linear | EV curved | ΔEV | Δbits | border shrink M·p→M·r |
+|---:|---:|---:|---:|---:|---:|
+| 48 | 0.14 | **0.99** | +0.85 | −1.5e5 | 1.5× |
+| 256 | 0.14 | **0.97** | +0.83 | −6.4e5 | 8× |
+| 1024 | 0.13 | **0.90** | +0.78 | −1.7e6 | 32× |
+| 2048 | 0.11 | **0.83** | +0.72 | −2.6e6 | 64× |
+
+**Verdict: curved never loses EV = True; curved wins bits = True** — across every seed and
+every p up to 2048 (the gate accepts on every draw; there is real curved structure to
+price). The frame border is `M·r` (r≈8–32) not `M·p`, so the curved point is also strictly
+**cheaper** at inference as p grows (r ≪ p) — it wins EV, bits, and FLOPs simultaneously.
+This is the reviewer's "SAE + evidence-priced refinement cannot lose EV" frontier, drawn.
+
+### Why the cascade, not the cold joint (falsified, gam#2132)
 
 Even in the cleanest regime (single-active planted circles), the multi-atom manifold
 dictionary **co-collapses** — it cannot be placed on a fair compute-matched frontier
@@ -131,14 +154,12 @@ one ambient p=1024/PCA-24 point even reads train 0.07 / held-out 0.62, which onl
 sense across conventions), so we do **not** read a train→held-out overfitting gap from it;
 it is shown only as the fit's own reported number.
 
-**Consequence for the mission.** The compute-matched *curved-wins* frontier cannot be
-demonstrated on synthetic with the current `sae_manifold_fit` dictionary solver — an
-honest negative, not a claim that curvature has no value (the `K=1` single-chart fits
-behind the dose-calibration crown are unaffected; the failure is specific to the
-multi-atom dictionary sweep). The harness, FLOP accounting, and MDL-bits currency are
-complete and correct, and will produce the frontier the moment the solver reaches the
-linear ceiling. The **real-35B block-lane frontier above stands on its own** as the
-delivered compute/bits frontier.
+**Consequence.** The cold-joint `sae_manifold_fit` *dictionary* co-collapses here — this
+is the program's known scar tissue and exactly why the shipped curved path is the in-frame
+cascade above, not the cold joint. So this section is the honest "why the cascade" row, not
+a dead end: the curved-wins frontier IS drawn (headline above), and the cold-joint result
+explains why that arm and not this one. The `K=1` single-chart fits behind the dose crown
+are also unaffected.
 
 Jobs (checkpointed; `exact_p48`=12515810 raw p=48, `exact_p1024`=12515811 ambient
 p=1024/PCA-24 heavy-tailed — both reproduce the same co-collapse as they land). First-round
