@@ -1,0 +1,10 @@
+{
+  "circ_corr_act_beh": 0.9508134486083264,
+  "circ_corr_beh_truth": 0.9728498999828884,
+  "circ_corr_act_truth": 0.9960452874333331,
+  "pullback_activation_ev": 0.9895514304977123,
+  "cal_beh_r2": 0.939253746509005,
+  "cal_beh_medratio": 0.6620903800791791,
+  "cal_act_r2": 0.860507926226277,
+  "cal_act_medratio": 0.6727277673964731
+}

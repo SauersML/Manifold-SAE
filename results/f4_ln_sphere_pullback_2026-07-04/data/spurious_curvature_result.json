@@ -1,0 +1,72 @@
+[
+  {
+    "flat_hh_frac": 0.00037808973400376176,
+    "flat_radial_rms": 5.5799183186634345e-05,
+    "flat_total_rms": 5.637181678007938e-05,
+    "sphere_hh_frac": 0.0003780897340037587,
+    "sphere_radial_rms": 5.579918318660332e-05,
+    "sphere_total_rms": 5.637181678005201e-05,
+    "norm_cv": 0.0,
+    "s": 0.0
+  },
+  {
+    "flat_hh_frac": 0.00045028571997660706,
+    "flat_radial_rms": 0.04762462318029897,
+    "flat_total_rms": 0.047646808138636525,
+    "sphere_hh_frac": 0.00037808973400375867,
+    "sphere_radial_rms": 5.579918318663001e-05,
+    "sphere_total_rms": 5.637181678007839e-05,
+    "norm_cv": 0.04841902465028165,
+    "s": 0.05
+  },
+  {
+    "flat_hh_frac": 0.000858747566806259,
+    "flat_radial_rms": 0.09492768200469986,
+    "flat_total_rms": 0.09516630823302853,
+    "sphere_hh_frac": 0.0003780897340037682,
+    "sphere_radial_rms": 5.579918318662968e-05,
+    "sphere_total_rms": 5.6371816780078915e-05,
+    "norm_cv": 0.09683586028868617,
+    "s": 0.1
+  },
+  {
+    "flat_hh_frac": 0.027435283302282735,
+    "flat_radial_rms": 0.16433927727164546,
+    "flat_total_rms": 0.18078950941769437,
+    "sphere_hh_frac": 0.0003780897340037329,
+    "sphere_radial_rms": 5.579918318656642e-05,
+    "sphere_total_rms": 5.637181678003954e-05,
+    "norm_cv": 0.19441647027808048,
+    "s": 0.2
+  },
+  {
+    "flat_hh_frac": 0.19897196316740517,
+    "flat_radial_rms": 0.2764515627461831,
+    "flat_total_rms": 0.3694418529722403,
+    "sphere_hh_frac": 0.0003780897340037747,
+    "sphere_radial_rms": 5.579918318663303e-05,
+    "sphere_total_rms": 5.637181678010586e-05,
+    "norm_cv": 0.29419526261482387,
+    "s": 0.3
+  },
+  {
+    "flat_hh_frac": 0.41923553298822375,
+    "flat_radial_rms": 0.2693539226637622,
+    "flat_total_rms": 0.40523519471461855,
+    "sphere_hh_frac": 0.00037808973400374967,
+    "sphere_radial_rms": 5.579918318656039e-05,
+    "sphere_total_rms": 5.637181678006067e-05,
+    "norm_cv": 0.3975955847442064,
+    "s": 0.4
+  },
+  {
+    "flat_hh_frac": 0.6334204583797518,
+    "flat_radial_rms": 0.28102196450366546,
+    "flat_total_rms": 0.46476499116722797,
+    "sphere_hh_frac": 0.000378089734003767,
+    "sphere_radial_rms": 5.5799183186600016e-05,
+    "sphere_total_rms": 5.637181678007876e-05,
+    "norm_cv": 0.5060649837846153,
+    "s": 0.5
+  }
+]
