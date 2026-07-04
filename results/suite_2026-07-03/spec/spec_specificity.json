@@ -1,0 +1,268 @@
+{
+  "config": {
+    "model": "/projects/standard/hsiehph/sauer354/models/qwen3-8b",
+    "layer": 18,
+    "rank": 8,
+    "n_bases": 20,
+    "fracs": [
+      0.0005,
+      0.001,
+      0.002,
+      0.004,
+      0.008,
+      0.015,
+      0.03,
+      0.06,
+      0.12,
+      0.25,
+      0.4
+    ],
+    "n_tasks": 15,
+    "seed": 0,
+    "chart_r2": 0.9970215435370683
+  },
+  "tasks": [
+    "The capital of France is",
+    "The capital of Japan is",
+    "Two plus two equals",
+    "The chemical symbol for gold is",
+    "The largest planet in the solar system is",
+    "The opposite of hot is",
+    "The first President of the United States was",
+    "The square root of eighty one is",
+    "Water is made of hydrogen and",
+    "The past tense of the verb run is",
+    "In the word 'hello' the number of letters is",
+    "The color of fresh grass is",
+    "Ten minus three equals",
+    "The author of Romeo and Juliet was",
+    "The freezing point of water in Celsius is"
+  ],
+  "neutral_tail": "and then the whole group quietly continued walking down the road",
+  "consistency": [
+    {
+      "base": 56,
+      "on_bare": 0.0007215274176141729,
+      "on_composite": 0.0007217327587790584,
+      "rel_diff": 0.0002845923243838419
+    },
+    {
+      "base": 16,
+      "on_bare": 0.0005960369081489309,
+      "on_composite": 0.0005961306677831129,
+      "rel_diff": 0.0001573050811118114
+    },
+    {
+      "base": 14,
+      "on_bare": 0.0003880564237528578,
+      "on_composite": 0.0003880251556604591,
+      "rel_diff": 8.057614945866223e-05
+    },
+    {
+      "base": 69,
+      "on_bare": 0.038709807563869214,
+      "on_composite": 0.03870990127166184,
+      "rel_diff": 2.420776503942329e-06
+    },
+    {
+      "base": 27,
+      "on_bare": 0.0005970993394704668,
+      "on_composite": 0.0005969562701197883,
+      "rel_diff": 0.00023960728344696368
+    },
+    {
+      "base": 38,
+      "on_bare": 0.018234686223607147,
+      "on_composite": 0.018234561816954847,
+      "rel_diff": 6.822527724015951e-06
+    },
+    {
+      "base": 68,
+      "on_bare": 0.0170453088542074,
+      "on_composite": 0.017044719117289057,
+      "rel_diff": 3.4598194927924594e-05
+    },
+    {
+      "base": 63,
+      "on_bare": 0.04218177209299285,
+      "on_composite": 0.04218258457295013,
+      "rel_diff": 1.9261399342989914e-05
+    },
+    {
+      "base": 33,
+      "on_bare": 0.3830727411682403,
+      "on_composite": 0.3830692540844106,
+      "rel_diff": 9.10292864758595e-06
+    },
+    {
+      "base": 39,
+      "on_bare": 0.012785309666648459,
+      "on_composite": 0.012785587771674243,
+      "rel_diff": 2.175191943217408e-05
+    },
+    {
+      "base": 10,
+      "on_bare": 0.006606156602518654,
+      "on_composite": 0.006606499579400694,
+      "rel_diff": 5.191776439409639e-05
+    },
+    {
+      "base": 48,
+      "on_bare": 5.9283849330955224e-05,
+      "on_composite": 5.926820078268536e-05,
+      "rel_diff": 0.0002639597199990166
+    },
+    {
+      "base": 42,
+      "on_bare": 5.9043087736087476e-05,
+      "on_composite": 5.901682735758913e-05,
+      "rel_diff": 0.00044476634785305076
+    },
+    {
+      "base": 0,
+      "on_bare": 0.00013967752715798436,
+      "on_composite": 0.00013962325808166432,
+      "rel_diff": 0.00038853119341570355
+    },
+    {
+      "base": 36,
+      "on_bare": 0.01714010813297576,
+      "on_composite": 0.017140279898460183,
+      "rel_diff": 1.002126025635259e-05
+    },
+    {
+      "base": 4,
+      "on_bare": 3.305662629759173e-05,
+      "on_composite": 3.3060598646937305e-05,
+      "rel_diff": 0.00012016802046939887
+    },
+    {
+      "base": 43,
+      "on_bare": 0.00010040803101337021,
+      "on_composite": 0.00010041052232891789,
+      "rel_diff": 2.4811915167954324e-05
+    },
+    {
+      "base": 31,
+      "on_bare": 0.08907296015607523,
+      "on_composite": 0.0890739133936134,
+      "rel_diff": 1.0701761078753788e-05
+    },
+    {
+      "base": 65,
+      "on_bare": 0.03290554193712524,
+      "on_composite": 0.032905416947145064,
+      "rel_diff": 3.798447702735717e-06
+    },
+    {
+      "base": 2,
+      "on_bare": 0.00012136812955108799,
+      "on_composite": 0.00012135324955298336,
+      "rel_diff": 0.0001226021869140886
+    }
+  ],
+  "bands": {
+    "0.01": {
+      "manifold": {
+        "n": 345,
+        "off_geomean": 5.983176091519664e-05,
+        "off_median": 5.30940984129855e-05,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.4115942028985507,
+        "on_geomean": 0.011702369910957479,
+        "specificity_ratio": 0.005112790090422057
+      },
+      "linear_norm": {
+        "n": 375,
+        "off_geomean": 0.00020061576203957789,
+        "off_median": 0.00026293521427414373,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.7226666666666667,
+        "on_geomean": 0.009898488146224802,
+        "specificity_ratio": 0.02026731345999453
+      },
+      "random": {
+        "n": 435,
+        "off_geomean": 0.0001301014761080733,
+        "off_median": 0.00013437847503335477,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.5770114942528736,
+        "on_geomean": 0.010415391163711684,
+        "specificity_ratio": 0.012491271241099456
+      }
+    },
+    "0.1": {
+      "manifold": {
+        "n": 345,
+        "off_geomean": 0.00034137111119657835,
+        "off_median": 0.0003495050088459787,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.8028985507246377,
+        "on_geomean": 0.11506501348994443,
+        "specificity_ratio": 0.0029667672287407403
+      },
+      "linear_norm": {
+        "n": 165,
+        "off_geomean": 0.0019034852219976463,
+        "off_median": 0.0020454370531087225,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.9212121212121213,
+        "on_geomean": 0.10073817077056554,
+        "specificity_ratio": 0.018895372106099623
+      },
+      "random": {
+        "n": 255,
+        "off_geomean": 0.00037031113412262095,
+        "off_median": 0.0003773807947816941,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.8509803921568627,
+        "on_geomean": 0.09345761651261479,
+        "specificity_ratio": 0.0039623430164478605
+      }
+    },
+    "0.3": {
+      "manifold": {
+        "n": 525,
+        "off_geomean": 0.0009776100944247695,
+        "off_median": 0.0008565584657790254,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.9066666666666666,
+        "on_geomean": 0.2842875475649883,
+        "specificity_ratio": 0.0034388073019669878
+      },
+      "linear_norm": null,
+      "random": {
+        "n": 225,
+        "off_geomean": 0.002371885266428743,
+        "off_median": 0.002352519258999537,
+        "floor_mean": 0.0,
+        "floor_max": 0.0,
+        "detect_eps": 0.0001,
+        "frac_detectable": 0.9244444444444444,
+        "on_geomean": 0.29371113475822064,
+        "specificity_ratio": 0.008075571490952319
+      }
+    }
+  },
+  "floor_audit": {
+    "floor_max": 0.0,
+    "n_cells": 19800,
+    "detect_eps": 0.0001,
+    "bit_exact_zero": true
+  },
+  "_note": "raw rows_B/rows_A (19800/15840) dropped for the suite; full JSON on MSI $ROOT/spec_out. bands recomputed with the bit-exact-zero floor fix."
+}
