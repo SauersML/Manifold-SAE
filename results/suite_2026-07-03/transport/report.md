@@ -139,3 +139,52 @@ every layer, but its downstream meaning rides along inside the same Jacobian.
 - JVP: `xport_metric_transport.py` → `xport_out/metric_transport_L{17,11}_from_L18.json(.rows.npz)` (job 12500639).
 - Figure: `xport_out/transport_figure.png`.
 - Wheel selection rationale: `wheels_xport` (9cd9da7a4) lacked #2074 (1-core deadlock) and the chart-transfer FFI; `wheels_head_atlas` (3cbb04b76) has both. Its stricter REML certificate refused the old rank-48 fit as off-optimum (~60 eff dof); rank 8 converges and fits best (r² 0.59 vs the old wheel's 0.47).
+
+---
+
+## Addendum — the L20→L21 anomaly characterized (XPORT chart-transport + TOPO fit-free homology)
+
+**Joint verdict: the single degree-2 / defect-4.56 hop is a chart-parametrization
+artifact localized to L20, not a topological transition.** Two independent lines
+of evidence converge.
+
+**Chart side (XPORT — rank sweep + skip-hops + JVP), `anomaly_L20_L21.json`:**
+- **Rank sensitivity.** The degree-2 appears **only at rank 8** (degree-conc 0.648,
+  isometry defect 4.68); it is **degree 1 at rank 16** (defect 1.95) and **degree 1
+  at rank 24** (conc 0.836, defect 1.15). Not robust to chart rank → not a genuine
+  double-winding.
+- **Winding concentration** on the rank-8 arc coords: c(k=1)=0.583 vs c(k=2)=0.648 —
+  k=2 barely edges k=1 (a real double-wind would show c₂≫c₁). No clean 2-winding.
+- **Localization (skip-hops).** Every hop with **L20 as an endpoint** is messy
+  (L20→L21 defect 4.68, L20→L22 defect 1.47, both flagged degree 2); every hop that
+  **avoids L20** is clean and degree 1 (L19→L21 defect 0.45, L19→L22 defect **0.16**,
+  the cleanest in the whole run). The wobble is specific to L20's chart, and L20 was
+  already the run's weakest layer (planarity 0.984, rank-8 r² 0.52).
+- **Metric rides through cleanly.** The L21 output-Fisher metric propagated by JVP to
+  L20 across this exact hop matches the metric harvested directly at L20 to
+  **pred-corr 1.000, ratio 0.9997** (`metric_transport_L20_from_L21.json`) — the
+  behavioral metric transports perfectly through the very hop where the chart
+  coordinate stumbles. Same unifying point as the main JVP arm.
+
+**Topology side (TOPO — fit-free Vietoris–Rips persistent homology on the raw
+weekday clouds):** Fit-free persistent homology on the raw weekday clouds (n=210
+dense, W7-demeaned, projected into each layer's fitted-circle plane, 500× bootstrap)
+finds a single connected component (H0=1, bootstrap [1,1,1]) and a single dominant
+H1 loop generator at BOTH L20 and L21 — crisp at L21 (dominance ratio ~10×) and
+weak-but-single at L20 (ratio ~2×, the fuzziest ring in the sweep), with no second
+generator and no fragmentation at either layer. Since homology counts loops rather
+than winding number, the rank-8 degree-2 is invisible to H1 by construction; the
+manifold's topology is an unchanged single S¹ across the hop, and L20's
+poorly-resolved ring is precisely what destabilizes its rank-8 chart into the
+spurious degree-2.
+
+**Why the two lines fit:** homology counts loops (Betti numbers), the chart's degree
+counts winding — a degree-2 and a degree-1 map parametrize the *same* S¹ (b₀=1,
+b₁=1). The topology is provably unchanged; only the low-rank chart parametrization
+at the fuzziest layer (L20) wobbled. Not a contested representational transition.
+
+Figure: `anomaly_figure.png` (correspondence scatter + rank-sensitivity bars).
+Data: `anomaly_L20_L21.json`, `metric_transport_L20_from_L21.json`; dense
+211-row harvest `weekday_acts_8b_L11to23_dense.npz` (30 templates). Repro:
+`scripts/xport_anomaly_probe.py` (job 12501235; dense confirm 12514425), fit-free
+audit by the TOPO lane. Both n=70 and n=210 are bootstrap-stable.

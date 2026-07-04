@@ -1,0 +1,33 @@
+{
+  "chart_layer": 20,
+  "metric_layer": 21,
+  "hop_layers": 1,
+  "n_prompts": 70,
+  "rank": 8,
+  "fracs": [
+    0.5,
+    1.0,
+    2.0,
+    4.0
+  ],
+  "radius": 20.828194110558854,
+  "planarity": 0.3605734341261122,
+  "harvested": {
+    "n": 560,
+    "slope_loglog": 0.8082527350791843,
+    "r2": 0.7581635614146794,
+    "median_meas_over_pred": 1.1263776678070019,
+    "median_abs_log_ratio": 0.5746979707947966
+  },
+  "propagated": {
+    "n": 560,
+    "slope_loglog": 0.8105902635868466,
+    "r2": 0.7603629837670501,
+    "median_meas_over_pred": 1.1250683187060113,
+    "median_abs_log_ratio": 0.5789965444584348
+  },
+  "propagated_vs_harvested": {
+    "pred_log_corr": 0.999970928099236,
+    "median_prop_over_harv": 0.9997051766495961
+  }
+}
