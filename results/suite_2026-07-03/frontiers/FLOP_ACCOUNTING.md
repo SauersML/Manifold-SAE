@@ -91,3 +91,20 @@ that migration.
 On a **pure-linear DGP** there is no curvature to find: `mean_l0` does not inflate for
 the linear lane, the chart's extra `dv_k=2` decoder is wasted, and the chart can only
 *lose* the selection/dictionary overhead. That row is the honest cost line.
+
+## Changelog (corrections caught during the build)
+
+- **Coordinate-solve charge (FLOP model).** Initially the curved encode charged the
+  intrinsic-coordinate `dv³` Gram solve on **all K** atoms. A sparse encoder scores all K
+  cheaply but only solves coordinates for the **s selected** atoms — corrected to
+  `encode = Σ_k dv_k·p + [curved] s·dv̄³`. Charging all K over-penalized the curved lane's
+  inference FLOPs and could flip a matched-FLOP EV verdict.
+- **DGP firing sampler.** The synthetic generator first used independent-Bernoulli concept
+  firing, which yields ~30% pure-noise (0-active) and ~27% multi-active tokens — a top-1
+  SAE cannot fit that mixture, and it produced a spurious "curved loses" first round. Fixed
+  with `--exactly N` (exactly N concepts per token, heavy-tailed which ones), matching the
+  top-k SAE assumption. WHICH concept fires stays heavy-tailed (the firing-frequency axis).
+- **Held-out scoring API.** `SparseDictionaryFit.reconstruct()` re-decodes the stored TRAIN
+  routing; out-of-sample must go through `reconstruct(*transform(test, active=s))`.
+  `reconstruction_r2` (a whitened/penalized in-model R²) is NOT the same convention as the
+  raw held-out `ev()` used for all cross-lane comparisons — never place them on one axis.
