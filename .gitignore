@@ -12,7 +12,11 @@ checkpoints/
 activations/
 *.pt
 *.safetensors
+*.zip
+*.log
 .DS_Store
+._*
+__MACOSX/
 .vscode/
 .idea/
 .scratch/

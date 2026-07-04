@@ -1,4 +1,0 @@
-[setup] device=cuda output_dir=/home/azuser/exp_logs/run3_modern_qwen05_tinystories
-[harvest] loading Qwen/Qwen2.5-0.5B
-Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
-Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:  19%|█▉        | 55/290 [00:00<00:01, 209.86it/s]Loading weights:  70%|███████   | 204/290 [00:00<00:00, 228.04it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 320.04it/s]

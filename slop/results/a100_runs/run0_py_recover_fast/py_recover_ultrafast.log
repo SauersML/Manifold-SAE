@@ -1,5 +1,0 @@
-ULTRAFAST Run0 | D=16 n=240 steps=120
-coh sigmin coord_off recon_off coord_on recon_on
-0.00 0.940 0.984 0.970 0.366 0.496
-0.70 0.784 0.905 0.967 0.235 0.539
-0.95 0.760 0.716 0.972 0.287 0.602

@@ -1,9 +1,0 @@
-pure-torch manifold-SAE recovery | D=64, n=2000, 2 circles, oracle gate
-  coh  sigmin | coordR2_OFF reconR2_OFF | coordR2_ON reconR2_ON
-[1m 00s] [heartbeat] elapsed=1m00s rss=771.5MiB peak_rss=774.1MiB process_threads=97 read_bytes=0B write_bytes=26.8MiB active_threads=0
-[2m 00s] [heartbeat] elapsed=2m00s rss=776.8MiB peak_rss=776.8MiB process_threads=97 read_bytes=0B write_bytes=26.8MiB active_threads=0
-[3m 00s] [heartbeat] elapsed=3m00s rss=775.0MiB peak_rss=777.0MiB process_threads=97 read_bytes=0B write_bytes=26.8MiB active_threads=0
-[4m 00s] [heartbeat] elapsed=4m00s rss=776.8MiB peak_rss=777.0MiB process_threads=97 read_bytes=0B write_bytes=26.8MiB active_threads=0
-[5m 00s] [heartbeat] elapsed=5m00s rss=776.8MiB peak_rss=777.0MiB process_threads=97 read_bytes=0B write_bytes=26.9MiB active_threads=0
-[6m 00s] [heartbeat] elapsed=6m00s rss=777.8MiB peak_rss=777.8MiB process_threads=97 read_bytes=0B write_bytes=26.9MiB active_threads=0
-[7m 00s] [heartbeat] elapsed=7m00s rss=776.8MiB peak_rss=777.4MiB process_threads=97 read_bytes=0B write_bytes=26.9MiB active_threads=0
