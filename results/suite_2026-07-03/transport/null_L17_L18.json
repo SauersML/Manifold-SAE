@@ -1,0 +1,29 @@
+{
+  "hop": "L17->L18",
+  "n_obs": 70,
+  "n_perm": 30,
+  "real": {
+    "isometry_defect": 0.6710627474994304,
+    "isometry_defect_se": 0.1198657571841309,
+    "degree": 1,
+    "degree_concentration": 0.9490669540414607,
+    "rotation_offset": -0.013728355300549012,
+    "topology_preserved": true
+  },
+  "shuffled_null": {
+    "isometry_defect": {
+      "mean": 0.5160188257591035,
+      "sd": 0.526949955341534,
+      "min": 2.1742008147984016e-14,
+      "max": 1.3300036858348452
+    },
+    "degree_concentration": {
+      "mean": 0.15594981545576395,
+      "sd": 0.05512485661244987,
+      "min": 0.06767313901559742,
+      "max": 0.30057275467270356
+    },
+    "degree_is_1_fraction": 0.3333333333333333
+  },
+  "degree_conc_z_vs_null": 14.387649915565902
+}
