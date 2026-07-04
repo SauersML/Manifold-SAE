@@ -20,5 +20,15 @@
     "r2": 0.006720379281766831,
     "median_ratio": 0.47934054557084926
   },
+  "calib_behavior_first_highconf": {
+    "r2": 0.6307221733049371,
+    "median_ratio": 0.5542768412406247,
+    "n_rows": 35,
+    "mass_thr": 0.04408538155257702
+  },
+  "calib_activation_first_highconf": {
+    "r2": 0.01656255356962666,
+    "median_ratio": 0.467454839155414
+  },
   "n_pairs": 2415
 }

@@ -146,6 +146,13 @@ def main():
     pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
     r2_beh, mr_beh = calib(t_beh, P7, pairs)
     r2_act, mr_act = calib(t_act, P7, pairs)
+    # high-confidence subset: rows where the model actually commits to a weekday
+    # (weekday_mass above the median) -- the 0.37 is capped by low-confidence rows.
+    thr = float(np.median(wk_mass))
+    hi = np.where(wk_mass >= thr)[0]
+    hpairs = [(i, j) for a, i in enumerate(hi) for j in hi[a + 1:]]
+    r2_beh_hi, mr_beh_hi = calib(t_beh, P7, hpairs)
+    r2_act_hi, mr_act_hi = calib(t_act, P7, hpairs)
 
     # ordering: does each coordinate sort tokens by the TARGET weekday?
     def order_purity(t):
@@ -164,6 +171,9 @@ def main():
         order_purity_behavior=order_purity(t_beh),
         calib_behavior_first=dict(r2=r2_beh, median_ratio=mr_beh),
         calib_activation_first=dict(r2=r2_act, median_ratio=mr_act),
+        calib_behavior_first_highconf=dict(r2=r2_beh_hi, median_ratio=mr_beh_hi,
+                                           n_rows=int(hi.size), mass_thr=thr),
+        calib_activation_first_highconf=dict(r2=r2_act_hi, median_ratio=mr_act_hi),
         n_pairs=len(pairs),
     )
     print(json.dumps(out, indent=2), flush=True)
