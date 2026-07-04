@@ -130,6 +130,21 @@ penalty.
 | **amplitude-normalized dose mode** | δ = steer.delta/amplitude | Not a free scale: the K=1 presence weight (~2.26e-1 here, ~1e-6 in the pre-fix run) multiplies the whole displacement; dividing it out consistently (and predicted_nats by amplitude²) recovers the *true* chart move. The `dose_mode_note` in each JSON derives it. The norm_audit lane exists to stress this exact choice. |
 | **topology (circle vs linear)** | chosen by penalized loss, not by hand | The fit *selects* topology under a complexity penalty; circle is only preferred when it beats linear net of the penalty (sycophancy: circle−linear r² +0.089 and survives; refusal: circle wins r² but we *keep linear* because it collapses ordering). This is the price mechanism doing its job. |
 | **rank-8 working subspace** | rdim 8–32 | A compute economy for the fit, not the readout (measurement is full-dimensional forward passes). Note the honest counter-finding that PCA-compressed fits condition *worse* than raw-ambient here (#813/#821 class). |
+| **dispersion estimator φ̂** | per-row basin-selecting MAP | Chosen for a principled reason — no tuned constants (SPEC). The known cost is a small downward bias (below), and the naive mixture-edf correction was *rejected* because it over-corrects and would smuggle a tuned constant into calibration. The exact bias-free fix is a documented open problem, not a knob we turned. |
+
+## Known limitation: dispersion φ̂ is biased slightly low
+
+The dispersion estimate φ̂ is biased ~2–7% **low** by the per-row basin-selecting MAP —
+a Neyman–Scott incidental-parameters effect that does **not** vanish as N grows, because
+each row contributes its own selected basin. In practice this means the published
+uncertainty bands and dose intervals are very slightly *narrower* than the exact ones
+(we under-state, not over-state, our uncertainty). The obvious fix — a mixture-edf
+correction — was tried and **rejected**: it over-corrects, and adopting it would violate
+the SPEC rule of no tuned constants in calibration. The correct bias-free fix (a SURE
+boundary integral over the argmax) is a documented open problem tracked in gam#2133; the
+bias itself is characterized by the simulation at
+`scripts/f5_neyman_scott_phi_bias.py` (gam SHA 805ace497). We flag it here rather than
+silently carry it.
 
 ## Honest-negatives index
 
@@ -147,6 +162,7 @@ Every registered miss, in one place. This is the ledger the writeup is judged ag
 | **misdiagnosed "tangent-column units bug" — retracted** | `crown_8b/writeup/ANALYSES.md`, `norm_audit/NORM_AUDIT.md` | We originally published a normalization bug in `predicted_nats_tangent` (a "constant ≈4.2× deficit at dt→0"). **That was wrong** and is retracted: NORM's audit found the "dt→0" rows were `clamped:true` at dt≈3.05 (116/168 rows), so dt was pinned, not small; at *true* small dt the pathint/tangent ratio is 1.000 exactly. The 4.2× is real clamp-driven curvature of a base-point quadratic over a near-half-circle, not a units bug — the tangent column is correct physics. No published calibration number was affected (tangent is a reference column). Kept visible as our own corrected error. |
 | **spec collateral floor bugged** (MSI-only) | placeholder | Spec-specificity collateral ratios 0.003–0.005 vs linear 0.02, but the zero-floor is bugged and being rerun; treat as provisional. MSI-only. |
 | **fit-seed fragility** | `crown_8b/` | 2 of 3 REML seeds failed to converge (guards aborted them correctly); only seed 1093 converged. The result is real but the fit is not push-button robust yet. |
+| **dispersion φ̂ biased ~2–7% low** | gam#2133; `scripts/f5_neyman_scott_phi_bias.py` (805ace497) | Per-row basin-selecting MAP under-estimates φ (Neyman–Scott incidental-parameters; persists in N), so published bands/dose intervals are very slightly narrower than exact. Mixture-edf correction over-corrects and was rejected (no tuned constants); exact SURE-boundary-integral fix is an open problem. See "Known limitation" above. |
 
 ## Provenance
 
