@@ -1,0 +1,86 @@
+{
+  "curvature_conditioning": [
+    {
+      "curv": 0.01,
+      "median_sigma_min": 0.2882591440350366,
+      "p05_sigma_min": 0.029252125258764444
+    },
+    {
+      "curv": 0.02,
+      "median_sigma_min": 0.2915554615296521,
+      "p05_sigma_min": 0.032867267043214465
+    },
+    {
+      "curv": 0.05,
+      "median_sigma_min": 0.2925884493799854,
+      "p05_sigma_min": 0.03653800004167607
+    },
+    {
+      "curv": 0.1,
+      "median_sigma_min": 0.29319094463996886,
+      "p05_sigma_min": 0.05247830903125835
+    },
+    {
+      "curv": 0.25,
+      "median_sigma_min": 0.3312214389452901,
+      "p05_sigma_min": 0.0952125670868603
+    },
+    {
+      "curv": 0.5,
+      "median_sigma_min": 0.4543648080959814,
+      "p05_sigma_min": 0.1403976207926959
+    },
+    {
+      "curv": 1.0,
+      "median_sigma_min": 0.6330283289052628,
+      "p05_sigma_min": 0.194470401773168
+    },
+    {
+      "curv": 2.0,
+      "median_sigma_min": 0.8236535025955475,
+      "p05_sigma_min": 0.23525843721919093
+    }
+  ],
+  "cocollapse": [
+    {
+      "collapse_alpha": 0.0,
+      "median_sigma_min": 0.6872799430459681,
+      "p05_sigma_min": 0.24416081696017183
+    },
+    {
+      "collapse_alpha": 0.5,
+      "median_sigma_min": 0.4295374299879297,
+      "p05_sigma_min": 0.15586711803550632
+    },
+    {
+      "collapse_alpha": 0.8,
+      "median_sigma_min": 0.19456366520719703,
+      "p05_sigma_min": 0.06621808911833929
+    },
+    {
+      "collapse_alpha": 0.9,
+      "median_sigma_min": 0.09739144927803246,
+      "p05_sigma_min": 0.033034568177382
+    },
+    {
+      "collapse_alpha": 0.95,
+      "median_sigma_min": 0.0493509313516627,
+      "p05_sigma_min": 0.01568413644235587
+    },
+    {
+      "collapse_alpha": 0.99,
+      "median_sigma_min": 0.00998778626729122,
+      "p05_sigma_min": 0.003498289173114299
+    },
+    {
+      "collapse_alpha": 0.999,
+      "median_sigma_min": 0.0010010565734154776,
+      "p05_sigma_min": 0.0003412327790889366
+    },
+    {
+      "collapse_alpha": 1.0,
+      "median_sigma_min": 2.078748482444864e-16,
+      "p05_sigma_min": 5.0512648769017875e-17
+    }
+  ]
+}

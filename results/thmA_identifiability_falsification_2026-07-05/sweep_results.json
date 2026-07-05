@@ -1,0 +1,169 @@
+{
+  "p_transition": [
+    {
+      "p": 4,
+      "slack": -1,
+      "fracs": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "mean_frac": 1.0,
+      "max_frac": 1.0
+    },
+    {
+      "p": 5,
+      "slack": 0,
+      "fracs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "p": 6,
+      "slack": 1,
+      "fracs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "p": 8,
+      "slack": 3,
+      "fracs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    }
+  ],
+  "resolution": [
+    {
+      "n_z": 50,
+      "n_starts": 50,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 50,
+      "n_starts": 100,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 100,
+      "n_starts": 50,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 100,
+      "n_starts": 100,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 200,
+      "n_starts": 50,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 200,
+      "n_starts": 100,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    }
+  ],
+  "center": [
+    {
+      "center_scale": 0.0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "center_scale": 0.5,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "center_scale": 1.0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "center_scale": 2.0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    }
+  ],
+  "curvature": [
+    {
+      "curvature": 0.02,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 0.05,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 0.1,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 0.25,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 0.5,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 1.0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    },
+    {
+      "curvature": 2.0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0,
+      "n_double_trials": 0,
+      "median_margin": null
+    }
+  ],
+  "elapsed_sec": 1240.0531499385834,
+  "n_seeds": 5
+}

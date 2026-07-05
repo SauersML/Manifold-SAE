@@ -1,0 +1,304 @@
+{
+  "experiment": "Theorem G / P1 \u2014 occupancy vs fidelity sets topology verdict",
+  "instrument": "premise held-out paired-deviance (gamfit sae_manifold_fit linear vs circle, leave-template-out 2-fold, sign test + Gaussian surrogate)",
+  "fit_config": {
+    "rho_search": false,
+    "working_rank_base": 4,
+    "smoothness_weight": 0.01,
+    "note": "rho-off+fixed smoothing; see gam#2138"
+  },
+  "gamfit_bug_filed": "SauersML/gam#2138",
+  "verdict": "Theorem G SUPPORTED (not falsified), qualified \u2014 clean in the one channel with a real topology verdict (sycophancy raw); weekday is an honest null.",
+  "channels": {
+    "weekday_8b_L18": {
+      "metric": "behav",
+      "cells": 29,
+      "converged": 28,
+      "occupancy": [
+        {
+          "x": 28,
+          "n_eff": 28,
+          "verdict_strength": 0.086,
+          "median": -0.1128,
+          "sign_test_p": 0.711071103811264,
+          "r2_circle": -8.383,
+          "nseed": 2
+        },
+        {
+          "x": 42,
+          "n_eff": 42,
+          "verdict_strength": 2.425,
+          "median": 0.0707,
+          "sign_test_p": 0.0077827982616630225,
+          "r2_circle": 0.226,
+          "nseed": 3
+        },
+        {
+          "x": 56,
+          "n_eff": 56,
+          "verdict_strength": -0.452,
+          "median": -0.0036,
+          "sign_test_p": 0.021652060915311716,
+          "r2_circle": 0.581,
+          "nseed": 3
+        },
+        {
+          "x": 70,
+          "n_eff": 70,
+          "verdict_strength": -1.383,
+          "median": -0.0026,
+          "sign_test_p": 0.041391428673915445,
+          "r2_circle": 0.638,
+          "nseed": 1
+        }
+      ],
+      "fidelity_rank": [
+        {
+          "x": 3,
+          "n_eff": 70,
+          "verdict_strength": -0.043,
+          "median": -0.0006,
+          "sign_test_p": 0.9049745264594622,
+          "r2_circle": 0.643,
+          "nseed": 1
+        },
+        {
+          "x": 4,
+          "n_eff": 70,
+          "verdict_strength": -1.383,
+          "median": -0.0026,
+          "sign_test_p": 0.041391428673915445,
+          "r2_circle": 0.638,
+          "nseed": 1
+        },
+        {
+          "x": 5,
+          "n_eff": 70,
+          "verdict_strength": -1.141,
+          "median": -0.0026,
+          "sign_test_p": 0.07223792719176259,
+          "r2_circle": 0.637,
+          "nseed": 1
+        },
+        {
+          "x": 6,
+          "n_eff": 70,
+          "verdict_strength": -1.383,
+          "median": -0.0038,
+          "sign_test_p": 0.041391428673915445,
+          "r2_circle": 0.637,
+          "nseed": 1
+        }
+      ],
+      "fidelity_noise": [
+        {
+          "x": 0.0,
+          "n_eff": 70,
+          "verdict_strength": -1.383,
+          "median": -0.0026,
+          "sign_test_p": 0.041391428673915445,
+          "r2_circle": 0.638,
+          "nseed": 3
+        },
+        {
+          "x": 0.25,
+          "n_eff": 70,
+          "verdict_strength": 0.242,
+          "median": 0.0024,
+          "sign_test_p": 0.1413503843053501,
+          "r2_circle": 0.647,
+          "nseed": 3
+        },
+        {
+          "x": 0.5,
+          "n_eff": 70,
+          "verdict_strength": 0.0,
+          "median": 0.0015,
+          "sign_test_p": 0.936649684306308,
+          "r2_circle": 0.657,
+          "nseed": 3
+        },
+        {
+          "x": 1.0,
+          "n_eff": 70,
+          "verdict_strength": 0.274,
+          "median": 0.0072,
+          "sign_test_p": 0.5815955448140694,
+          "r2_circle": 0.745,
+          "nseed": 3
+        },
+        {
+          "x": 2.0,
+          "n_eff": 70,
+          "verdict_strength": -0.139,
+          "median": -0.0945,
+          "sign_test_p": 0.22113906842029,
+          "r2_circle": 0.883,
+          "nseed": 3
+        }
+      ]
+    },
+    "sycophancy_8b_L18": {
+      "metric": "raw",
+      "cells": 46,
+      "converged": 46,
+      "occupancy": [
+        {
+          "x": 14,
+          "n_eff": 14,
+          "verdict_strength": 0.995,
+          "median": 373.3852,
+          "sign_test_p": 0.01849365234375,
+          "r2_circle": 0.531,
+          "nseed": 4
+        },
+        {
+          "x": 21,
+          "n_eff": 21,
+          "verdict_strength": 2.207,
+          "median": 390.1232,
+          "sign_test_p": 0.00739598274230957,
+          "r2_circle": 0.508,
+          "nseed": 4
+        },
+        {
+          "x": 28,
+          "n_eff": 28,
+          "verdict_strength": 1.748,
+          "median": 450.1034,
+          "sign_test_p": 0.0009885095059871674,
+          "r2_circle": 0.526,
+          "nseed": 4
+        },
+        {
+          "x": 35,
+          "n_eff": 35,
+          "verdict_strength": 4.514,
+          "median": 377.1782,
+          "sign_test_p": 0.00013911223504692316,
+          "r2_circle": 0.7,
+          "nseed": 4
+        },
+        {
+          "x": 42,
+          "n_eff": 42,
+          "verdict_strength": 4.319,
+          "median": 465.9265,
+          "sign_test_p": 0.0049481279796737,
+          "r2_circle": 0.63,
+          "nseed": 4
+        },
+        {
+          "x": 56,
+          "n_eff": 56,
+          "verdict_strength": 4.471,
+          "median": 452.5117,
+          "sign_test_p": 0.00019525458999522516,
+          "r2_circle": 0.709,
+          "nseed": 4
+        },
+        {
+          "x": 70,
+          "n_eff": 70,
+          "verdict_strength": 3.78,
+          "median": 619.9774,
+          "sign_test_p": 0.00016604182060301755,
+          "r2_circle": 0.707,
+          "nseed": 1
+        }
+      ],
+      "fidelity_rank": [
+        {
+          "x": 3,
+          "n_eff": 70,
+          "verdict_strength": 5.233,
+          "median": 562.9232,
+          "sign_test_p": 5.85395552938811e-06,
+          "r2_circle": 0.772,
+          "nseed": 1
+        },
+        {
+          "x": 4,
+          "n_eff": 70,
+          "verdict_strength": 3.78,
+          "median": 619.9774,
+          "sign_test_p": 0.00016604182060301755,
+          "r2_circle": 0.707,
+          "nseed": 1
+        },
+        {
+          "x": 5,
+          "n_eff": 70,
+          "verdict_strength": 4.233,
+          "median": 642.1591,
+          "sign_test_p": 5.849547318695843e-05,
+          "r2_circle": 0.671,
+          "nseed": 1
+        },
+        {
+          "x": 6,
+          "n_eff": 70,
+          "verdict_strength": 2.961,
+          "median": 694.3597,
+          "sign_test_p": 0.001093244972968613,
+          "r2_circle": 0.631,
+          "nseed": 1
+        }
+      ],
+      "fidelity_noise": [
+        {
+          "x": 0.0,
+          "n_eff": 70,
+          "verdict_strength": 3.78,
+          "median": 619.9774,
+          "sign_test_p": 0.00016604182060301755,
+          "r2_circle": 0.707,
+          "nseed": 4
+        },
+        {
+          "x": 0.25,
+          "n_eff": 70,
+          "verdict_strength": 3.497,
+          "median": 582.6635,
+          "sign_test_p": 0.00034887061121031813,
+          "r2_circle": 0.702,
+          "nseed": 3
+        },
+        {
+          "x": 0.5,
+          "n_eff": 70,
+          "verdict_strength": 3.385,
+          "median": 563.368,
+          "sign_test_p": 0.0007483284730413947,
+          "r2_circle": 0.695,
+          "nseed": 3
+        },
+        {
+          "x": 1.0,
+          "n_eff": 70,
+          "verdict_strength": 2.524,
+          "median": 416.8901,
+          "sign_test_p": 0.0005349642016498918,
+          "r2_circle": 0.726,
+          "nseed": 4
+        },
+        {
+          "x": 2.0,
+          "n_eff": 70,
+          "verdict_strength": 1.326,
+          "median": 197.4777,
+          "sign_test_p": 0.015495519490141121,
+          "r2_circle": 0.726,
+          "nseed": 3
+        }
+      ]
+    }
+  },
+  "dissociation_OLS_sycophancy_raw": {
+    "beta_occupancy": 0.471,
+    "t_occupancy": 1.28,
+    "beta_fidelity": 0.014,
+    "t_fidelity": 0.04,
+    "reading": "occupancy carries verdict strength; measured-fidelity partial effect ~0 (t=0.04)"
+  }
+}

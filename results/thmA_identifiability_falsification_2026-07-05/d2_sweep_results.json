@@ -1,0 +1,43 @@
+{
+  "p_transition": [
+    {
+      "p": 4,
+      "slack": -2,
+      "mean_frac": 0.99375,
+      "max_frac": 1.0
+    },
+    {
+      "p": 5,
+      "slack": -1,
+      "mean_frac": 1.0,
+      "max_frac": 1.0
+    },
+    {
+      "p": 6,
+      "slack": 0,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "p": 8,
+      "slack": 2,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    }
+  ],
+  "resolution_p6": [
+    {
+      "n_z": 200,
+      "n_starts": 120,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    },
+    {
+      "n_z": 300,
+      "n_starts": 150,
+      "mean_frac": 0.0,
+      "max_frac": 0.0
+    }
+  ],
+  "note": "{d=2 sphere patch, d=1 ellipse}; parse=5 params; boundary Sum(d+1)=5<=p-1"
+}
