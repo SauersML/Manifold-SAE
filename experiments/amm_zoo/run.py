@@ -123,7 +123,13 @@ def _worker_impl(spec_path: str) -> None:
                 timing=timing,
             )
             scored_at = time.perf_counter()
-            report = score_arm(dataset, recovered, "test", seed=spec["seed"])
+            report = score_arm(
+                dataset,
+                recovered,
+                "test",
+                seed=spec["seed"],
+                geodesic_sample=spec["geodesic_sample"],
+            )
             timing["score_s"] = round(time.perf_counter() - scored_at, 6)
 
             null_at = time.perf_counter()
@@ -150,6 +156,7 @@ def _worker_impl(spec_path: str) -> None:
                     recovered_factor.meta,
                     rng,
                     b_perm=spec["b_perm"],
+                    n_sample=spec["null_sample"],
                 )
                 factor_report["geodesic_null_observed"] = observed
                 factor_report["geodesic_null_p"] = p_value
@@ -257,6 +264,8 @@ def _run_group(
             "manifold_iters": cfg["manifold_iters"],
             "manifold_oos_batch": cfg["manifold_oos_batch"],
             "b_perm": cfg["b_perm"],
+            "geodesic_sample": cfg["geodesic_sample"],
+            "null_sample": cfg["null_sample"],
             "threads": cfg["threads"],
             "out_path": str(output_path),
             "profile_path": None

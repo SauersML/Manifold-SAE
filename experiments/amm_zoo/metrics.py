@@ -382,6 +382,7 @@ def score_arm(
     *,
     seed: int = 0,
     delta2: float | None = None,
+    geodesic_sample: int = 256,
 ) -> dict[str, Any]:
     """Hungarian-match ``recovered`` to the dataset's true factors and report the
     full per-factor + aggregate metric suite (all on the held-out ``split``).
@@ -431,7 +432,13 @@ def score_arm(
         if rows_v.size >= 5:
             rec["geodesic_spearman"] = round(
                 geodesic_spearman(
-                    tcoord_v, tf.topology, rc_v, rf.topology, rf.meta, rng
+                    tcoord_v,
+                    tf.topology,
+                    rc_v,
+                    rf.topology,
+                    rf.meta,
+                    rng,
+                    n_sample=geodesic_sample,
                 ),
                 4,
             )
