@@ -39,8 +39,8 @@ _HERE = Path(__file__).resolve().parent
 class RecoveredFactor:
     """One factor an arm recovered, in a form the scorer can match to truth.
 
-    contribution: (n, d) additive reconstruction contribution on the scored split
-                  (0 on tokens where this factor is inactive).
+    contribution: (n_fire, d) additive reconstruction on exactly ``rows``.
+    rows:         sorted scored-split row ids corresponding to ``contribution``.
     coord:        (n, r_rec) recovered intrinsic coordinate/code (NaN where the
                   factor is inactive); used for circular-corr + geodesic-Spearman.
     active:       (n,) bool — tokens where this factor fired.
@@ -51,6 +51,7 @@ class RecoveredFactor:
     """
 
     contribution: np.ndarray
+    rows: np.ndarray
     coord: np.ndarray
     active: np.ndarray
     topology: str
@@ -59,6 +60,24 @@ class RecoveredFactor:
     embedding_dim: int = 0  # recovered ambient subspace dim (b); 0 = "= block size"
     name: str = ""
     meta: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.rows = np.asarray(self.rows, dtype=np.int64)
+        self.contribution = np.asarray(self.contribution)
+        self.active = np.asarray(self.active, dtype=bool)
+        self.coord = np.asarray(self.coord)
+        if self.rows.ndim != 1 or self.contribution.ndim != 2:
+            raise ValueError("recovered rows/contribution must be rank 1/rank 2")
+        if self.contribution.shape[0] != self.rows.size:
+            raise ValueError("recovered contribution rows do not match row ids")
+        if self.rows.size and (
+            self.rows[0] < 0 or self.rows[-1] >= self.active.size or np.any(np.diff(self.rows) <= 0)
+        ):
+            raise ValueError("recovered row ids must be sorted, unique, and in range")
+        if self.coord.ndim != 2 or self.coord.shape[0] != self.active.size:
+            raise ValueError("recovered coordinates do not match the scored split")
+        if int(self.active.sum()) != self.rows.size or not np.all(self.active[self.rows]):
+            raise ValueError("recovered active mask and sparse row ids disagree")
 
 
 # --------------------------------------------------------------------------- #
@@ -208,9 +227,7 @@ def geodesic_pairwise(coord: np.ndarray, topology: str) -> np.ndarray:
         return np.sqrt(d1 * d1 + d2 * d2)
     if topology == "sphere":
         phi, lam = coord[:, 0], coord[:, 1]
-        xyz = np.stack(
-            [np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1
-        )
+        xyz = np.stack([np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1)
         dot = np.clip(xyz @ xyz.T, -1.0, 1.0)
         return np.arccos(dot)
     if topology == "helix":
@@ -239,9 +256,7 @@ def recovered_pairwise(coord: np.ndarray, topology: str, meta: dict) -> np.ndarr
 
     if topology == "sphere" and coord.shape[1] >= 2:
         phi, lam = coord[:, 0], coord[:, 1]
-        xyz = np.stack(
-            [np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1
-        )
+        xyz = np.stack([np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1)
         return np.arccos(np.clip(xyz @ xyz.T, -1.0, 1.0))
 
     delta = coord[:, None, :] - coord[None, :, :]
@@ -329,9 +344,7 @@ def matched_geodesic_permutation_test(
 # --------------------------------------------------------------------------- #
 # Contribution R² matrix + matching
 # --------------------------------------------------------------------------- #
-def contribution_r2_matrix(
-    dataset, recovered: list[RecoveredFactor], split: str
-) -> np.ndarray:
+def contribution_r2_matrix(dataset, recovered: list[RecoveredFactor], split: str) -> np.ndarray:
     """Exact contribution R² without materializing dense true-factor tensors.
 
     A true factor is zero away from its planted active rows. Its SSE against a
@@ -347,7 +360,15 @@ def contribution_r2_matrix(
     n_rec = len(recovered)
     mat = np.zeros((n_rec, dataset.G), dtype=np.float64)
     rec_ss = np.asarray(
-        [np.einsum("ij,ij->", rf.contribution, rf.contribution, dtype=np.float64) for rf in recovered]
+        [
+            np.einsum(
+                "ij,ij->",
+                rf.contribution,
+                rf.contribution,
+                dtype=np.float64,
+            )
+            for rf in recovered
+        ]
     )
 
     for true_index, factor in enumerate(dataset.factors):
@@ -362,11 +383,18 @@ def contribution_r2_matrix(
         if sst <= 1e-12:
             continue
         for rec_index, rf in enumerate(recovered):
+            recovered_positions = np.searchsorted(rf.rows, rows)
+            overlap = recovered_positions < rf.rows.size
+            true_positions = np.flatnonzero(overlap)
+            recovered_positions = recovered_positions[overlap]
+            exact = rf.rows[recovered_positions] == rows[true_positions]
+            true_positions = true_positions[exact]
+            recovered_positions = recovered_positions[exact]
             cross = float(
                 np.einsum(
                     "ij,ij->",
-                    true_active,
-                    rf.contribution[rows],
+                    true_active[true_positions],
+                    rf.contribution[recovered_positions],
                     dtype=np.float64,
                 )
             )
@@ -392,7 +420,7 @@ def score_arm(
     fidelity the noise allows, not beyond", so an arm that fits noise pays for it
     rather than getting infinite credit for zero residual."""
     if delta2 is None:
-        delta2 = float(dataset.d * dataset.sigma ** 2)
+        delta2 = float(dataset.d * dataset.sigma**2)
     rng = np.random.default_rng(seed)
     r2m = contribution_r2_matrix(dataset, recovered, split)
     # Maximise total R² == minimise -R².
@@ -408,7 +436,11 @@ def score_arm(
         # Recovered coord on the SAME true-active rows (recovered code where it
         # fired; NaN rows dropped by taking the true-active support).
         rc_rows = rf.coord[rows]
-        valid = np.all(np.isfinite(rc_rows), axis=tuple(range(1, rc_rows.ndim))) if rc_rows.ndim > 1 else np.isfinite(rc_rows)
+        valid = (
+            np.all(np.isfinite(rc_rows), axis=tuple(range(1, rc_rows.ndim)))
+            if rc_rows.ndim > 1
+            else np.isfinite(rc_rows)
+        )
         rows_v = rows[valid]
         tcoord_v = tcoord[valid]
         rc_v = rf.coord[rows_v]
@@ -461,9 +493,7 @@ def score_arm(
         t: {
             "n": len(recs),
             "mean_contribution_r2": _mean("contribution_r2", recs),
-            "topology_id_accuracy": round(
-                float(np.mean([r["topology_correct"] for r in recs])), 4
-            ),
+            "topology_id_accuracy": round(float(np.mean([r["topology_correct"] for r in recs])), 4),
             "intrinsic_dim_accuracy": round(
                 float(np.mean([r["intrinsic_dim_correct"] for r in recs])), 4
             ),
@@ -477,10 +507,18 @@ def score_arm(
     }
 
     overall = {
-        "mean_contribution_r2": round(float(np.mean([r["contribution_r2"] for r in per_factor])), 4),
-        "topology_id_accuracy": round(float(np.mean([r["topology_correct"] for r in per_factor])), 4),
-        "intrinsic_dim_accuracy": round(float(np.mean([r["intrinsic_dim_correct"] for r in per_factor])), 4),
-        "embedding_dim_accuracy": round(float(np.mean([r["embedding_dim_correct"] for r in per_factor])), 4),
+        "mean_contribution_r2": round(
+            float(np.mean([r["contribution_r2"] for r in per_factor])), 4
+        ),
+        "topology_id_accuracy": round(
+            float(np.mean([r["topology_correct"] for r in per_factor])), 4
+        ),
+        "intrinsic_dim_accuracy": round(
+            float(np.mean([r["intrinsic_dim_correct"] for r in per_factor])), 4
+        ),
+        "embedding_dim_accuracy": round(
+            float(np.mean([r["embedding_dim_correct"] for r in per_factor])), 4
+        ),
         "n_recovered": len(recovered),
         "n_true": dataset.G,
         "n_matched": len(per_factor),
@@ -503,6 +541,7 @@ def score_arm(
 def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
     sys.path.insert(0, str(_HERE.parent / "mdl_ladder"))
     import mdl  # noqa: E402
+
     n_tokens = dataset.test.n if split == "test" else dataset.train.n
     featurizers = []
     for i, rf in enumerate(recovered):
@@ -512,7 +551,7 @@ def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
         # Signal variance the factor's code carries, and the EV it achieves — in
         # the ambient contribution space (consistent across arms).
         c = rf.contribution
-        total_var = float((c ** 2).sum() / max(n_fire, 1))
+        total_var = float((c**2).sum() / max(n_fire, 1))
         # ev vs its best-matched true factor (from per_factor if present).
         ev = 0.0
         for rec in per_factor:
@@ -533,9 +572,7 @@ def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
         )
     if not featurizers:
         return None
-    resp = mdl.score_json(
-        {"delta2": delta2, "l_param_bits": None, "featurizers": featurizers}
-    )
+    resp = mdl.score_json({"delta2": delta2, "l_param_bits": None, "featurizers": featurizers})
     total_bits = sum(row.get("bits_per_token", 0.0) for row in resp.get("rows", []))
     return {"bits_per_token_total": round(float(total_bits), 4), "rows": resp.get("rows", [])}
 
@@ -549,13 +586,14 @@ def _oracle_recovered(dataset, split: str) -> list[RecoveredFactor]:
     out = []
     sp = dataset.train if split == "train" else dataset.test
     for g, f in enumerate(dataset.factors):
-        contrib = dataset.contribution(split, g)
         coord = np.full((sp.n, f.intrinsic_dim), np.nan)
         rows = np.nonzero(sp.active[:, g])[0]
         coord[rows] = sp.coords[rows, g, : f.intrinsic_dim]
+        contrib = dataset.contribution(split, g)[rows]
         out.append(
             RecoveredFactor(
                 contribution=contrib,
+                rows=rows,
                 coord=coord,
                 active=sp.active[:, g].copy(),
                 topology=f.topology,
@@ -578,7 +616,9 @@ if __name__ == "__main__":
             c = rng.random((n, n))
             ri, ci = linear_sum_assignment(c)
             got = c[ri, ci].sum()
-            best = min(sum(c[i, perm[i]] for i in range(n)) for perm in itertools.permutations(range(n)))
+            best = min(
+                sum(c[i, perm[i]] for i in range(n)) for perm in itertools.permutations(range(n))
+            )
             assert abs(got - best) < 1e-9, (n, got, best)
     # rectangular
     c = rng.random((3, 5))
@@ -592,11 +632,17 @@ if __name__ == "__main__":
     oracle = _oracle_recovered(ds, "test")
     rep = score_arm(ds, oracle, "test", seed=0)
     ov = rep["overall"]
-    print(f"oracle overall: R2={ov['mean_contribution_r2']} "
-          f"topoID={ov['topology_id_accuracy']} dim={ov['intrinsic_dim_accuracy']}")
-    print(f"oracle circular (circle): {rep['by_topology']['circle']['mean_circular_corr']}, "
-          f"geodesic-Spearman (sphere): {rep['by_topology']['sphere']['mean_geodesic_spearman']}")
-    print(f"oracle MDL bits/token total: {rep['mdl']['bits_per_token_total'] if rep['mdl'] else None}")
+    print(
+        f"oracle overall: R2={ov['mean_contribution_r2']} "
+        f"topoID={ov['topology_id_accuracy']} dim={ov['intrinsic_dim_accuracy']}"
+    )
+    print(
+        f"oracle circular (circle): {rep['by_topology']['circle']['mean_circular_corr']}, "
+        f"geodesic-Spearman (sphere): {rep['by_topology']['sphere']['mean_geodesic_spearman']}"
+    )
+    print(
+        f"oracle MDL bits/token total: {rep['mdl']['bits_per_token_total'] if rep['mdl'] else None}"
+    )
     assert ov["mean_contribution_r2"] > 0.99, ov
     assert ov["topology_id_accuracy"] == 1.0 and ov["intrinsic_dim_accuracy"] == 1.0
     print("Oracle scores ~perfect: OK")

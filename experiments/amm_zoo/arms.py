@@ -146,15 +146,17 @@ def bsf_recovered(model: BSF, dataset, split: str = "test") -> list[RecoveredFac
     _, g, b = codes.shape
     recovered: list[RecoveredFactor] = []
     for block in range(g):
-        contribution = codes[:, block] @ decoder[block]
-        contribution[~active[:, block]] = 0.0
+        block_active = active[:, block]
+        rows = np.flatnonzero(block_active)
+        contribution = codes[rows, block] @ decoder[block]
         coord = codes[:, block].copy()
-        coord[~active[:, block]] = np.nan
+        coord[~block_active] = np.nan
         recovered.append(
             RecoveredFactor(
                 contribution=contribution,
+                rows=rows,
                 coord=coord,
-                active=active[:, block],
+                active=block_active,
                 topology="linear",
                 intrinsic_dim=b,
                 embedding_dim=b,
@@ -178,8 +180,8 @@ def _hybrid_linear_images(model: Any) -> dict[int, dict[str, Any]]:
     return images
 
 
-def _effective_embedding_dim(contribution: np.ndarray, active: np.ndarray) -> int:
-    rows = contribution[active]
+def _effective_embedding_dim(contribution: np.ndarray) -> int:
+    rows = contribution
     if rows.shape[0] < 3:
         return 0
     if rows.shape[0] > 4096:
@@ -249,7 +251,8 @@ def manifold_sae_recovered(
     if not (len(basis) == len(dims) == len(decoder_params) == k):
         raise RuntimeError("ManifoldSAE atom metadata lengths disagree with chosen_k")
 
-    contributions = [np.zeros((n, dataset.d), dtype=np.float64) for _ in range(k)]
+    contribution_chunks: list[list[np.ndarray]] = [[] for _ in range(k)]
+    row_chunks: list[list[np.ndarray]] = [[] for _ in range(k)]
     coords = [np.full((n, dims[i]), np.nan, dtype=np.float64) for i in range(k)]
     active = [np.zeros(n, dtype=bool) for _ in range(k)]
     hybrid = _hybrid_linear_images(model)
@@ -286,20 +289,33 @@ def manifold_sae_recovered(
                 )
             contribution = assignment[:, None] * atom_image
             fired = np.abs(assignment) > 1e-8
-            contribution[~fired] = 0.0
-            contributions[atom_index][lo:hi] = contribution
+            local_rows = np.flatnonzero(fired)
+            if local_rows.size:
+                row_chunks[atom_index].append(lo + local_rows)
+                contribution_chunks[atom_index].append(contribution[local_rows])
             active[atom_index][lo:hi] = fired
-            coords[atom_index][lo:hi][fired] = atom_coord[fired, : dims[atom_index]]
+            coords[atom_index][lo + local_rows] = atom_coord[local_rows, : dims[atom_index]]
 
     recovered: list[RecoveredFactor] = []
     for atom_index in range(k):
-        embedding_dim = _effective_embedding_dim(contributions[atom_index], active[atom_index])
+        rows = (
+            np.concatenate(row_chunks[atom_index])
+            if row_chunks[atom_index]
+            else np.empty(0, dtype=np.int64)
+        )
+        contribution = (
+            np.concatenate(contribution_chunks[atom_index], axis=0)
+            if contribution_chunks[atom_index]
+            else np.empty((0, dataset.d), dtype=np.float64)
+        )
+        embedding_dim = _effective_embedding_dim(contribution)
         topology = _topology_from_atom(
             basis[atom_index], dims[atom_index], embedding_dim, atom_index in hybrid
         )
         recovered.append(
             RecoveredFactor(
-                contribution=contributions[atom_index],
+                contribution=contribution,
+                rows=rows,
                 coord=coords[atom_index],
                 active=active[atom_index],
                 topology=topology,
