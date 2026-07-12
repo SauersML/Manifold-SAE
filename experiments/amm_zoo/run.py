@@ -139,9 +139,7 @@ def _worker_impl(spec_path: str) -> None:
                 if factor_report["true_topology"] == "linear":
                     continue
                 recovered_factor = recovered_by_name[factor_report["recovered"]]
-                rows, true_coord = dataset.true_intrinsic(
-                    "test", factor_report["true_factor"]
-                )
+                rows, true_coord = dataset.true_intrinsic("test", factor_report["true_factor"])
                 recovered_coord = recovered_factor.coord[rows]
                 valid = np.all(np.isfinite(recovered_coord), axis=1)
                 if valid.sum() < 8:
@@ -284,7 +282,9 @@ def _run_group(
             )
             last_diagnostic = (process.stdout + "\n" + process.stderr)[-6000:]
         except subprocess.TimeoutExpired as error:
-            last_diagnostic = f"worker timed out after {time.perf_counter() - started:.1f}s: {error}"
+            last_diagnostic = (
+                f"worker timed out after {time.perf_counter() - started:.1f}s: {error}"
+            )
         print(
             f"[group seed={seed} sigma={sigma:g}] attempt {attempt + 1} "
             f"pending={pending} wall={time.perf_counter() - started:.1f}s",
@@ -454,11 +454,7 @@ def make_figures(master: dict[str, Any], out: Path) -> None:
     heat = np.full((len(arms), len(TOPOLOGIES)), np.nan)
     for row, arm in enumerate(arms):
         for col, topology in enumerate(TOPOLOGIES):
-            values = [
-                value
-                for sigma in sigmas
-                for value in topology_id[(arm, sigma)][topology]
-            ]
+            values = [value for sigma in sigmas for value in topology_id[(arm, sigma)][topology]]
             if values:
                 heat[row, col] = float(np.mean(values))
     figure, axis = plt.subplots(figsize=(10.5, 3.6))
@@ -498,9 +494,7 @@ def _write_report(master: dict[str, Any], out: Path) -> None:
     for arm in arms:
         for topology in TOPOLOGIES:
             values = [
-                f"{np.mean(r2[(arm, sigma)][topology]):.3f}"
-                if r2[(arm, sigma)][topology]
-                else "-"
+                f"{np.mean(r2[(arm, sigma)][topology]):.3f}" if r2[(arm, sigma)][topology] else "-"
                 for sigma in sigmas
             ]
             lines.append(f"| {arm} | {topology} | " + " | ".join(values) + " |")
@@ -514,11 +508,7 @@ def _write_report(master: dict[str, Any], out: Path) -> None:
     for arm in arms:
         values = []
         for topology in TOPOLOGIES:
-            observed = [
-                value
-                for sigma in sigmas
-                for value in topology_id[(arm, sigma)][topology]
-            ]
+            observed = [value for sigma in sigmas for value in topology_id[(arm, sigma)][topology]]
             values.append(f"{np.mean(observed):.2f}" if observed else "-")
         lines.append(f"| {arm} | " + " | ".join(values) + " |")
     (out / "REPORT.md").write_text("\n".join(lines) + "\n")
@@ -527,7 +517,7 @@ def _write_report(master: dict[str, Any], out: Path) -> None:
 def _config(full: bool, arms: list[str]) -> dict[str, Any]:
     if full:
         return {
-            "benchmark_revision": "production_msae_v1",
+            "benchmark_revision": "production_msae_v2_exact_geometry",
             "seeds": [0, 1, 2, 3, 4],
             "sigmas": [0.02, 0.05, 0.1, 0.2],
             "coherence": 0.0,
@@ -547,7 +537,7 @@ def _config(full: bool, arms: list[str]) -> dict[str, Any]:
             "results_name": "results.json",
         }
     return {
-        "benchmark_revision": "production_msae_v1",
+        "benchmark_revision": "production_msae_v2_exact_geometry",
         "seeds": [0],
         "sigmas": [0.05, 0.2],
         "coherence": 0.0,

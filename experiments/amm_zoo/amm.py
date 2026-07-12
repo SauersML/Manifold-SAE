@@ -14,6 +14,8 @@ reconstruction but on whether it recovers the RIGHT geometry:
     4 tori      (intrinsic 2, ambient b=4)      m(θ1,θ2)  = r[cosθ1,sinθ1,cosθ2,sinθ2]/√2
     4 spheres   (intrinsic 2, ambient b=3)      m(φ,λ)    = r[sinφcosλ, sinφsinλ, cosφ]
     4 arcs      (intrinsic 1, ambient b=2)      m(θ)      = r[cosθ, sinθ], θ∈[lo,hi]⊊[0,2π)
+    2 helices   (intrinsic 1, ambient b=3)      m(t)      = r[cos t, sin t, p(t-2π)]
+    2 Möbius    (intrinsic 2, ambient b=3)      m(θ,w)    = standard one-twist strip
     4 linear    (intrinsic b, ambient b=2)      m(c)      = r V_g c,  c ~ N(0, I)   [CONTROL]
 
 The 4 **linear** factors are the control: they carry NO curvature, so a curved
@@ -55,6 +57,7 @@ ZOO = [
 MAX_INTRINSIC = 2  # >=2-intrinsic factors carry 2 coords; 1-D carry 1 (2nd = NaN)
 HELIX_T = 4.0 * np.pi  # helix parameter range (2 turns), non-closed
 HELIX_PITCH = 0.16  # z-rise so the axial extent ≈ the ring radius
+GEOMETRY_REVISION = "amm-analytic-v2-float64"
 
 
 @dataclass(frozen=True)
@@ -93,9 +96,7 @@ def _embed_torus(coords: np.ndarray) -> np.ndarray:
 
 def _embed_sphere(coords: np.ndarray) -> np.ndarray:
     phi, lam = coords[:, 0], coords[:, 1]  # phi in [0,pi], lam in [0,2pi)
-    return np.stack(
-        [np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1
-    )
+    return np.stack([np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1)
 
 
 def _embed_linear(coords: np.ndarray) -> np.ndarray:
@@ -113,9 +114,7 @@ def _embed_mobius(coords: np.ndarray) -> np.ndarray:
     theta, w = coords[:, 0], coords[:, 1]  # theta in [0,2pi), w in [-1,1] (width)
     half = 0.5 * w
     rad = 1.0 + half * np.cos(theta / 2.0)  # the θ/2 half-twist -> orientation reversal
-    return np.stack(
-        [rad * np.cos(theta), rad * np.sin(theta), half * np.sin(theta / 2.0)], axis=1
-    )
+    return np.stack([rad * np.cos(theta), rad * np.sin(theta), half * np.sin(theta / 2.0)], axis=1)
 
 
 _EMBED = {
@@ -129,9 +128,107 @@ _EMBED = {
 }
 
 
+def _validated_coords(topology: str, coords: np.ndarray) -> np.ndarray:
+    """Return float64 coordinates in the closed domain used for seam evaluation.
+
+    Random samples use half-open periodic intervals; accepting the right endpoint
+    here permits exact seam tests without changing the sampling distribution.
+    """
+    intrinsic_dims = {
+        "circle": 1,
+        "arc": 1,
+        "torus": 2,
+        "sphere": 2,
+        "helix": 1,
+        "mobius": 2,
+        "linear": 2,
+    }
+    if topology not in intrinsic_dims:
+        raise ValueError(f"unknown topology {topology!r}")
+    values = np.asarray(coords, dtype=np.float64)
+    needed = intrinsic_dims[topology]
+    if values.ndim != 2 or values.shape[1] < needed:
+        raise ValueError(
+            f"{topology} coordinates must have shape (n, >= {needed}), got {values.shape}"
+        )
+    intrinsic = values[:, :needed]
+    if not np.isfinite(intrinsic).all():
+        raise ValueError(f"{topology} coordinates contain non-finite values")
+
+    tolerance = 32.0 * np.finfo(np.float64).eps
+
+    def require_interval(column: int, lower: float, upper: float, name: str) -> None:
+        value = intrinsic[:, column]
+        if np.any(value < lower - tolerance) or np.any(value > upper + tolerance):
+            raise ValueError(f"{topology} {name} must lie in [{lower}, {upper}]")
+
+    if topology in {"circle", "arc", "helix"}:
+        upper = HELIX_T if topology == "helix" else 2.0 * np.pi
+        require_interval(0, 0.0, upper, "angle")
+    elif topology == "torus":
+        require_interval(0, 0.0, 2.0 * np.pi, "first angle")
+        require_interval(1, 0.0, 2.0 * np.pi, "second angle")
+    elif topology == "sphere":
+        require_interval(0, 0.0, np.pi, "polar angle")
+        require_interval(1, 0.0, 2.0 * np.pi, "longitude")
+    elif topology == "mobius":
+        require_interval(0, 0.0, 2.0 * np.pi, "angle")
+        require_interval(1, -1.0, 1.0, "width")
+    return values
+
+
+def _validated_factor_coords(factor: Factor, coords: np.ndarray) -> np.ndarray:
+    values = _validated_coords(factor.topology, coords)
+    if factor.topology == "arc":
+        tolerance = 32.0 * np.finfo(np.float64).eps
+        angle = values[:, 0]
+        if np.any(angle < factor.arc_lo - tolerance) or np.any(angle > factor.arc_hi + tolerance):
+            raise ValueError(f"arc coordinates must lie in [{factor.arc_lo}, {factor.arc_hi}]")
+    return values
+
+
 def embed_unit(topology: str, coords: np.ndarray) -> np.ndarray:
     """Unit-scale ambient block ``(n, b)`` for a topology from intrinsic coords."""
-    return _EMBED[topology](coords)
+    coords = _validated_coords(topology, coords)
+    embedded = _EMBED[topology](coords)
+    if not np.isfinite(embedded).all():
+        raise ValueError(f"{topology} embedding returned non-finite values")
+    tolerance = 2.0e-12
+    if topology in {"circle", "arc"}:
+        residual = embedded[:, 0] ** 2 + embedded[:, 1] ** 2 - 1.0
+    elif topology == "torus":
+        inv_sq = 0.5
+        residual = np.maximum(
+            np.abs(embedded[:, 0] ** 2 + embedded[:, 1] ** 2 - inv_sq),
+            np.abs(embedded[:, 2] ** 2 + embedded[:, 3] ** 2 - inv_sq),
+        )
+    elif topology == "sphere":
+        residual = np.sum(embedded * embedded, axis=1) - 1.0
+    elif topology == "helix":
+        radius_error = embedded[:, 0] ** 2 + embedded[:, 1] ** 2 - 1.0
+        height_error = embedded[:, 2] - HELIX_PITCH * (coords[:, 0] - HELIX_T / 2.0)
+        residual = np.maximum(np.abs(radius_error), np.abs(height_error))
+    elif topology == "mobius":
+        theta = coords[:, 0]
+        half_width = 0.5 * coords[:, 1]
+        radius = 1.0 + half_width * np.cos(theta / 2.0)
+        expected = np.stack(
+            [
+                radius * np.cos(theta),
+                radius * np.sin(theta),
+                half_width * np.sin(theta / 2.0),
+            ],
+            axis=1,
+        )
+        residual = embedded - expected
+    elif topology == "linear":
+        residual = embedded - coords[:, :2]
+    else:
+        raise ValueError(f"unknown topology {topology!r}")
+    error = float(np.max(np.abs(residual), initial=0.0))
+    if error > tolerance:
+        raise ValueError(f"{topology} defining-equation error {error:.3e} exceeds {tolerance:.3e}")
+    return embedded
 
 
 def _sample_coords(topology: str, n: int, factor: Factor, rng: np.random.Generator) -> np.ndarray:
@@ -172,7 +269,9 @@ def _make_frames(
     each frame's raw Gaussian span toward a SHARED random subspace ``S`` (dim
     ``s = max b_g``), so the factor subspaces overlap more as coherence rises.
     Returns ``(frames, measured_min_principal_angle_deg)``."""
-    coherence = float(np.clip(coherence, 0.0, 0.98))
+    coherence = float(coherence)
+    if not 0.0 <= coherence < 1.0:
+        raise ValueError(f"coherence must lie in [0, 1), got {coherence}")
     s = max(f.block_dim for f in factors)
     shared, _ = np.linalg.qr(rng.standard_normal((d, s)))  # d × s shared basis
     frames = []
@@ -268,7 +367,8 @@ class AMMDataset:
         rows = np.nonzero(sp.active[:, g])[0]
         if rows.size == 0:
             return out
-        emb = embed_unit(f.topology, sp.coords[rows, g, :])  # (n_g, b)
+        coords = _validated_factor_coords(f, sp.coords[rows, g, :])
+        emb = embed_unit(f.topology, coords)  # (n_g, b)
         out[rows] = f.radius * (emb @ self.frames[g].T)
         return out
 
@@ -280,11 +380,68 @@ class AMMDataset:
         di = self.factors[g].intrinsic_dim
         return rows, sp.coords[rows, g, :di]
 
+    def validate_exact_geometry(self) -> None:
+        """Reject malformed, quantized, or non-analytic persisted ground truth."""
+        expected_registry = [
+            (topology, intrinsic_dim, block_dim)
+            for topology, intrinsic_dim, block_dim, count in ZOO
+            for _ in range(count)
+        ]
+        if self.G != len(expected_registry) or len(self.frames) != self.G:
+            raise ValueError("AMM factor registry has the wrong size")
+        if not 1 <= self.k <= self.G:
+            raise ValueError("AMM sparsity is outside the factor registry")
+        for g, (factor, frame, expected) in enumerate(
+            zip(self.factors, self.frames, expected_registry, strict=True)
+        ):
+            if factor.fid != g:
+                raise ValueError("AMM factor ids must be contiguous and ordered")
+            if (factor.topology, factor.intrinsic_dim, factor.block_dim) != expected:
+                raise ValueError("AMM factor registry does not match the analytic zoo")
+            if not np.isfinite(factor.radius) or factor.radius <= 0.0:
+                raise ValueError("AMM factor radii must be finite and positive")
+            if factor.topology == "arc" and not (
+                0.0 <= factor.arc_lo < factor.arc_hi <= 2.0 * np.pi
+            ):
+                raise ValueError("AMM arc bounds are invalid")
+            if frame.dtype != np.float64 or frame.shape != (self.d, factor.block_dim):
+                raise ValueError("AMM frame has the wrong dtype or shape")
+            gram = frame.T @ frame
+            if not np.allclose(gram, np.eye(factor.block_dim), rtol=0.0, atol=2.0e-12):
+                raise ValueError("AMM frame is not an isometry")
+
+        for name, split in (("train", self.train), ("test", self.test)):
+            if split.x.dtype != np.float64 or split.coords.dtype != np.float64:
+                raise ValueError(f"AMM {name} geometry must be float64")
+            if split.active.dtype != np.bool_:
+                raise ValueError(f"AMM {name} active mask must be boolean")
+            if split.x.ndim != 2 or split.x.shape[1] != self.d:
+                raise ValueError(f"AMM {name} tokens have the wrong shape")
+            n = split.x.shape[0]
+            if split.active.shape != (n, self.G):
+                raise ValueError(f"AMM {name} active mask has the wrong shape")
+            if split.coords.shape != (n, self.G, MAX_INTRINSIC):
+                raise ValueError(f"AMM {name} coordinates have the wrong shape")
+            if not np.isfinite(split.x).all():
+                raise ValueError(f"AMM {name} tokens contain non-finite values")
+            if not np.all(split.active.sum(axis=1) == self.k):
+                raise ValueError(f"AMM {name} rows do not have exactly k active factors")
+            if not np.isnan(split.coords[~split.active]).all():
+                raise ValueError(f"AMM {name} inactive coordinates must be NaN")
+            for g, factor in enumerate(self.factors):
+                rows = np.flatnonzero(split.active[:, g])
+                coords = split.coords[rows, g]
+                _validated_factor_coords(factor, coords)
+                if factor.intrinsic_dim == 1 and not np.isnan(coords[:, 1]).all():
+                    raise ValueError("unused intrinsic coordinates must be NaN")
+                embed_unit(factor.topology, coords)
+
     # -- persistence -------------------------------------------------------- #
     def save(self, out_dir: str | Path) -> None:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         meta = {
+            "geometry_revision": GEOMETRY_REVISION,
             "d": self.d,
             "G": self.G,
             "k": self.k,
@@ -300,22 +457,23 @@ class AMMDataset:
         }
         (out / "meta.json").write_text(json.dumps(meta, indent=2))
         arrays: dict[str, np.ndarray] = {
-            "x_train": self.train.x.astype(np.float32),
+            "x_train": np.ascontiguousarray(self.train.x, dtype=np.float64),
             "active_train": self.train.active,
-            "coords_train": self.train.coords.astype(np.float32),
-            "x_test": self.test.x.astype(np.float32),
+            "coords_train": np.ascontiguousarray(self.train.coords, dtype=np.float64),
+            "x_test": np.ascontiguousarray(self.test.x, dtype=np.float64),
             "active_test": self.test.active,
-            "coords_test": self.test.coords.astype(np.float32),
+            "coords_test": np.ascontiguousarray(self.test.coords, dtype=np.float64),
         }
         for g, v in enumerate(self.frames):
-            arrays[f"V_{g}"] = v.astype(np.float32)
+            arrays[f"V_{g}"] = np.ascontiguousarray(v, dtype=np.float64)
         np.savez_compressed(out / "amm.npz", **arrays)
 
     @classmethod
     def load(cls, out_dir: str | Path) -> "AMMDataset":
         out = Path(out_dir)
         meta = json.loads((out / "meta.json").read_text())
-        z = np.load(out / "amm.npz")
+        if meta.get("geometry_revision") != GEOMETRY_REVISION:
+            raise ValueError("saved AMM corpus uses a stale or quantized geometry revision")
         factors = [
             Factor(
                 fid=int(fj["fid"]),
@@ -328,18 +486,33 @@ class AMMDataset:
             )
             for fj in meta["factors"]
         ]
-        frames = [np.ascontiguousarray(z[f"V_{g}"], dtype=np.float64) for g in range(len(factors))]
-        train = AMMSplit(
-            x=np.ascontiguousarray(z["x_train"], dtype=np.float64),
-            active=np.ascontiguousarray(z["active_train"]),
-            coords=np.ascontiguousarray(z["coords_train"], dtype=np.float64),
-        )
-        test = AMMSplit(
-            x=np.ascontiguousarray(z["x_test"], dtype=np.float64),
-            active=np.ascontiguousarray(z["active_test"]),
-            coords=np.ascontiguousarray(z["coords_test"], dtype=np.float64),
-        )
-        return cls(
+        expected_float = {
+            "x_train",
+            "coords_train",
+            "x_test",
+            "coords_test",
+            *(f"V_{g}" for g in range(len(factors))),
+        }
+        expected_bool = {"active_train", "active_test"}
+        with np.load(out / "amm.npz") as saved:
+            if set(saved.files) != expected_float | expected_bool:
+                raise ValueError("saved AMM corpus has an unexpected array schema")
+            if any(saved[name].dtype != np.float64 for name in expected_float):
+                raise ValueError("saved AMM geometry must be persisted directly as float64")
+            if any(saved[name].dtype != np.bool_ for name in expected_bool):
+                raise ValueError("saved AMM active masks must be boolean")
+            frames = [np.ascontiguousarray(saved[f"V_{g}"]) for g in range(len(factors))]
+            train = AMMSplit(
+                x=np.ascontiguousarray(saved["x_train"]),
+                active=np.ascontiguousarray(saved["active_train"]),
+                coords=np.ascontiguousarray(saved["coords_train"]),
+            )
+            test = AMMSplit(
+                x=np.ascontiguousarray(saved["x_test"]),
+                active=np.ascontiguousarray(saved["active_test"]),
+                coords=np.ascontiguousarray(saved["coords_test"]),
+            )
+        dataset = cls(
             factors,
             frames,
             train,
@@ -353,10 +526,16 @@ class AMMDataset:
             min_principal_angle_deg=float(meta["min_principal_angle_deg"]),
             seed=int(meta["seed"]),
         )
+        if dataset.train.n != int(meta["n_train"]) or dataset.test.n != int(meta["n_test"]):
+            raise ValueError("saved AMM split sizes disagree with metadata")
+        if dataset.G != int(meta["G"]):
+            raise ValueError("saved AMM factor count disagrees with metadata")
+        dataset.validate_exact_geometry()
+        return dataset
 
 
 def build_factors(rng: np.random.Generator) -> list[Factor]:
-    """Instantiate the 24-factor zoo with per-factor radii and arc ranges."""
+    """Instantiate the 28-factor zoo with per-factor radii and arc ranges."""
     factors: list[Factor] = []
     fid = 0
     for topology, di, b, count in ZOO:
@@ -369,9 +548,7 @@ def build_factors(rng: np.random.Generator) -> list[Factor]:
                 span = float(rng.uniform(0.6 * np.pi, 1.4 * np.pi))
                 lo = float(rng.uniform(0.0, 2.0 * np.pi - span))
                 arc_lo, arc_hi = lo, lo + span
-            factors.append(
-                Factor(fid, topology, di, b, radius, arc_lo, arc_hi)
-            )
+            factors.append(Factor(fid, topology, di, b, radius, arc_lo, arc_hi))
             fid += 1
     return factors
 
@@ -388,9 +565,10 @@ def _make_split(
     """Build one split; returns ``(split, sum_sq)`` where ``sum_sq`` is the total
     noiseless signal energy (for the shared ``signal_rms`` estimate)."""
     G = len(factors)
-    # Active set: k distinct factors per token, uniform (argsort of noise = shuffle).
+    # Active set: k distinct factors per token, uniformly sampled. Partial
+    # selection avoids sorting all G keys when k << G.
     active = np.zeros((n, G), dtype=bool)
-    order = np.argsort(rng.random((n, G)), axis=1)[:, :k]
+    order = np.argpartition(rng.random((n, G)), k - 1, axis=1)[:, :k]
     np.put_along_axis(active, order, True, axis=1)
 
     coords = np.full((n, G, MAX_INTRINSIC), np.nan, dtype=np.float64)
@@ -400,14 +578,35 @@ def _make_split(
         if rows.size == 0:
             continue
         c = _sample_coords(f.topology, rows.size, f, rng)  # (n_g, MAX_INTRINSIC)
+        _validated_factor_coords(f, c)
         coords[rows, g, :] = c
         emb = embed_unit(f.topology, c)  # (n_g, b)
         x_clean[rows] += f.radius * (emb @ frames[g].T)
 
-    sum_sq = float((x_clean ** 2).sum())
-    noise = sigma * rng.standard_normal((n, d))
-    x = x_clean + noise
-    return AMMSplit(x=x, active=active, coords=coords), sum_sq
+    sum_sq = float(np.einsum("ij,ij->", x_clean, x_clean, optimize=True))
+    _add_noise_in_place(x_clean, sigma, rng)
+    return AMMSplit(x=x_clean, active=active, coords=coords), sum_sq
+
+
+def _add_noise_in_place(
+    x: np.ndarray,
+    sigma: float,
+    rng: np.random.Generator,
+    *,
+    target_chunk_bytes: int = 8 * 1024 * 1024,
+) -> None:
+    """Add Gaussian noise without allocating another corpus-sized matrix."""
+    if sigma == 0.0:
+        return
+    if sigma < 0.0 or not np.isfinite(sigma):
+        raise ValueError(f"noise standard deviation must be finite and nonnegative, got {sigma}")
+    row_bytes = x.shape[1] * x.dtype.itemsize
+    chunk_rows = max(1, target_chunk_bytes // row_bytes)
+    for start in range(0, x.shape[0], chunk_rows):
+        stop = min(start + chunk_rows, x.shape[0])
+        noise = rng.standard_normal((stop - start, x.shape[1]))
+        noise *= sigma
+        x[start:stop] += noise
 
 
 def generate_amm(
@@ -425,18 +624,26 @@ def generate_amm(
     same absolute ``σ`` applies to both splits — a matched noise floor)."""
     rng = np.random.default_rng(seed)
     factors = build_factors(rng)
+    if n_train <= 0 or n_test <= 0:
+        raise ValueError("n_train and n_test must both be positive")
+    if not np.isfinite(sigma_frac) or sigma_frac < 0.0:
+        raise ValueError(f"sigma_frac must be finite and nonnegative, got {sigma_frac}")
+    if not 1 <= k <= len(factors):
+        raise ValueError(f"k must lie in [1, {len(factors)}], got {k}")
+    max_span = max(factor.block_dim for factor in factors)
+    if d < max_span:
+        raise ValueError(f"ambient dimension {d} cannot contain native AMM span {max_span}")
     frames, min_angle = _make_frames(factors, d, coherence, rng)
 
-    # First a σ=0 train pass to fix the signal RMS, then set σ and regenerate both
-    # splits at that absolute noise level (deterministic: fresh child RNGs).
-    probe_rng = np.random.default_rng(seed + 101)
-    probe, sum_sq = _make_split(n_train, factors, frames, d, k, 0.0, probe_rng)
+    # Generate the training realization exactly once. Its clean energy fixes σ,
+    # then independent Gaussian noise is added in cache-sized blocks in place.
+    train, sum_sq = _make_split(
+        n_train, factors, frames, d, k, 0.0, np.random.default_rng(seed + 1)
+    )
     signal_rms = float(np.sqrt(sum_sq / (n_train * d)))
     sigma = sigma_frac * signal_rms
-
-    train, _ = _make_split(n_train, factors, frames, d, k, sigma, np.random.default_rng(seed + 1))
+    _add_noise_in_place(train.x, sigma, np.random.default_rng(seed + 10_001))
     test, _ = _make_split(n_test, factors, frames, d, k, sigma, np.random.default_rng(seed + 2))
-    del probe
 
     return AMMDataset(
         factors,
@@ -462,11 +669,15 @@ SEEDS = [0, 1, 2, 3, 4]
 if __name__ == "__main__":
     # Smoke: a small corpus, verify shapes + ground-truth round-trip + signal.
     ds = generate_amm(seed=0, sigma_frac=0.05, n_train=2000, n_test=500)
-    print(f"factors={ds.G} d={ds.d} k={ds.k} signal_rms={ds.signal_rms:.4f} "
-          f"sigma={ds.sigma:.4f} min_angle={ds.min_principal_angle_deg}deg")
+    print(
+        f"factors={ds.G} d={ds.d} k={ds.k} signal_rms={ds.signal_rms:.4f} "
+        f"sigma={ds.sigma:.4f} min_angle={ds.min_principal_angle_deg}deg"
+    )
     print(f"topologies: {[f.topology for f in ds.factors]}")
-    print(f"train x {ds.train.x.shape}, active/token = {ds.train.active.sum(1).mean():.2f} (k={ds.k})")
+    print(
+        f"train x {ds.train.x.shape}, active/token = {ds.train.active.sum(1).mean():.2f} (k={ds.k})"
+    )
     # contribution reconstructs the clean sum:
-    clean = sum(ds.contribution('test', g) for g in range(ds.G))
+    clean = sum(ds.contribution("test", g) for g in range(ds.G))
     resid = ds.test.x - clean
     print(f"noise std check: {resid.std():.4f} vs sigma {ds.sigma:.4f}")
