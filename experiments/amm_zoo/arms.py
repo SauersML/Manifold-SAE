@@ -249,16 +249,14 @@ def manifold_sae_recovered(
     if not (len(basis) == len(dims) == len(decoder_params) == k):
         raise RuntimeError("ManifoldSAE atom metadata lengths disagree with chosen_k")
 
-    contributions = [np.zeros((n, dataset.d), dtype=np.float32) for _ in range(k)]
+    contributions = [np.zeros((n, dataset.d), dtype=np.float64) for _ in range(k)]
     coords = [np.full((n, dims[i]), np.nan, dtype=np.float64) for i in range(k)]
     active = [np.zeros(n, dtype=bool) for _ in range(k)]
     hybrid = _hybrid_linear_images(model)
 
     for lo in range(0, n, oos_batch_size):
         hi = min(lo + oos_batch_size, n)
-        payload = dict(
-            model.converged_latents(np.ascontiguousarray(x[lo:hi], dtype=np.float64))
-        )
+        payload = dict(model.converged_latents(np.ascontiguousarray(x[lo:hi], dtype=np.float64)))
         assignments = np.asarray(payload["assignments"], dtype=np.float64)
         coord_blocks = list(payload["coords"])
         atom_images = list(payload["atom_images"])
@@ -289,7 +287,7 @@ def manifold_sae_recovered(
             contribution = assignment[:, None] * atom_image
             fired = np.abs(assignment) > 1e-8
             contribution[~fired] = 0.0
-            contributions[atom_index][lo:hi] = contribution.astype(np.float32)
+            contributions[atom_index][lo:hi] = contribution
             active[atom_index][lo:hi] = fired
             coords[atom_index][lo:hi][fired] = atom_coord[fired, : dims[atom_index]]
 
