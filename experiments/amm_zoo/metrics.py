@@ -22,7 +22,6 @@ Hungarian (validated against brute force in ``__main__``).
 
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -132,9 +131,17 @@ def _hungarian_square(cost: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 # Correlation helpers
 # --------------------------------------------------------------------------- #
 def _rankdata(a: np.ndarray) -> np.ndarray:
+    """Average ranks with exact tie handling (SciPy-free)."""
+    a = np.asarray(a)
     order = np.argsort(a, kind="stable")
+    values = a[order]
+    starts = np.r_[0, np.flatnonzero(values[1:] != values[:-1]) + 1]
+    ends = np.r_[starts[1:], len(values)]
+    sorted_ranks = np.empty(len(a), dtype=np.float64)
+    for lo, hi in zip(starts, ends):
+        sorted_ranks[lo:hi] = 0.5 * (lo + hi - 1)
     ranks = np.empty(len(a), dtype=np.float64)
-    ranks[order] = np.arange(len(a), dtype=np.float64)
+    ranks[order] = sorted_ranks
     return ranks
 
 
@@ -165,15 +172,19 @@ def circular_corr(a: np.ndarray, b: np.ndarray) -> float:
     return abs(num / den) if den > 0 else 0.0
 
 
-def _to_angle(coord: np.ndarray) -> np.ndarray:
-    """Best 1-D angle from a recovered coordinate: use atan2 of the first two
-    columns when >=2-D (a b=2 block/chart code), else the column itself."""
+def _to_angle(coord: np.ndarray, topology: str, meta: dict) -> np.ndarray:
+    """Map a recovered coordinate to radians for circular correlation."""
     coord = np.asarray(coord, dtype=np.float64)
     if coord.ndim == 1:
-        return coord
+        coord = coord[:, None]
     if coord.shape[1] >= 2:
         return np.arctan2(coord[:, 1], coord[:, 0])
-    return coord[:, 0]
+    value = coord[:, 0]
+    periods = meta.get("coord_periods", [])
+    period = periods[0] if periods else None
+    if topology == "circle" and period is not None:
+        return (2.0 * np.pi / float(period)) * value
+    return value
 
 
 # --------------------------------------------------------------------------- #
@@ -185,7 +196,6 @@ def _wrap_pi(x: np.ndarray) -> np.ndarray:
 
 def geodesic_pairwise(coord: np.ndarray, topology: str) -> np.ndarray:
     """Pairwise geodesic distance matrix ``(m, m)`` for true intrinsic coords."""
-    m = coord.shape[0]
     if topology in ("circle",):
         th = coord[:, 0]
         return np.abs(_wrap_pi(th[:, None] - th[None, :]))
@@ -219,54 +229,149 @@ def geodesic_pairwise(coord: np.ndarray, topology: str) -> np.ndarray:
     return np.sqrt((diff * diff).sum(-1))
 
 
+def recovered_pairwise(coord: np.ndarray, topology: str, meta: dict) -> np.ndarray:
+    """Pairwise distance in the recovered factor's declared latent geometry."""
+    coord = np.asarray(coord, dtype=np.float64)
+    if coord.ndim == 1:
+        coord = coord[:, None]
+    periods = list(meta.get("coord_periods", []))
+    periods.extend([None] * (coord.shape[1] - len(periods)))
+
+    if topology == "sphere" and coord.shape[1] >= 2:
+        phi, lam = coord[:, 0], coord[:, 1]
+        xyz = np.stack(
+            [np.sin(phi) * np.cos(lam), np.sin(phi) * np.sin(lam), np.cos(phi)], axis=1
+        )
+        return np.arccos(np.clip(xyz @ xyz.T, -1.0, 1.0))
+
+    delta = coord[:, None, :] - coord[None, :, :]
+    for axis, period in enumerate(periods[: coord.shape[1]]):
+        if period is not None:
+            p = float(period)
+            delta[..., axis] = (delta[..., axis] + 0.5 * p) % p - 0.5 * p
+    return np.sqrt((delta * delta).sum(-1))
+
+
 def geodesic_spearman(
     true_coord: np.ndarray,
     true_topology: str,
     rec_coord: np.ndarray,
+    rec_topology: str,
+    rec_meta: dict,
     rng: np.random.Generator,
-    n_sample: int = 1200,
+    n_sample: int = 256,
 ) -> float:
-    """Spearman rank corr between recovered-code Euclidean distances and TRUE
-    geodesic distances on a random subsample of shared active tokens — does the
-    recovered code respect the manifold's geometry, independent of parametrisation."""
+    """Spearman correlation between true and recovered manifold distances."""
     m = true_coord.shape[0]
     if m < 5:
         return 0.0
     idx = np.arange(m) if m <= n_sample else rng.choice(m, n_sample, replace=False)
     d_true = geodesic_pairwise(true_coord[idx], true_topology)
-    rc = np.atleast_2d(rec_coord[idx])
-    if rc.shape[0] == 1:
-        rc = rc.T
-    diff = rc[:, None, :] - rc[None, :, :]
-    d_rec = np.sqrt((diff * diff).sum(-1))
+    d_rec = recovered_pairwise(rec_coord[idx], rec_topology, rec_meta)
     iu = np.triu_indices(len(idx), k=1)
     return spearman(d_true[iu], d_rec[iu])
+
+
+def matched_geodesic_permutation_test(
+    true_coord: np.ndarray,
+    true_topology: str,
+    rec_coord: np.ndarray,
+    rec_topology: str,
+    rec_meta: dict,
+    rng: np.random.Generator,
+    *,
+    b_perm: int,
+    n_sample: int = 128,
+) -> tuple[float, float]:
+    """Fast matched permutation null on one fixed complete-graph subsample.
+
+    Both distance matrices and their ranks are computed once. A token
+    permutation only relabels the recovered rank matrix, eliminating the old
+    ``B`` repeated pairwise-distance builds and sorts while preserving the exact
+    matched null on the selected rows.
+    """
+    m = true_coord.shape[0]
+    if m < 8:
+        return 0.0, 1.0
+    idx = np.arange(m) if m <= n_sample else rng.choice(m, n_sample, replace=False)
+    true_distance = geodesic_pairwise(true_coord[idx], true_topology)
+    rec_distance = recovered_pairwise(rec_coord[idx], rec_topology, rec_meta)
+    iu = np.triu_indices(len(idx), k=1)
+
+    true_rank = _rankdata(true_distance[iu])
+    rec_rank = _rankdata(rec_distance[iu])
+    rank_matrix = np.zeros((len(idx), len(idx)), dtype=np.float64)
+    rank_matrix[iu] = rec_rank
+    rank_matrix[(iu[1], iu[0])] = rec_rank
+    true_centered = true_rank - true_rank.mean()
+    rec_centered = rec_rank - rec_rank.mean()
+    denominator = float(
+        np.sqrt(np.dot(true_centered, true_centered) * np.dot(rec_centered, rec_centered))
+    )
+    if denominator == 0.0:
+        return 0.0, 1.0
+    observed = float(np.dot(true_centered, rec_centered) / denominator)
+    null_ge = 0
+    batch_size = 32
+    for lo in range(0, b_perm, batch_size):
+        count = min(batch_size, b_perm - lo)
+        permutations = np.stack([rng.permutation(len(idx)) for _ in range(count)])
+        permuted_rank = rank_matrix[
+            permutations[:, iu[0]],
+            permutations[:, iu[1]],
+        ]
+        correlations = ((permuted_rank - rec_rank.mean()) @ true_centered) / denominator
+        null_ge += int(np.count_nonzero(correlations >= observed))
+    p_value = (1.0 + null_ge) / (1.0 + b_perm)
+    return round(float(observed), 4), round(float(p_value), 4)
 
 
 # --------------------------------------------------------------------------- #
 # Contribution R² matrix + matching
 # --------------------------------------------------------------------------- #
-def _r2(true_c: np.ndarray, rec_c: np.ndarray) -> float:
-    sst = float(((true_c - true_c.mean(0)) ** 2).sum())
-    if sst <= 1e-12:
-        return 0.0
-    sse = float(((true_c - rec_c) ** 2).sum())
-    return 1.0 - sse / sst
-
-
 def contribution_r2_matrix(
     dataset, recovered: list[RecoveredFactor], split: str
 ) -> np.ndarray:
-    """``(n_rec, n_true)`` matrix of contribution R² between every recovered and
-    true factor. Memory-safe: streams one (true, rec) pair at a time."""
-    n_true = dataset.G
-    true_contribs = [dataset.contribution(split, g) for g in range(n_true)]
+    """Exact contribution R² without materializing dense true-factor tensors.
+
+    A true factor is zero away from its planted active rows. Its SSE against a
+    recovered contribution therefore follows from three sufficient statistics:
+    true sum-of-squares on those rows, recovered sum-of-squares on all rows, and
+    their active-row cross product. At the full setting this removes a 1.43-GB
+    list of dense true contributions and cuts pairwise work by roughly ``G/k``.
+    """
+    from amm import embed_unit
+
+    scored = dataset.test if split == "test" else dataset.train
+    n_tokens = scored.n
     n_rec = len(recovered)
-    mat = np.zeros((n_rec, n_true), dtype=np.float64)
-    for i, rf in enumerate(recovered):
-        rc = rf.contribution
-        for j in range(n_true):
-            mat[i, j] = _r2(true_contribs[j], rc)
+    mat = np.zeros((n_rec, dataset.G), dtype=np.float64)
+    rec_ss = np.asarray(
+        [np.einsum("ij,ij->", rf.contribution, rf.contribution, dtype=np.float64) for rf in recovered]
+    )
+
+    for true_index, factor in enumerate(dataset.factors):
+        rows, coord = dataset.true_intrinsic(split, true_index)
+        embedded = embed_unit(factor.topology, coord)
+        true_active = np.ascontiguousarray(
+            factor.radius * (embedded @ dataset.frames[true_index].T), dtype=np.float64
+        )
+        true_ss = float(np.einsum("ij,ij->", true_active, true_active, dtype=np.float64))
+        true_sum = true_active.sum(axis=0, dtype=np.float64)
+        sst = true_ss - float(true_sum @ true_sum) / n_tokens
+        if sst <= 1e-12:
+            continue
+        for rec_index, rf in enumerate(recovered):
+            cross = float(
+                np.einsum(
+                    "ij,ij->",
+                    true_active,
+                    rf.contribution[rows],
+                    dtype=np.float64,
+                )
+            )
+            sse = max(0.0, true_ss + rec_ss[rec_index] - 2.0 * cross)
+            mat[rec_index, true_index] = 1.0 - sse / sst
     return mat
 
 
@@ -321,17 +426,18 @@ def score_arm(
             "embedding_dim_true": int(tf.block_dim),
             "embedding_dim_guess": int(rf.embedding_dim),
             "embedding_dim_correct": bool(rf.embedding_dim == tf.block_dim),
-            # Back-compat alias (intrinsic).
-            "dim_correct": bool(rf.intrinsic_dim == tf.intrinsic_dim),
             "n_matched_tokens": int(rows_v.size),
         }
         if rows_v.size >= 5:
             rec["geodesic_spearman"] = round(
-                geodesic_spearman(tcoord_v, tf.topology, rc_v, rng), 4
+                geodesic_spearman(
+                    tcoord_v, tf.topology, rc_v, rf.topology, rf.meta, rng
+                ),
+                4,
             )
             if tf.topology in ("circle", "arc"):
                 rec["circular_corr"] = round(
-                    circular_corr(_to_angle(rc_v), tcoord_v[:, 0]), 4
+                    circular_corr(_to_angle(rc_v, rf.topology, rf.meta), tcoord_v[:, 0]), 4
                 )
         per_factor.append(rec)
 
@@ -388,11 +494,8 @@ def score_arm(
 # MDL bits/token via the mdl_ladder scorer.
 # --------------------------------------------------------------------------- #
 def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
-    try:
-        sys.path.insert(0, str(_HERE.parent / "mdl_ladder"))
-        import mdl  # noqa: E402
-    except Exception:
-        return None
+    sys.path.insert(0, str(_HERE.parent / "mdl_ladder"))
+    import mdl  # noqa: E402
     n_tokens = dataset.test.n if split == "test" else dataset.train.n
     featurizers = []
     for i, rf in enumerate(recovered):
@@ -412,9 +515,7 @@ def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
         featurizers.append(
             {
                 "name": rf.name or f"rec{i}",
-                "kind": {"linear": "block", "circle": "chart", "arc": "chart"}.get(
-                    rf.topology, "block"
-                ),
+                "kind": "block" if rf.topology == "linear" else "chart",
                 "total_var": max(total_var, 1e-9),
                 "n_tokens": int(n_tokens),
                 "n_firings": n_fire,
@@ -425,14 +526,11 @@ def _score_mdl(dataset, recovered, per_factor, split, delta2) -> dict | None:
         )
     if not featurizers:
         return None
-    try:
-        resp = mdl.score_json(
-            {"delta2": delta2, "l_param_bits": None, "featurizers": featurizers}
-        )
-        total_bits = sum(row.get("bits_per_token", 0.0) for row in resp.get("rows", []))
-        return {"bits_per_token_total": round(float(total_bits), 4), "rows": resp.get("rows", [])}
-    except Exception as exc:  # pragma: no cover
-        return {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+    resp = mdl.score_json(
+        {"delta2": delta2, "l_param_bits": None, "featurizers": featurizers}
+    )
+    total_bits = sum(row.get("bits_per_token", 0.0) for row in resp.get("rows", []))
+    return {"bits_per_token_total": round(float(total_bits), 4), "rows": resp.get("rows", [])}
 
 
 # --------------------------------------------------------------------------- #
@@ -488,10 +586,10 @@ if __name__ == "__main__":
     rep = score_arm(ds, oracle, "test", seed=0)
     ov = rep["overall"]
     print(f"oracle overall: R2={ov['mean_contribution_r2']} "
-          f"topoID={ov['topology_id_accuracy']} dim={ov['dim_accuracy']}")
+          f"topoID={ov['topology_id_accuracy']} dim={ov['intrinsic_dim_accuracy']}")
     print(f"oracle circular (circle): {rep['by_topology']['circle']['mean_circular_corr']}, "
           f"geodesic-Spearman (sphere): {rep['by_topology']['sphere']['mean_geodesic_spearman']}")
     print(f"oracle MDL bits/token total: {rep['mdl']['bits_per_token_total'] if rep['mdl'] else None}")
     assert ov["mean_contribution_r2"] > 0.99, ov
-    assert ov["topology_id_accuracy"] == 1.0 and ov["dim_accuracy"] == 1.0
+    assert ov["topology_id_accuracy"] == 1.0 and ov["intrinsic_dim_accuracy"] == 1.0
     print("Oracle scores ~perfect: OK")
